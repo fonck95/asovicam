@@ -47,7 +47,7 @@ export default function Contact() {
               <p className={styles.infoText}>
                 ¿Quieres conocer más sobre nuestro proyecto? ¿Te interesa
                 visitar nuestros cultivos o explorar posibilidades de apoyo?
-                Escríbenos o visítanos en Yondó.
+                Escríbenos o visítanos en la Ciénaga de Barbacoas, Yondó.
               </p>
 
               <div className={styles.contactItems}>
@@ -57,7 +57,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Ubicación</strong>
-                    <p>Yondó, Antioquia — Magdalena Medio, Colombia</p>
+                    <p>Ciénaga de Barbacoas, Yondó, Antioquia — Magdalena Medio, Colombia</p>
                   </div>
                 </div>
 
@@ -67,7 +67,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Teléfono</strong>
-                    <p>+57 300 000 0000</p>
+                    <p>+57 316 557 0682</p>
                   </div>
                 </div>
 
@@ -77,7 +77,8 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Correo electrónico</strong>
-                    <p>contacto@asovicam.org</p>
+                    <p>asovicam2023@gmail.com</p>
+                    <p>biojulian20@gmail.com</p>
                   </div>
                 </div>
 
@@ -186,6 +187,25 @@ export default function Contact() {
                 </form>
               )}
             </div>
+          </div>
+        </div>
+      </section>
+      {/* Map */}
+      <section className="section section--alt">
+        <div className="container">
+          <h2 className="section__title">Nuestra ubicación</h2>
+          <p className="section__subtitle">
+            Ciénaga de Barbacoas, Yondó, Antioquia — Magdalena Medio
+          </p>
+          <div className={styles.mapContainer}>
+            <iframe
+              src="https://www.google.com/maps/d/u/0/embed?mid=1pR7tb0-RpiB08RRk2XKuMbFzAxtBeEY&ehbc=2E312F"
+              className={styles.mapEmbed}
+              title="Mapa de ASOVICAM - Ciénaga de Barbacoas, Yondó"
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
           </div>
         </div>
       </section>

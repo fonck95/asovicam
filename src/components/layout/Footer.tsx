@@ -47,15 +47,15 @@ export default function Footer() {
             <ul className={styles.contactList}>
               <li className={styles.contactItem}>
                 <MapPin size={16} />
-                <span>Yondó, Antioquia — Magdalena Medio</span>
+                <span>Ciénaga de Barbacoas, Yondó, Antioquia</span>
               </li>
               <li className={styles.contactItem}>
                 <Phone size={16} />
-                <span>+57 300 000 0000</span>
+                <span>+57 316 557 0682</span>
               </li>
               <li className={styles.contactItem}>
                 <Mail size={16} />
-                <span>contacto@asovicam.org</span>
+                <span>asovicam2023@gmail.com</span>
               </li>
             </ul>
           </div>

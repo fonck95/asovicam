@@ -155,6 +155,20 @@
   margin-bottom: var(--spacing-xl);
 }
 
+/* Map */
+.mapContainer {
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.mapEmbed {
+  width: 100%;
+  height: 480px;
+  border: none;
+  display: block;
+}
+
 @media (max-width: 768px) {
   .heroTitle {
     font-size: 2rem;

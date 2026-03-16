@@ -138,7 +138,7 @@ export default function About() {
         <div className="container">
           <h2 className="section__title">Nuestro territorio</h2>
           <p className="section__subtitle">
-            Yondó, Antioquia — en el corazón del Magdalena Medio colombiano
+            Ciénaga de Barbacoas, Yondó, Antioquia — en el corazón del Magdalena Medio colombiano
           </p>
           <div className={styles.territory}>
             <div className={styles.territoryInfo}>
@@ -156,7 +156,7 @@ export default function About() {
                 comunidades durante generaciones.
               </p>
               <ul className={styles.territoryList}>
-                <li><strong>Ubicación:</strong> Margen oriental de Antioquia</li>
+                <li><strong>Ubicación:</strong> Ciénaga de Barbacoas, Yondó, Antioquia</li>
                 <li><strong>Región:</strong> Magdalena Medio</li>
                 <li><strong>Clima:</strong> Tropical cálido y húmedo (28-35°C)</li>
                 <li><strong>Altitud:</strong> 75-150 msnm</li>
@@ -164,14 +164,14 @@ export default function About() {
               </ul>
             </div>
             <div className={styles.territoryMap}>
-              <div className={styles.mapPlaceholder}>
-                <span className={styles.mapIcon}>📍</span>
-                <span className={styles.mapText}>
-                  Yondó, Antioquia
-                  <br />
-                  Magdalena Medio
-                </span>
-              </div>
+              <iframe
+                src="https://www.google.com/maps/d/u/0/embed?mid=1pR7tb0-RpiB08RRk2XKuMbFzAxtBeEY&ehbc=2E312F"
+                className={styles.mapEmbed}
+                title="Mapa de ASOVICAM - Ciénaga de Barbacoas, Yondó"
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
             </div>
           </div>
         </div>

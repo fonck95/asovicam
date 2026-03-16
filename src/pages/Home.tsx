@@ -14,7 +14,7 @@ export default function Home() {
         <div className={styles.heroOverlay} />
         <div className={`container ${styles.heroContent}`}>
           <span className={styles.heroBadge}>
-            <Leaf size={16} /> Yondó, Antioquia — Magdalena Medio
+            <Leaf size={16} /> Ciénaga de Barbacoas, Yondó — Magdalena Medio
           </span>
           <h1 className={styles.heroTitle}>
             Cultivando tradición,
