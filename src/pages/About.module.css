@@ -1,0 +1,249 @@
+.hero {
+  background: linear-gradient(135deg, #14532d 0%, #15803d 100%);
+  color: white;
+  padding: var(--spacing-3xl) 0;
+  text-align: center;
+}
+
+.heroTitle {
+  font-size: 2.75rem;
+  font-weight: 800;
+  color: white;
+  margin-bottom: var(--spacing-sm);
+}
+
+.heroSubtitle {
+  font-size: 1.188rem;
+  opacity: 0.85;
+}
+
+/* Content */
+.content {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: var(--spacing-2xl);
+  align-items: start;
+}
+
+.textBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.textBlock p {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--color-gray-700);
+}
+
+.sectionTitle {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin-bottom: var(--spacing-sm);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+
+.statCard {
+  background: var(--color-gray-50);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  text-align: center;
+  border: 1px solid var(--color-gray-200);
+}
+
+.statNumber {
+  display: block;
+  font-family: var(--font-family-heading);
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  line-height: 1;
+  margin-bottom: var(--spacing-xs);
+}
+
+.statLabel {
+  font-size: 0.813rem;
+  color: var(--color-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Mission */
+.missionGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-2xl);
+}
+
+.missionCard {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  border: 1px solid var(--color-gray-200);
+}
+
+.missionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  background: rgba(21, 128, 61, 0.08);
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.missionTitle {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin-bottom: var(--spacing-md);
+  color: var(--color-primary-dark);
+}
+
+.missionCard p {
+  font-size: 0.938rem;
+  line-height: 1.7;
+  color: var(--color-gray-600);
+}
+
+/* Values */
+.valuesTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-primary-dark);
+  margin-bottom: var(--spacing-xl);
+}
+
+.valuesGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-lg);
+}
+
+.valueCard {
+  text-align: center;
+  padding: var(--spacing-lg);
+}
+
+.valueIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: rgba(21, 128, 61, 0.08);
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.valueTitle {
+  font-family: var(--font-family);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.valueDescription {
+  font-size: 0.875rem;
+  color: var(--color-gray-500);
+  line-height: 1.6;
+}
+
+/* Territory */
+.territory {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-2xl);
+  align-items: center;
+}
+
+.territoryInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.territoryInfo p {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--color-gray-700);
+}
+
+.territoryList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.territoryList li {
+  font-size: 0.938rem;
+  color: var(--color-gray-600);
+  padding-left: var(--spacing-md);
+  border-left: 2px solid var(--color-primary-light);
+}
+
+.territoryMap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mapPlaceholder {
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 400px;
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--color-primary-light);
+}
+
+.mapIcon {
+  font-size: 3rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.mapText {
+  font-size: 1.125rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--color-primary-dark);
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .content {
+    grid-template-columns: 1fr;
+  }
+
+  .missionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .valuesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .territory {
+    grid-template-columns: 1fr;
+  }
+}

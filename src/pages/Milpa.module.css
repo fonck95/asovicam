@@ -1,0 +1,212 @@
+.hero {
+  background: linear-gradient(135deg, #92400e 0%, #b45309 100%);
+  color: white;
+  padding: var(--spacing-3xl) 0;
+  text-align: center;
+}
+
+.heroTitle {
+  font-size: 2.75rem;
+  font-weight: 800;
+  color: white;
+  margin-bottom: var(--spacing-sm);
+}
+
+.heroSubtitle {
+  font-size: 1.188rem;
+  opacity: 0.85;
+}
+
+/* Intro */
+.intro {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.sectionTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin-bottom: var(--spacing-lg);
+}
+
+.intro p {
+  font-size: 1.063rem;
+  line-height: 1.8;
+  color: var(--color-gray-700);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Crops Detail */
+.cropsDetail {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-xl);
+}
+
+.cropHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.cropIcon {
+  font-size: 2.5rem;
+}
+
+.cropName {
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+
+.cropScientific {
+  font-size: 0.813rem;
+  font-style: italic;
+  color: var(--color-gray-500);
+}
+
+.cropDescription {
+  font-size: 0.938rem;
+  line-height: 1.7;
+  color: var(--color-gray-600);
+  margin-bottom: var(--spacing-md);
+}
+
+.benefitsTitle {
+  font-family: var(--font-family);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-gray-500);
+  margin-bottom: var(--spacing-sm);
+}
+
+.benefitsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.benefitItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  font-size: 0.875rem;
+  color: var(--color-gray-700);
+  line-height: 1.5;
+}
+
+.benefitItem svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Mulch */
+.mulchContent {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-2xl);
+  align-items: start;
+}
+
+.mulchText p {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--color-gray-700);
+  margin-bottom: var(--spacing-md);
+}
+
+.mulchBenefits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.mulchBenefitCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-gray-200);
+}
+
+.mulchBenefitIcon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.mulchBenefitTitle {
+  font-family: var(--font-family);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.mulchBenefitDesc {
+  font-size: 0.875rem;
+  color: var(--color-gray-600);
+  line-height: 1.6;
+}
+
+/* Process */
+.process {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-xl);
+}
+
+.processStep {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-gray-200);
+}
+
+.processNumber {
+  font-family: var(--font-family-heading);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.processTitle {
+  font-family: var(--font-family);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.processDescription {
+  font-size: 0.875rem;
+  color: var(--color-gray-600);
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .cropsDetail {
+    grid-template-columns: 1fr;
+  }
+
+  .mulchContent {
+    grid-template-columns: 1fr;
+  }
+
+  .process {
+    grid-template-columns: 1fr;
+  }
+}

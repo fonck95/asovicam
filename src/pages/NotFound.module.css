@@ -1,0 +1,27 @@
+.notFound {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emoji {
+  font-size: 4rem;
+  display: block;
+  margin-bottom: var(--spacing-md);
+}
+
+.title {
+  font-size: 5rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.text {
+  font-size: 1.125rem;
+  color: var(--color-gray-500);
+  max-width: 480px;
+  margin: 0 auto var(--spacing-xl);
+  line-height: 1.7;
+}
