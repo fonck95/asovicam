@@ -1,11 +1,17 @@
 import { CheckCircle, Layers, Droplets, Bug, Recycle } from 'lucide-react';
 import Card from '../components/ui/Card';
+import SEO from '../components/SEO';
 import { crops } from '../data/crops';
 import styles from './Milpa.module.css';
 
 export default function Milpa() {
   return (
     <>
+      <SEO
+        title="El Sistema Milpa"
+        description="Conoce el sistema milpa de ASOVICAM: maíz, frijol caupí y sandía con técnica de mulch. Agricultura agroecológica ancestral en Yondó, Antioquia."
+      />
+
       {/* Hero */}
       <section className={styles.hero}>
         <div className="container">
@@ -35,7 +41,9 @@ export default function Milpa() {
               A diferencia del monocultivo convencional, la milpa imita los
               ecosistemas naturales: cada planta cumple una función específica
               que beneficia al conjunto, creando un ciclo virtuoso de nutrientes,
-              protección y productividad.
+              protección y productividad. Este modelo ancestral ha demostrado ser
+              más resiliente al cambio climático y más productivo por hectárea
+              que el monocultivo.
             </p>
           </div>
         </div>
@@ -75,8 +83,49 @@ export default function Milpa() {
         </div>
       </section>
 
-      {/* Mulch Technique */}
+      {/* Synergy */}
       <section className="section">
+        <div className="container">
+          <h2 className="section__title">Sinergia de la milpa</h2>
+          <p className="section__subtitle">
+            Cómo los tres cultivos se benefician mutuamente
+          </p>
+
+          <div className={styles.synergyGrid}>
+            <div className={styles.synergyCard}>
+              <h3 className={styles.synergyTitle}>Maíz + Frijol Caupí</h3>
+              <p className={styles.synergyDesc}>
+                El maíz proporciona la estructura vertical que el frijol utiliza como
+                tutor natural para trepar. A cambio, el frijol caupí fija nitrógeno
+                atmosférico al suelo a través de bacterias en sus raíces (Rhizobium),
+                aportando fertilidad natural que beneficia al maíz y reduce la
+                necesidad de fertilizantes.
+              </p>
+            </div>
+            <div className={styles.synergyCard}>
+              <h3 className={styles.synergyTitle}>Sandía + Maíz</h3>
+              <p className={styles.synergyDesc}>
+                Las amplias hojas rastreras de la sandía cubren el suelo entre las
+                hileras de maíz, actuando como cobertura viva que reduce la
+                evaporación del agua, suprime el crecimiento de malezas y protege
+                el suelo de la erosión por lluvia directa.
+              </p>
+            </div>
+            <div className={styles.synergyCard}>
+              <h3 className={styles.synergyTitle}>Los tres juntos</h3>
+              <p className={styles.synergyDesc}>
+                El resultado es un sistema que produce tres tipos de alimentos
+                simultáneamente, mejora la fertilidad del suelo en cada ciclo, requiere
+                menos agua e insumos, y es más resiliente a plagas porque la diversidad
+                rompe los ciclos de los insectos perjudiciales.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Mulch Technique */}
+      <section className="section section--alt">
         <div className="container">
           <h2 className="section__title">Técnica de Mulch</h2>
           <p className="section__subtitle">
@@ -138,7 +187,7 @@ export default function Milpa() {
       </section>
 
       {/* Process */}
-      <section className="section section--alt">
+      <section className="section">
         <div className="container">
           <h2 className="section__title">El proceso de siembra</h2>
           <p className="section__subtitle">

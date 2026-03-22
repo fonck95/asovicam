@@ -1,14 +1,29 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Leaf, Users, Mountain, Sun } from 'lucide-react';
+import { ArrowRight, Leaf, Users, Mountain, Sun, BookOpen, Wheat, TreePine } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import SEO from '../components/SEO';
 import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
+import { programs } from '../data/programs';
+import { impactStats } from '../data/impact';
 import styles from './Home.module.css';
+
+const programIcons: Record<string, React.ReactNode> = {
+  leaf: <Leaf size={28} />,
+  wheat: <Wheat size={28} />,
+  book: <BookOpen size={28} />,
+  tree: <TreePine size={28} />,
+};
 
 export default function Home() {
   return (
     <>
+      <SEO
+        title="Inicio"
+        description="ASOVICAM - Asociación Campesina Vida en el Campo. Sistema milpa con técnica de mulch en Yondó, Antioquia. Agricultura sostenible en el Magdalena Medio colombiano."
+      />
+
       {/* Hero */}
       <section className={styles.hero}>
         <div className={styles.heroOverlay} />
@@ -24,7 +39,8 @@ export default function Home() {
           <p className={styles.heroText}>
             Somos ASOVICAM, la Asociación Campesina Vida en el Campo. Rescatamos
             el sistema ancestral de la milpa — maíz, frijol caupí y sandía —
-            con técnica de mulch para una agricultura sostenible.
+            con técnica de mulch para una agricultura sostenible en el corazón
+            del Magdalena Medio colombiano.
           </p>
           <div className={styles.heroCta}>
             <Button to="/milpa" size="lg">
@@ -105,6 +121,52 @@ export default function Home() {
                   Saber más <ArrowRight size={14} />
                 </Link>
               </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Impact Stats */}
+      <section className="section">
+        <div className="container">
+          <h2 className="section__title">Nuestro impacto</h2>
+          <p className="section__subtitle">
+            Cifras que reflejan el compromiso de ASOVICAM con la agricultura
+            sostenible y la comunidad campesina.
+          </p>
+
+          <div className={styles.impactGrid}>
+            {impactStats.map((stat) => (
+              <div key={stat.id} className={styles.impactCard}>
+                <span className={styles.impactValue}>{stat.value}</span>
+                <span className={styles.impactLabel}>{stat.label}</span>
+                <p className={styles.impactDesc}>{stat.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Programs */}
+      <section className="section section--alt">
+        <div className="container">
+          <h2 className="section__title">Nuestros programas</h2>
+          <p className="section__subtitle">
+            Líneas de trabajo que fortalecen la agricultura campesina, la
+            organización comunitaria y la conservación del territorio.
+          </p>
+
+          <div className={styles.programsGrid}>
+            {programs.map((program) => (
+              <div key={program.id} className={styles.programCard}>
+                <div className={styles.programIcon}>
+                  {programIcons[program.icon]}
+                </div>
+                <h3 className={styles.programTitle}>{program.title}</h3>
+                <p className={styles.programDescription}>
+                  {program.description}
+                </p>
+              </div>
             ))}
           </div>
         </div>

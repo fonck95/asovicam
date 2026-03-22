@@ -1,9 +1,16 @@
-import { Heart, Target, Eye, Users, TreePine, Handshake, Award } from 'lucide-react';
+import { Heart, Target, Eye, Users, TreePine, Handshake, Award, UserCircle } from 'lucide-react';
+import SEO from '../components/SEO';
+import { teamMembers } from '../data/team';
 import styles from './About.module.css';
 
 export default function About() {
   return (
     <>
+      <SEO
+        title="Sobre Nosotros"
+        description="Conoce la historia, misión, visión y valores de ASOVICAM. Más de 50 familias campesinas unidas por la agricultura sostenible en Yondó, Antioquia."
+      />
+
       {/* Hero */}
       <section className={styles.hero}>
         <div className="container">
@@ -37,6 +44,12 @@ export default function About() {
                 Medio, ASOVICAM representa la resistencia pacífica del
                 campesinado, demostrando que es posible producir alimentos sanos
                 mientras se cuida la tierra para las futuras generaciones.
+              </p>
+              <p>
+                Con el tiempo, hemos logrado consolidar una red de más de 50
+                familias que trabajan en 120 hectáreas de tierra, produciendo
+                alimentos orgánicos y fortaleciendo la economía local a través
+                de ferias campesinas y bancos de semillas criollas.
               </p>
             </div>
             <div className={styles.statsGrid}>
@@ -133,8 +146,32 @@ export default function About() {
         </div>
       </section>
 
-      {/* Territory */}
+      {/* Team */}
       <section className="section">
+        <div className="container">
+          <h2 className="section__title">Nuestro equipo</h2>
+          <p className="section__subtitle">
+            Las personas que lideran y sostienen el trabajo de ASOVICAM
+            en el territorio.
+          </p>
+
+          <div className={styles.teamGrid}>
+            {teamMembers.map((member) => (
+              <div key={member.id} className={styles.teamCard}>
+                <div className={styles.teamAvatar}>
+                  <UserCircle size={48} />
+                </div>
+                <h3 className={styles.teamName}>{member.name}</h3>
+                <span className={styles.teamRole}>{member.role}</span>
+                <p className={styles.teamDescription}>{member.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Territory */}
+      <section className="section section--alt">
         <div className="container">
           <h2 className="section__title">Nuestro territorio</h2>
           <p className="section__subtitle">
@@ -153,7 +190,9 @@ export default function About() {
                 La región del Magdalena Medio se caracteriza por su
                 biodiversidad excepcional, sus ciénagas y humedales, y una
                 tradición campesina y pesquera que ha sostenido a las
-                comunidades durante generaciones.
+                comunidades durante generaciones. La Ciénaga de Barbacoas es
+                uno de los ecosistemas más importantes de la zona, hogar de
+                diversas especies de aves, peces y flora nativa.
               </p>
               <ul className={styles.territoryList}>
                 <li><strong>Ubicación:</strong> Ciénaga de Barbacoas, Yondó, Antioquia</li>
@@ -161,6 +200,7 @@ export default function About() {
                 <li><strong>Clima:</strong> Tropical cálido y húmedo (28-35°C)</li>
                 <li><strong>Altitud:</strong> 75-150 msnm</li>
                 <li><strong>Suelos:</strong> Aluviales fértiles del río Magdalena</li>
+                <li><strong>Hidrografía:</strong> Río Magdalena, ciénagas y humedales</li>
               </ul>
             </div>
             <div className={styles.territoryMap}>

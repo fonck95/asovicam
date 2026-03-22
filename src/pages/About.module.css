@@ -160,6 +160,60 @@
   line-height: 1.6;
 }
 
+/* Team */
+.teamGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-xl);
+}
+
+.teamCard {
+  text-align: center;
+  padding: var(--spacing-xl) var(--spacing-lg);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-gray-200);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.teamCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.teamAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-full);
+  background: rgba(21, 128, 61, 0.08);
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.teamName {
+  font-family: var(--font-family);
+  font-size: 1.063rem;
+  font-weight: 700;
+  margin-bottom: var(--spacing-xs);
+}
+
+.teamRole {
+  display: block;
+  font-size: 0.813rem;
+  color: var(--color-primary);
+  font-weight: 500;
+  margin-bottom: var(--spacing-sm);
+}
+
+.teamDescription {
+  font-size: 0.875rem;
+  color: var(--color-gray-500);
+  line-height: 1.6;
+}
+
 /* Territory */
 .territory {
   display: grid;
@@ -209,6 +263,12 @@
   box-shadow: var(--shadow-md);
 }
 
+@media (max-width: 1024px) {
+  .teamGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .heroTitle {
     font-size: 2rem;
@@ -223,6 +283,10 @@
   }
 
   .valuesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .teamGrid {
     grid-template-columns: 1fr;
   }
 

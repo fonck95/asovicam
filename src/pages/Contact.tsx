@@ -1,34 +1,19 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
 import { MapPin, Phone, Mail, Clock, Send } from 'lucide-react';
 import Button from '../components/ui/Button';
-import type { ContactFormData } from '../types';
+import SEO from '../components/SEO';
+import { useContactForm } from '../hooks/useContactForm';
 import styles from './Contact.module.css';
 
 export default function Contact() {
-  const [formData, setFormData] = useState<ContactFormData>({
-    name: '',
-    email: '',
-    subject: '',
-    message: '',
-  });
-  const [submitted, setSubmitted] = useState(false);
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    // In production, this would send to a backend
-    console.log('Form submitted:', formData);
-    setSubmitted(true);
-  };
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
-  ) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+  const { formData, submitted, handleChange, handleSubmit, reset } = useContactForm();
 
   return (
     <>
+      <SEO
+        title="Contacto"
+        description="Contacta a ASOVICAM. Escríbenos para información, visitas a cultivos, alianzas o compra de productos orgánicos en Yondó, Antioquia."
+      />
+
       <section className={styles.hero}>
         <div className="container">
           <h1 className={styles.heroTitle}>Contacto</h1>
@@ -98,13 +83,13 @@ export default function Contact() {
             <div className={styles.formWrapper}>
               {submitted ? (
                 <div className={styles.success}>
-                  <span className={styles.successIcon}>✅</span>
+                  <span className={styles.successIcon} role="img" aria-label="Enviado">&#9989;</span>
                   <h3>Mensaje enviado</h3>
                   <p>
                     Gracias por comunicarte con ASOVICAM. Te responderemos lo
                     antes posible.
                   </p>
-                  <Button onClick={() => setSubmitted(false)}>
+                  <Button onClick={reset}>
                     Enviar otro mensaje
                   </Button>
                 </div>
@@ -161,6 +146,7 @@ export default function Contact() {
                       <option value="visita">Visitar nuestros cultivos</option>
                       <option value="alianza">Alianza o colaboración</option>
                       <option value="compra">Compra de productos</option>
+                      <option value="asociarse">Asociarse a ASOVICAM</option>
                       <option value="otro">Otro</option>
                     </select>
                   </div>
@@ -190,6 +176,7 @@ export default function Contact() {
           </div>
         </div>
       </section>
+
       {/* Map */}
       <section className="section section--alt">
         <div className="container">

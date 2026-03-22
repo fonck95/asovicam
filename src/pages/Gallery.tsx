@@ -1,20 +1,26 @@
+import SEO from '../components/SEO';
 import styles from './Gallery.module.css';
 
 const galleryItems = [
-  { id: 1, emoji: '🌽', title: 'Cultivo de maíz', description: 'Maíz criollo en pleno desarrollo' },
-  { id: 2, emoji: '🫘', title: 'Frijol caupí', description: 'Vainas listas para cosecha' },
-  { id: 3, emoji: '🍉', title: 'Sandía en campo', description: 'Frutos maduros entre las guías' },
-  { id: 4, emoji: '🌱', title: 'Sistema milpa', description: 'Los tres cultivos en asocio' },
-  { id: 5, emoji: '🧑‍🌾', title: 'Trabajo comunitario', description: 'Jornada de siembra colectiva' },
-  { id: 6, emoji: '🌿', title: 'Mulch aplicado', description: 'Cobertura orgánica sobre el suelo' },
-  { id: 7, emoji: '🏞️', title: 'Magdalena Medio', description: 'Paisaje del territorio' },
-  { id: 8, emoji: '🤝', title: 'Asociación', description: 'Reunión de campesinos asociados' },
-  { id: 9, emoji: '🌾', title: 'Cosecha', description: 'Recolección del maíz maduro' },
+  { id: 1, emoji: '🌽', title: 'Cultivo de maíz', description: 'Maíz criollo en pleno desarrollo en nuestras parcelas' },
+  { id: 2, emoji: '🫘', title: 'Frijol caupí', description: 'Vainas de frijol caupí listas para cosecha' },
+  { id: 3, emoji: '🍉', title: 'Sandía en campo', description: 'Frutos maduros de sandía entre las guías rastreras' },
+  { id: 4, emoji: '🌱', title: 'Sistema milpa', description: 'Los tres cultivos creciendo en asocio sobre el mulch' },
+  { id: 5, emoji: '🧑‍🌾', title: 'Trabajo comunitario', description: 'Jornada de siembra colectiva con familias asociadas' },
+  { id: 6, emoji: '🌿', title: 'Mulch aplicado', description: 'Cobertura orgánica protegiendo el suelo entre cultivos' },
+  { id: 7, emoji: '🏞️', title: 'Magdalena Medio', description: 'Paisaje del territorio y la Ciénaga de Barbacoas' },
+  { id: 8, emoji: '🤝', title: 'Asociación', description: 'Reunión de campesinos asociados planificando la siembra' },
+  { id: 9, emoji: '🌾', title: 'Cosecha', description: 'Recolección del maíz maduro al final del ciclo' },
 ];
 
 export default function Gallery() {
   return (
     <>
+      <SEO
+        title="Galería"
+        description="Galería de imágenes de ASOVICAM: cultivos de milpa, trabajo comunitario y vida campesina en Yondó, Antioquia."
+      />
+
       <section className={styles.hero}>
         <div className="container">
           <h1 className={styles.heroTitle}>Galería</h1>
