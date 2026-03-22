@@ -105,6 +105,35 @@
   margin-top: 2px;
 }
 
+/* Synergy */
+.synergyGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-xl);
+}
+
+.synergyCard {
+  padding: var(--spacing-xl);
+  background: var(--color-gray-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-gray-200);
+  border-top: 3px solid var(--color-primary-light);
+}
+
+.synergyTitle {
+  font-family: var(--font-family);
+  font-size: 1.063rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin-bottom: var(--spacing-sm);
+}
+
+.synergyDesc {
+  font-size: 0.938rem;
+  line-height: 1.7;
+  color: var(--color-gray-600);
+}
+
 /* Mulch */
 .mulchContent {
   display: grid;
@@ -131,7 +160,7 @@
   align-items: flex-start;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  background: var(--color-gray-50);
+  background: var(--color-white);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-gray-200);
 }
@@ -166,7 +195,7 @@
   align-items: flex-start;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  background: var(--color-white);
+  background: var(--color-gray-50);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-gray-200);
 }
@@ -199,6 +228,10 @@
   }
 
   .cropsDetail {
+    grid-template-columns: 1fr;
+  }
+
+  .synergyGrid {
     grid-template-columns: 1fr;
   }
 
