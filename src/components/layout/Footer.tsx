@@ -13,22 +13,24 @@ export default function Footer() {
           {/* Brand */}
           <div className={styles.footerBrand}>
             <div className={styles.logo}>
-              <Sprout size={28} />
+              <span className={styles.logoMark}>
+                <Sprout size={22} strokeWidth={2.25} />
+              </span>
               <div>
                 <div className={styles.logoName}>ASOVICAM</div>
                 <div className={styles.logoTagline}>
-                  Asociación Campesina Vida en el Campo
+                  Vida en el Campo
                 </div>
               </div>
             </div>
             <p className={styles.footerDescription}>
               Cultivando tradición, sembrando futuro. Sistema milpa con técnica
-              de mulch en el corazón del Magdalena Medio.
+              de mulch en el corazón del Magdalena Medio colombiano.
             </p>
           </div>
 
           {/* Navigation */}
-          <div className={styles.footerSection}>
+          <div>
             <h3 className={styles.footerTitle}>Navegación</h3>
             <ul className={styles.footerLinks}>
               {navLinks.map((link) => (
@@ -41,8 +43,19 @@ export default function Footer() {
             </ul>
           </div>
 
+          {/* Explorar */}
+          <div>
+            <h3 className={styles.footerTitle}>Explorar</h3>
+            <ul className={styles.footerLinks}>
+              <li><Link to="/milpa" className={styles.footerLink}>Sistema milpa</Link></li>
+              <li><Link to="/nosotros" className={styles.footerLink}>Nuestro equipo</Link></li>
+              <li><Link to="/galeria" className={styles.footerLink}>Galería</Link></li>
+              <li><Link to="/preguntas" className={styles.footerLink}>FAQ</Link></li>
+            </ul>
+          </div>
+
           {/* Contact */}
-          <div className={styles.footerSection}>
+          <div>
             <h3 className={styles.footerTitle}>Contacto</h3>
             <ul className={styles.contactList}>
               <li className={styles.contactItem}>

@@ -1,21 +1,43 @@
 .notFound {
-  min-height: 60vh;
+  position: relative;
+  min-height: 70vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--spacing-3xl) 0;
+  background: radial-gradient(ellipse at center, var(--color-surface-alt), var(--color-surface));
+  overflow: hidden;
+}
+
+.notFound::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(22, 101, 52, 0.06) 1px, transparent 0);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at center, black, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black, transparent 70%);
 }
 
 .emoji {
-  font-size: 4rem;
+  font-size: 4.5rem;
   display: block;
   margin-bottom: var(--spacing-md);
+  filter: drop-shadow(0 8px 16px rgba(20, 20, 10, 0.10));
 }
 
 .title {
-  font-size: 5rem;
-  font-weight: 800;
-  color: var(--color-primary);
+  font-family: var(--font-family-heading);
+  font-size: clamp(4rem, 12vw, 7rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   margin-bottom: var(--spacing-md);
+  line-height: 1;
 }
 
 .text {
