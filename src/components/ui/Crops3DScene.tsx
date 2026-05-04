@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import styles from './Crops3DScene.module.css';
 
 type CropKey = 'maiz' | 'sandia' | 'frijol';
@@ -16,18 +17,22 @@ interface CropMount {
 }
 
 const PALETTE = {
-  maizCob: 0xf6c14a,
-  maizKernel: 0xfbe26a,
-  maizLeaf: 0x4f7a2a,
-  sandiaSkin: 0x1f5b2a,
-  sandiaStripe: 0x0d3018,
-  sandiaLeaf: 0x2f7d3a,
-  frijolPod: 0x6fa64d,
-  frijolBean: 0x6b4226,
   soil: 0x4b2e16,
   soilTop: 0x6b3f1d,
   grass: 0x3c8c3f,
   pollen: 0xfbe26a,
+};
+
+interface ModelSpec {
+  url: string;
+  targetHeight: number;
+  yOffset: number;
+}
+
+const MODEL_SPECS: Record<CropKey, ModelSpec> = {
+  maiz: { url: '/models/corn.glb', targetHeight: 1.8, yOffset: 0.32 },
+  sandia: { url: '/models/watermelon.glb', targetHeight: 1.0, yOffset: 0.32 },
+  frijol: { url: '/models/beanstalk.glb', targetHeight: 1.9, yOffset: 0.32 },
 };
 
 function buildSoilIsland(): THREE.Group {
@@ -89,214 +94,59 @@ function buildSoilIsland(): THREE.Group {
   return group;
 }
 
-function buildCorn(): THREE.Group {
-  const group = new THREE.Group();
+function normalizeModel(root: THREE.Object3D, spec: ModelSpec): THREE.Group {
+  const wrapper = new THREE.Group();
+  wrapper.add(root);
 
-  const cob = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.28, 0.22, 1.1, 24, 6),
-    new THREE.MeshStandardMaterial({
-      color: PALETTE.maizCob,
-      roughness: 0.6,
-      metalness: 0.05,
-    })
-  );
-  cob.position.y = 0.7;
-  cob.castShadow = true;
-  group.add(cob);
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
 
-  const kernelGeo = new THREE.SphereGeometry(0.06, 8, 6);
-  const kernelMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.maizKernel,
-    roughness: 0.4,
-    metalness: 0.1,
-    emissive: 0x4a3000,
-    emissiveIntensity: 0.15,
-  });
-  const rows = 9;
-  const cols = 14;
-  const kernels = new THREE.InstancedMesh(kernelGeo, kernelMat, rows * cols);
-  const m = new THREE.Matrix4();
-  let ix = 0;
-  for (let r = 0; r < rows; r++) {
-    const v = r / (rows - 1);
-    const yLocal = THREE.MathUtils.lerp(0.18, 1.22, v);
-    const radius = THREE.MathUtils.lerp(0.27, 0.21, v);
-    const offset = (r % 2) * (Math.PI / cols);
-    for (let c = 0; c < cols; c++) {
-      const a = (c / cols) * Math.PI * 2 + offset;
-      const x = Math.cos(a) * radius;
-      const z = Math.sin(a) * radius;
-      m.makeRotationY(a);
-      m.setPosition(x, yLocal, z);
-      kernels.setMatrixAt(ix++, m);
+  const height = Math.max(size.y, 0.001);
+  const scale = spec.targetHeight / height;
+  root.scale.setScalar(scale);
+
+  root.position.x -= center.x * scale;
+  root.position.z -= center.z * scale;
+  root.position.y -= box.min.y * scale;
+  root.position.y += spec.yOffset;
+
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      const mat = mesh.material as
+        | THREE.MeshStandardMaterial
+        | THREE.MeshStandardMaterial[]
+        | undefined;
+      const tune = (m: THREE.Material) => {
+        const sm = m as THREE.MeshStandardMaterial;
+        if ('roughness' in sm) sm.roughness = Math.min(1, (sm.roughness ?? 0.7) * 0.9 + 0.1);
+        if ('metalness' in sm) sm.metalness = Math.min(0.2, sm.metalness ?? 0);
+        sm.envMapIntensity = 0.9;
+        sm.needsUpdate = true;
+      };
+      if (Array.isArray(mat)) mat.forEach(tune);
+      else if (mat) tune(mat);
     }
-  }
-  kernels.instanceMatrix.needsUpdate = true;
-  kernels.castShadow = true;
-  group.add(kernels);
-
-  const leafMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.maizLeaf,
-    roughness: 0.7,
-    side: THREE.DoubleSide,
   });
-  for (let i = 0; i < 3; i++) {
-    const leafGeo = new THREE.PlaneGeometry(0.18, 1.4, 1, 8);
-    const lp = leafGeo.attributes.position;
-    for (let j = 0; j < lp.count; j++) {
-      const y = lp.getY(j);
-      const t = (y + 0.7) / 1.4;
-      lp.setX(j, lp.getX(j) * (1 - t * 0.7));
-      lp.setZ(j, Math.sin(t * Math.PI) * 0.15);
-    }
-    leafGeo.computeVertexNormals();
-    const leaf = new THREE.Mesh(leafGeo, leafMat);
-    const a = (i / 3) * Math.PI * 2;
-    leaf.position.set(Math.cos(a) * 0.12, 0.55, Math.sin(a) * 0.12);
-    leaf.rotation.y = a + Math.PI / 2;
-    leaf.rotation.z = -0.35;
-    leaf.castShadow = true;
-    group.add(leaf);
-  }
 
-  return group;
+  return wrapper;
 }
 
-function buildWatermelon(): THREE.Group {
+function buildPlaceholder(key: CropKey): THREE.Group {
   const group = new THREE.Group();
-
-  const body = new THREE.Mesh(
-    new THREE.SphereGeometry(0.55, 48, 32),
-    new THREE.MeshStandardMaterial({
-      color: PALETTE.sandiaSkin,
-      roughness: 0.45,
-      metalness: 0.05,
-    })
-  );
-  body.position.y = 0.85;
-  body.scale.set(1.0, 0.95, 1.0);
-  body.castShadow = true;
-  group.add(body);
-
-  const stripeMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.sandiaStripe,
-    roughness: 0.5,
-    side: THREE.DoubleSide,
-  });
-  for (let i = 0; i < 8; i++) {
-    const stripeGeo = new THREE.TorusGeometry(0.555, 0.05, 6, 64, Math.PI);
-    const stripe = new THREE.Mesh(stripeGeo, stripeMat);
-    stripe.position.y = 0.85;
-    stripe.rotation.y = (i / 8) * Math.PI * 2;
-    stripe.rotation.x = Math.PI / 2;
-    stripe.scale.set(1.0, 0.95, 1.0);
-    group.add(stripe);
-  }
-
+  const color = key === 'maiz' ? 0xf6c14a : key === 'sandia' ? 0x1f5b2a : 0x6fa64d;
   const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.035, 0.045, 0.18, 8),
-    new THREE.MeshStandardMaterial({ color: 0x5b3a1a, roughness: 0.9 })
+    new THREE.CylinderGeometry(0.08, 0.1, 1.2, 12),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
   );
-  stem.position.y = 1.45;
+  stem.position.y = 0.9;
+  stem.castShadow = true;
   group.add(stem);
-
-  const leafGeo = new THREE.SphereGeometry(0.15, 12, 8);
-  const lp = leafGeo.attributes.position;
-  for (let j = 0; j < lp.count; j++) {
-    lp.setY(j, lp.getY(j) * 0.18);
-  }
-  leafGeo.computeVertexNormals();
-  const leaf = new THREE.Mesh(
-    leafGeo,
-    new THREE.MeshStandardMaterial({
-      color: PALETTE.sandiaLeaf,
-      roughness: 0.6,
-      side: THREE.DoubleSide,
-    })
-  );
-  leaf.position.set(0.12, 1.55, 0);
-  leaf.rotation.z = -0.4;
-  leaf.castShadow = true;
-  group.add(leaf);
-
-  return group;
-}
-
-function buildBeans(): THREE.Group {
-  const group = new THREE.Group();
-
-  const stalk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.05, 1.0, 8),
-    new THREE.MeshStandardMaterial({ color: 0x3a5e1a, roughness: 0.9 })
-  );
-  stalk.position.y = 0.65;
-  group.add(stalk);
-
-  const podMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.frijolPod,
-    roughness: 0.55,
-    metalness: 0.05,
-  });
-
-  for (let i = 0; i < 4; i++) {
-    const podGroup = new THREE.Group();
-    const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, 0, 0),
-      new THREE.Vector3(0.1, 0.06, 0.05),
-      new THREE.Vector3(0.25, 0.1, 0.0),
-      new THREE.Vector3(0.4, 0.06, -0.05),
-      new THREE.Vector3(0.5, 0, 0),
-    ]);
-    const podGeo = new THREE.TubeGeometry(curve, 24, 0.06, 10, false);
-    const pod = new THREE.Mesh(podGeo, podMat);
-    pod.castShadow = true;
-    podGroup.add(pod);
-
-    const beanMat = new THREE.MeshStandardMaterial({
-      color: PALETTE.frijolBean,
-      roughness: 0.5,
-      metalness: 0.2,
-    });
-    for (let b = 0; b < 4; b++) {
-      const bean = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 12, 8),
-        beanMat
-      );
-      bean.scale.set(1.1, 0.7, 0.7);
-      bean.position.set(0.07 + b * 0.11, 0.07, 0);
-      podGroup.add(bean);
-    }
-
-    const angle = (i / 4) * Math.PI * 2;
-    podGroup.position.set(
-      Math.cos(angle) * 0.08,
-      0.45 + i * 0.18,
-      Math.sin(angle) * 0.08
-    );
-    podGroup.rotation.y = angle;
-    podGroup.rotation.z = -0.15;
-    group.add(podGroup);
-  }
-
-  const leafMat = new THREE.MeshStandardMaterial({
-    color: 0x4f8a2a,
-    roughness: 0.7,
-    side: THREE.DoubleSide,
-  });
-  for (let i = 0; i < 6; i++) {
-    const leaf = new THREE.Mesh(
-      new THREE.SphereGeometry(0.13, 10, 8),
-      leafMat
-    );
-    leaf.scale.set(1.0, 0.12, 0.7);
-    const a = (i / 6) * Math.PI * 2;
-    const y = 0.4 + i * 0.13;
-    leaf.position.set(Math.cos(a) * 0.18, y, Math.sin(a) * 0.18);
-    leaf.rotation.y = a;
-    leaf.rotation.z = -0.25;
-    group.add(leaf);
-  }
-
   return group;
 }
 
@@ -325,12 +175,6 @@ function buildPollen(): THREE.Points {
   return new THREE.Points(geo, mat);
 }
 
-const CROP_BUILDERS: Record<CropKey, () => THREE.Group> = {
-  maiz: buildCorn,
-  sandia: buildWatermelon,
-  frijol: buildBeans,
-};
-
 const CROP_LAYOUT: { key: CropKey; x: number }[] = [
   { key: 'maiz', x: -2.6 },
   { key: 'sandia', x: 0 },
@@ -351,6 +195,24 @@ function detectWebGLSupport(): boolean {
   }
 }
 
+const modelCache = new Map<string, Promise<THREE.Group>>();
+function loadModel(spec: ModelSpec): Promise<THREE.Group> {
+  let cached = modelCache.get(spec.url);
+  if (!cached) {
+    const loader = new GLTFLoader();
+    cached = new Promise<THREE.Group>((resolve, reject) => {
+      loader.load(
+        spec.url,
+        (gltf) => resolve(gltf.scene),
+        undefined,
+        (err) => reject(err)
+      );
+    });
+    modelCache.set(spec.url, cached);
+  }
+  return cached.then((scene) => scene.clone(true));
+}
+
 interface Crops3DSceneProps {
   className?: string;
 }
@@ -359,6 +221,7 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [supported] = useState(detectWebGLSupport);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!supported) return;
@@ -380,9 +243,22 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     const scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x0a1d12, 8, 22);
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const envScene = new THREE.Scene();
+    envScene.background = new THREE.Color(0x223844);
+    const envLightTop = new THREE.Mesh(
+      new THREE.SphereGeometry(50, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffe6b0, side: THREE.BackSide })
+    );
+    envScene.add(envLightTop);
+    const envTarget = pmrem.fromScene(envScene, 0.04);
+    scene.environment = envTarget.texture;
 
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     camera.position.set(0, 2.6, 8.2);
@@ -416,11 +292,11 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
       pivot.position.set(x, 0, 0);
       const island = buildSoilIsland();
       pivot.add(island);
-      const crop = CROP_BUILDERS[key]();
-      pivot.add(crop);
+      const placeholder = buildPlaceholder(key);
+      pivot.add(placeholder);
       root.add(pivot);
       return {
-        group: crop,
+        group: placeholder,
         pivot,
         basePosition: pivot.position.clone(),
         baseScale: 1,
@@ -430,6 +306,27 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
         key,
       };
     });
+
+    let cancelled = false;
+    Promise.all(
+      CROP_LAYOUT.map(({ key }) => loadModel(MODEL_SPECS[key]).then((scene) => ({ key, scene })))
+    )
+      .then((loaded) => {
+        if (cancelled) return;
+        loaded.forEach(({ key, scene: modelScene }) => {
+          const mount = mounts.find((m) => m.key === key);
+          if (!mount) return;
+          mount.pivot.remove(mount.group);
+          const normalized = normalizeModel(modelScene, MODEL_SPECS[key]);
+          mount.pivot.add(normalized);
+          mount.group = normalized;
+        });
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error loading crop models', err);
+        setLoading(false);
+      });
 
     const pollen = buildPollen();
     scene.add(pollen);
@@ -551,10 +448,13 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
     animate();
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
       wrapper.removeEventListener('pointermove', handlePointerMove);
       wrapper.removeEventListener('pointerleave', handlePointerLeave);
+      pmrem.dispose();
+      envTarget.dispose();
       scene.traverse((obj) => {
         if ((obj as THREE.Mesh).geometry) {
           (obj as THREE.Mesh).geometry.dispose();
@@ -583,6 +483,11 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
           la milpa siguen disponibles abajo.
         </div>
       )}
+      {supported && loading && (
+        <div className={styles.loading} aria-hidden="true">
+          Cargando modelos 3D…
+        </div>
+      )}
       <span className={styles.hint}>Mueve el cursor para explorar</span>
       <div className={styles.legend} aria-hidden="true">
         <span className={styles.chip}>
@@ -607,6 +512,9 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
           Frijol caupí
         </span>
       </div>
+      <span className={styles.credits}>
+        Modelos 3D: Quaternius (CC0), Kenney (CC0), Poly by Google (CC-BY)
+      </span>
     </div>
   );
 }
