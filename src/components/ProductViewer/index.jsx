@@ -81,8 +81,8 @@ export default function ProductViewer() {
             </div>
 
             {useFallback && (
-              <div className="pointer-events-none absolute left-3 top-3 rounded-full bg-amber-100/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-800 ring-1 ring-amber-300">
-                Vista previa · Modelos placeholder
+              <div className="pointer-events-none absolute left-3 top-3 rounded-full bg-emerald-50/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800 ring-1 ring-emerald-300">
+                Modelo procedural HD
               </div>
             )}
           </div>

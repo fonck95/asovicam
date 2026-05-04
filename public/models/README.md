@@ -1,8 +1,17 @@
 # Modelos 3D — `/public/models/`
 
-Esta carpeta debe contener los archivos `.glb` que el visor 3D consume.
+El visor 3D usa por defecto **modelos procedurales detallados**
+construidos con Three.js (mazorca con cientos de kernels reales,
+vaina con frijoles visibles, sandía con shader de franjas). Estos
+modelos viven en `src/components/ProductViewer/models/` y no
+requieren ninguna descarga: el sitio funciona desde el primer
+`npm run dev`.
 
-## Archivos esperados
+Si querés sustituirlos por modelos `.glb` reales (por ejemplo
+escaneos fotogramétricos), colocá los archivos aquí con los
+nombres esperados y el visor los detecta automáticamente.
+
+## Archivos opcionales
 
 | Archivo            | Producto |
 | ------------------ | -------- |
@@ -10,37 +19,43 @@ Esta carpeta debe contener los archivos `.glb` que el visor 3D consume.
 | `bean.glb`         | Frijol   |
 | `watermelon.glb`   | Sandía   |
 
-> Mientras los archivos no existan (o pesen muy poco), el visor mostrará
-> automáticamente **geometrías primitivas** como fallback (un cilindro
-> amarillo para el maíz, una esfera achatada verde para la sandía y una
-> cápsula con semillas para el frijol). Esto permite que el proyecto
-> funcione desde el primer `npm run dev` sin descargar nada.
+Cuando los `.glb` existen y pesan más de 1 KB, el visor los carga
+automáticamente; en caso contrario muestra los modelos
+procedurales HD.
 
-## Dónde descargar modelos gratuitos
+## Dónde descargar modelos gratuitos verificados
 
-1. **[Sketchfab](https://sketchfab.com/3d-models)**
-   - Filtra por `Downloadable` + licencia `Creative Commons - Attribution`.
-   - Búsquedas sugeridas:
-     - `corn cob low poly`
-     - `bean plant`
-     - `watermelon realistic`
-   - Descarga el `.glb` (no `.gltf` separado).
-   - **Recuerda dar crédito** al autor en el footer del sitio.
+1. **[Poly Pizza](https://poly.pizza/)** — sucesor comunitario de
+   Google Poly. Filtros por licencia CC0 / CC-BY. Búsquedas:
+   - `corn` / `corn cob`
+   - `bean plant` / `bean pod`
+   - `watermelon`
 
-2. **[Poly Haven](https://polyhaven.com/models)** — modelos CC0 (sin atribución).
+   Hay un modelo "Watermelon Character" CC0 de Polygonal Mind
+   directamente descargable como GLB.
 
-3. **[Quaternius](https://quaternius.com/)** — packs CC0 de plantas y frutas.
+2. **[Quaternius — Ultimate Stylized Nature Pack](https://quaternius.com/packs/ultimatestylizednature.html)**
+   — pack CC0 de plantas estilizadas (descarga ZIP, conviértelo a GLB con `gltf-transform`).
 
-## Optimización (recomendado)
+3. **[Kenney Assets — Nature Kit](https://kenney.nl/assets/nature-kit)**
+   — assets CC0 low-poly.
 
-Los `.glb` directos suelen ser pesados. Para web, comprime con Draco/Meshopt:
+4. **[Sketchfab](https://sketchfab.com/3d-models?features=downloadable&licenses=322a749bcfa841b29dff1e8a1bb74b0b)**
+   — modelos descargables con licencia CC-BY (recordá dar crédito en el footer).
+
+5. **[Poly Haven — Models](https://polyhaven.com/models)** — CC0 (sin atribución requerida).
+
+## Optimización de los `.glb` (recomendado)
+
+Los `.glb` directos suelen pesar bastante. Antes de usarlos en producción,
+comprimilos con Draco/Meshopt:
 
 ### Opción A — gltf.report (web, sin instalar nada)
 
-1. Abre <https://gltf.report/>
-2. Sube tu `.glb`.
-3. Activa `Draco compression` y `Meshopt`.
-4. Descarga el resultado y renombra a `corn.glb`, `bean.glb` o `watermelon.glb`.
+1. Abrí <https://gltf.report/>
+2. Subí tu `.glb`.
+3. Activá `Draco compression` y `Meshopt`.
+4. Descargá el resultado y renombralo a `corn.glb`, `bean.glb` o `watermelon.glb`.
 
 ### Opción B — gltf-transform (CLI)
 
@@ -49,7 +64,18 @@ npm install -g @gltf-transform/cli
 gltf-transform optimize input.glb corn.glb --compress draco
 ```
 
-## Cómo cambiar a otros modelos
+## Cambiar nombres de archivo
 
-Si quieres usar otros nombres de archivo, edítalos en
+Si querés usar otros nombres, edítalos en
 `src/components/ProductViewer/products.js`, campo `modelPath`.
+
+## Editar los modelos procedurales
+
+Cada modelo procedural vive en su propio archivo:
+
+- `src/components/ProductViewer/models/CornModel.jsx`
+- `src/components/ProductViewer/models/BeanModel.jsx`
+- `src/components/ProductViewer/models/WatermelonModel.jsx`
+
+Podés ajustar colores, número de kernels, curvatura de la vaina o
+parámetros del shader de la sandía sin tocar el resto del visor.
