@@ -7,6 +7,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
 const Milpa = lazy(() => import('./pages/Milpa'));
+const Productos = lazy(() => import('./pages/Productos'));
 const Gallery = lazy(() => import('./pages/Gallery'));
 const Contact = lazy(() => import('./pages/Contact'));
 const FAQ = lazy(() => import('./pages/FAQ'));
@@ -38,6 +39,7 @@ export default function App() {
               <Route index element={<Home />} />
               <Route path="nosotros" element={<About />} />
               <Route path="milpa" element={<Milpa />} />
+              <Route path="productos" element={<Productos />} />
               <Route path="galeria" element={<Gallery />} />
               <Route path="contacto" element={<Contact />} />
               <Route path="preguntas" element={<FAQ />} />
