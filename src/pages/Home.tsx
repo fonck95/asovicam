@@ -1,5 +1,16 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Leaf, Users, Mountain, Sun, BookOpen, Wheat, TreePine } from 'lucide-react';
+import {
+  ArrowRight,
+  Leaf,
+  Users,
+  Mountain,
+  Sun,
+  BookOpen,
+  Wheat,
+  TreePine,
+  Sparkles,
+  Heart,
+} from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import SEO from '../components/SEO';
@@ -10,10 +21,10 @@ import { impactStats } from '../data/impact';
 import styles from './Home.module.css';
 
 const programIcons: Record<string, React.ReactNode> = {
-  leaf: <Leaf size={28} />,
-  wheat: <Wheat size={28} />,
-  book: <BookOpen size={28} />,
-  tree: <TreePine size={28} />,
+  leaf: <Leaf size={24} />,
+  wheat: <Wheat size={24} />,
+  book: <BookOpen size={24} />,
+  tree: <TreePine size={24} />,
 };
 
 export default function Home() {
@@ -29,18 +40,21 @@ export default function Home() {
         <div className={styles.heroOverlay} />
         <div className={`container ${styles.heroContent}`}>
           <span className={styles.heroBadge}>
-            <Leaf size={16} /> Ciénaga de Barbacoas, Yondó — Magdalena Medio
+            <span className={styles.heroBadgeDot}>
+              <Leaf size={12} strokeWidth={2.5} />
+            </span>
+            Ciénaga de Barbacoas, Yondó · Magdalena Medio
           </span>
           <h1 className={styles.heroTitle}>
             Cultivando tradición,
             <br />
-            <span className={styles.heroHighlight}>sembrando futuro</span>
+            <span className={styles.heroHighlight}>sembrando futuro.</span>
           </h1>
           <p className={styles.heroText}>
-            Somos ASOVICAM, la Asociación Campesina Vida en el Campo. Rescatamos
-            el sistema ancestral de la milpa — maíz, frijol caupí y sandía —
-            con técnica de mulch para una agricultura sostenible en el corazón
-            del Magdalena Medio colombiano.
+            Somos ASOVICAM, la Asociación Campesina Vida en el Campo.
+            Rescatamos el sistema ancestral de la milpa &mdash; maíz, frijol caupí
+            y sandía &mdash; con técnica de mulch para una agricultura sostenible en
+            el corazón del Magdalena Medio colombiano.
           </p>
           <div className={styles.heroCta}>
             <Button to="/milpa" size="lg">
@@ -50,43 +64,67 @@ export default function Home() {
               Sobre nosotros
             </Button>
           </div>
+
+          <div className={styles.heroMeta}>
+            <div className={styles.heroMetaItem}>
+              <span className={styles.heroMetaValue}>50+</span>
+              <span className={styles.heroMetaLabel}>Familias</span>
+            </div>
+            <div className={styles.heroMetaItem}>
+              <span className={styles.heroMetaValue}>120 ha</span>
+              <span className={styles.heroMetaLabel}>Cultivadas</span>
+            </div>
+            <div className={styles.heroMetaItem}>
+              <span className={styles.heroMetaValue}>100%</span>
+              <span className={styles.heroMetaLabel}>Orgánico</span>
+            </div>
+          </div>
         </div>
+
+        <span className={styles.heroScroll} aria-hidden="true">
+          Scroll
+        </span>
       </section>
 
       {/* Features */}
       <section className="section">
         <div className="container">
-          <h2 className="section__title">Nuestra esencia</h2>
-          <p className="section__subtitle">
-            Un modelo de agricultura campesina que cuida la tierra, alimenta
-            comunidades y preserva el saber ancestral.
-          </p>
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>
+              <Sparkles size={12} /> Nuestra esencia
+            </span>
+            <h2 className="section__title">Un modelo que cuida la tierra</h2>
+            <p className="section__subtitle">
+              Agricultura campesina que regenera el suelo, alimenta comunidades
+              y preserva el saber ancestral del Magdalena Medio.
+            </p>
+          </div>
 
           <div className={styles.features}>
             {[
               {
-                icon: <Leaf size={32} />,
+                icon: <Leaf size={26} />,
                 title: 'Agricultura Sostenible',
                 description:
                   'El sistema milpa con mulch regenera el suelo, conserva agua y elimina la necesidad de agroquímicos.',
               },
               {
-                icon: <Users size={32} />,
+                icon: <Users size={26} />,
                 title: 'Comunidad Campesina',
                 description:
-                  'Más de 50 familias campesinas unidas por el amor a la tierra y la tradición agrícola del Magdalena Medio.',
+                  'Más de 50 familias campesinas unidas por el amor a la tierra y la tradición agrícola.',
               },
               {
-                icon: <Mountain size={32} />,
+                icon: <Mountain size={26} />,
                 title: 'Territorio',
                 description:
-                  'Yondó, Antioquia, en el corazón del Magdalena Medio, tierra fértil donde la milpa encuentra su hogar ideal.',
+                  'Yondó, Antioquia, en el corazón del Magdalena Medio, tierra fértil donde la milpa florece.',
               },
               {
-                icon: <Sun size={32} />,
+                icon: <Sun size={26} />,
                 title: 'Técnica de Mulch',
                 description:
-                  'La cobertura orgánica del suelo protege de la erosión, mantiene la humedad y nutre la vida microbiana.',
+                  'Cobertura orgánica que protege de la erosión, retiene humedad y nutre la vida microbiana.',
               },
             ].map((feature) => (
               <div key={feature.title} className={styles.featureItem}>
@@ -104,11 +142,16 @@ export default function Home() {
       {/* Crops Preview */}
       <section className="section section--alt">
         <div className="container">
-          <h2 className="section__title">Los tres pilares de la milpa</h2>
-          <p className="section__subtitle">
-            Maíz, frijol caupí y sandía: una alianza natural que ha alimentado
-            comunidades durante generaciones.
-          </p>
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>
+              <Wheat size={12} /> Sistema milpa
+            </span>
+            <h2 className="section__title">Los tres pilares de la milpa</h2>
+            <p className="section__subtitle">
+              Maíz, frijol caupí y sandía: una alianza natural que ha alimentado
+              comunidades durante generaciones.
+            </p>
+          </div>
 
           <div className={styles.cropsGrid}>
             {crops.map((crop) => (
@@ -129,11 +172,16 @@ export default function Home() {
       {/* Impact Stats */}
       <section className="section">
         <div className="container">
-          <h2 className="section__title">Nuestro impacto</h2>
-          <p className="section__subtitle">
-            Cifras que reflejan el compromiso de ASOVICAM con la agricultura
-            sostenible y la comunidad campesina.
-          </p>
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>
+              <Heart size={12} /> Nuestro impacto
+            </span>
+            <h2 className="section__title">Cifras que reflejan compromiso</h2>
+            <p className="section__subtitle">
+              Resultados tangibles del trabajo colectivo en agricultura
+              sostenible y fortalecimiento comunitario.
+            </p>
+          </div>
 
           <div className={styles.impactGrid}>
             {impactStats.map((stat) => (
@@ -150,11 +198,16 @@ export default function Home() {
       {/* Programs */}
       <section className="section section--alt">
         <div className="container">
-          <h2 className="section__title">Nuestros programas</h2>
-          <p className="section__subtitle">
-            Líneas de trabajo que fortalecen la agricultura campesina, la
-            organización comunitaria y la conservación del territorio.
-          </p>
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>
+              <BookOpen size={12} /> Líneas de trabajo
+            </span>
+            <h2 className="section__title">Nuestros programas</h2>
+            <p className="section__subtitle">
+              Iniciativas que fortalecen la agricultura campesina, la
+              organización comunitaria y la conservación del territorio.
+            </p>
+          </div>
 
           <div className={styles.programsGrid}>
             {programs.map((program) => (
@@ -162,10 +215,12 @@ export default function Home() {
                 <div className={styles.programIcon}>
                   {programIcons[program.icon]}
                 </div>
-                <h3 className={styles.programTitle}>{program.title}</h3>
-                <p className={styles.programDescription}>
-                  {program.description}
-                </p>
+                <div className={styles.programBody}>
+                  <h3 className={styles.programTitle}>{program.title}</h3>
+                  <p className={styles.programDescription}>
+                    {program.description}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
@@ -175,16 +230,25 @@ export default function Home() {
       {/* Testimonials */}
       <section className="section">
         <div className="container">
-          <h2 className="section__title">Voces del campo</h2>
-          <p className="section__subtitle">
-            Nuestros campesinos comparten su experiencia con el sistema milpa.
-          </p>
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>
+              <Users size={12} /> Voces del campo
+            </span>
+            <h2 className="section__title">Lo que dicen nuestras familias</h2>
+            <p className="section__subtitle">
+              Testimonios reales de campesinos y campesinas que viven el
+              sistema milpa cada día.
+            </p>
+          </div>
 
           <div className={styles.testimonials}>
             {testimonials.map((t) => (
               <div key={t.id} className={styles.testimonial}>
+                <div className={styles.testimonialQuoteMark} aria-hidden="true">
+                  &ldquo;
+                </div>
                 <blockquote className={styles.testimonialQuote}>
-                  &ldquo;{t.content}&rdquo;
+                  {t.content}
                 </blockquote>
                 <div className={styles.testimonialAuthor}>
                   <strong>{t.author}</strong>
@@ -198,17 +262,22 @@ export default function Home() {
 
       {/* CTA */}
       <section className={styles.cta}>
-        <div className="container" style={{ textAlign: 'center' }}>
-          <h2 className={styles.ctaTitle}>
-            Únete a nuestra causa campesina
-          </h2>
-          <p className={styles.ctaText}>
-            Conoce más sobre nuestro trabajo, visita nuestros cultivos o apoya
-            la agricultura sostenible en el Magdalena Medio.
-          </p>
-          <Button to="/contacto" size="lg">
-            Contáctanos <ArrowRight size={18} />
-          </Button>
+        <div className="container">
+          <div className={styles.ctaInner}>
+            <span className={styles.ctaEyebrow}>
+              <Heart size={12} /> Únete
+            </span>
+            <h2 className={styles.ctaTitle}>
+              Apoya la causa campesina del Magdalena Medio
+            </h2>
+            <p className={styles.ctaText}>
+              Conoce nuestro trabajo, visita los cultivos o suma tu voz al
+              movimiento por una agricultura digna y sostenible.
+            </p>
+            <Button to="/contacto" size="lg">
+              Contáctanos <ArrowRight size={18} />
+            </Button>
+          </div>
         </div>
       </section>
     </>

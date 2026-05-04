@@ -3,36 +3,65 @@
    Asociación Campesina Vida en el Campo
    ======================================== */
 
-/* CSS Custom Properties */
 :root {
-  /* Brand Colors */
-  --color-primary: #15803d;
+  /* Brand Colors — refined palette */
+  --color-primary: #166534;
   --color-primary-light: #22c55e;
-  --color-primary-dark: #14532d;
+  --color-primary-lighter: #dcfce7;
+  --color-primary-dark: #052e16;
+  --color-primary-darker: #022c22;
+
   --color-secondary: #92400e;
   --color-secondary-light: #d97706;
-  --color-accent: #dc2626;
+  --color-secondary-soft: #fef3c7;
 
-  /* Neutral Colors */
+  --color-accent: #b91c1c;
+  --color-accent-soft: #fee2e2;
+
+  /* Surface */
+  --color-surface: #ffffff;
+  --color-surface-alt: #fafaf7;
+  --color-surface-warm: #f7f5ee;
+
+  /* Neutral Colors (warm-tinted) */
   --color-white: #ffffff;
-  --color-gray-50: #f9fafb;
-  --color-gray-100: #f3f4f6;
-  --color-gray-200: #e5e7eb;
-  --color-gray-300: #d1d5db;
-  --color-gray-500: #6b7280;
-  --color-gray-600: #4b5563;
-  --color-gray-700: #374151;
-  --color-gray-800: #1f2937;
-  --color-gray-900: #111827;
+  --color-gray-50: #faf9f6;
+  --color-gray-100: #f3f1ea;
+  --color-gray-200: #e6e3d9;
+  --color-gray-300: #d4d0c2;
+  --color-gray-400: #9a9685;
+  --color-gray-500: #6b6857;
+  --color-gray-600: #4b4838;
+  --color-gray-700: #3a3828;
+  --color-gray-800: #1f1d12;
+  --color-gray-900: #14130a;
 
   /* Crop Colors */
   --color-maiz: #f59e0b;
   --color-frijol: #059669;
   --color-sandia: #dc2626;
 
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #052e16 0%, #14532d 45%, #166534 100%);
+  --gradient-warm: linear-gradient(135deg, #78350f 0%, #b45309 60%, #d97706 100%);
+  --gradient-soft: linear-gradient(180deg, #faf9f6 0%, #f3f1ea 100%);
+  --gradient-leaf: linear-gradient(135deg, #15803d 0%, #166534 50%, #14532d 100%);
+
   /* Typography */
-  --font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-family-heading: 'Georgia', 'Times New Roman', serif;
+  --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-family-heading: 'Fraunces', 'Georgia', 'Times New Roman', serif;
+
+  /* Type Scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.5rem;
+  --text-5xl: 3.25rem;
+  --text-6xl: 4rem;
 
   /* Spacing */
   --spacing-xs: 0.25rem;
@@ -41,29 +70,35 @@
   --spacing-lg: 1.5rem;
   --spacing-xl: 2rem;
   --spacing-2xl: 3rem;
-  --spacing-3xl: 4rem;
+  --spacing-3xl: 4.5rem;
+  --spacing-4xl: 6rem;
 
   /* Border Radius */
   --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
   --radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  /* Shadows — layered, soft */
+  --shadow-xs: 0 1px 2px rgba(20, 20, 10, 0.04);
+  --shadow-sm: 0 1px 3px rgba(20, 20, 10, 0.06), 0 1px 2px rgba(20, 20, 10, 0.04);
+  --shadow-md: 0 4px 8px -2px rgba(20, 20, 10, 0.06), 0 2px 4px -2px rgba(20, 20, 10, 0.04);
+  --shadow-lg: 0 12px 24px -8px rgba(20, 20, 10, 0.10), 0 4px 8px -4px rgba(20, 20, 10, 0.06);
+  --shadow-xl: 0 24px 48px -12px rgba(20, 20, 10, 0.14), 0 8px 16px -8px rgba(20, 20, 10, 0.08);
+  --shadow-glow: 0 0 0 1px rgba(22, 101, 52, 0.08), 0 8px 24px -8px rgba(22, 101, 52, 0.20);
+  --shadow-ring: 0 0 0 4px rgba(22, 101, 52, 0.12);
 
   /* Transitions */
-  --transition-fast: 150ms ease;
-  --transition-base: 250ms ease;
-  --transition-slow: 350ms ease;
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Layout */
   --max-width: 1200px;
-  --header-height: 72px;
+  --max-width-narrow: 880px;
+  --header-height: 76px;
 }
 
 /* Reset & Base */
@@ -78,15 +113,18 @@
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
 }
 
 body {
   font-family: var(--font-family);
+  font-size: var(--text-base);
   color: var(--color-gray-800);
-  background-color: var(--color-white);
-  line-height: 1.6;
+  background-color: var(--color-surface);
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 img {
@@ -121,8 +159,23 @@ select {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-family-heading);
-  line-height: 1.2;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
   color: var(--color-gray-900);
+}
+
+h1 { font-weight: 700; letter-spacing: -0.025em; }
+h2 { letter-spacing: -0.02em; }
+
+p {
+  text-wrap: pretty;
+}
+
+/* Selection */
+::selection {
+  background-color: rgba(22, 101, 52, 0.18);
+  color: var(--color-primary-darker);
 }
 
 /* Utility Classes */
@@ -133,28 +186,108 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0 var(--spacing-lg);
 }
 
+.container-narrow {
+  max-width: var(--max-width-narrow);
+}
+
 .section {
-  padding: var(--spacing-3xl) 0;
+  padding: var(--spacing-4xl) 0;
 }
 
 .section--alt {
-  background-color: var(--color-gray-50);
+  background-color: var(--color-surface-alt);
+  position: relative;
+}
+
+.section--alt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(22, 101, 52, 0.06) 1px, transparent 0);
+  background-size: 32px 32px;
+  pointer-events: none;
+  mask-image: linear-gradient(180deg, transparent 0, black 80px, black calc(100% - 80px), transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, black 80px, black calc(100% - 80px), transparent 100%);
+}
+
+.section--alt > * {
+  position: relative;
+}
+
+.section__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  background: var(--color-primary-lighter);
+  color: var(--color-primary);
+  border-radius: var(--radius-full);
+  font-family: var(--font-family);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--spacing-md);
 }
 
 .section__title {
-  font-size: 2.25rem;
-  font-weight: 700;
+  font-family: var(--font-family-heading);
+  font-size: clamp(1.875rem, 3.2vw + 0.5rem, 2.75rem);
+  font-weight: 600;
   text-align: center;
-  margin-bottom: var(--spacing-sm);
-  color: var(--color-primary-dark);
+  letter-spacing: -0.025em;
+  margin-bottom: var(--spacing-md);
+  color: var(--color-gray-900);
+  text-wrap: balance;
 }
 
 .section__subtitle {
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   text-align: center;
   color: var(--color-gray-500);
   max-width: 640px;
-  margin: 0 auto var(--spacing-2xl);
+  margin: 0 auto var(--spacing-3xl);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.section__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--spacing-3xl);
+}
+
+.section__header .section__title,
+.section__header .section__subtitle {
+  margin-bottom: 0;
+}
+
+.section__header .section__title + .section__subtitle {
+  margin-top: var(--spacing-md);
+}
+
+/* Decorative divider */
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: var(--spacing-md) 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  max-width: 40px;
+  background: linear-gradient(90deg, transparent, var(--color-gray-300));
+}
+
+.divider::after {
+  background: linear-gradient(90deg, var(--color-gray-300), transparent);
 }
 
 /* Screen reader only */
@@ -173,14 +306,15 @@ h1, h2, h3, h4, h5, h6 {
 /* Focus visible */
 :focus-visible {
   outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
 }
 
 /* Animations */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(24px);
   }
   to {
     opacity: 1;
@@ -193,21 +327,32 @@ h1, h2, h3, h4, h5, h6 {
   to { opacity: 1; }
 }
 
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
 .animate-fade-in-up {
-  animation: fadeInUp 0.6s ease forwards;
+  animation: fadeInUp 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .animate-fade-in {
   animation: fadeIn 0.6s ease forwards;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .section__title {
-    font-size: 1.75rem;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+}
 
+@media (max-width: 768px) {
   .section {
-    padding: var(--spacing-2xl) 0;
+    padding: var(--spacing-3xl) 0;
   }
 }

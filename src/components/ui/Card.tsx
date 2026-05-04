@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import styles from './Card.module.css';
 
 interface CardProps {
@@ -8,11 +8,12 @@ interface CardProps {
 }
 
 export default function Card({ children, className = '', accentColor }: CardProps) {
+  const style = accentColor
+    ? ({ '--card-accent': accentColor } as CSSProperties)
+    : undefined;
+
   return (
-    <div
-      className={`${styles.card} ${className}`}
-      style={accentColor ? { borderTopColor: accentColor } : undefined}
-    >
+    <div className={`${styles.card} ${className}`} style={style}>
       {children}
     </div>
   );
