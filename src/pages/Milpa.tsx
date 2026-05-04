@@ -1,5 +1,6 @@
 import { CheckCircle, Layers, Droplets, Bug, Recycle } from 'lucide-react';
 import Card from '../components/ui/Card';
+import GpuImage from '../components/ui/GpuImage';
 import SEO from '../components/SEO';
 import { crops } from '../data/crops';
 import styles from './Milpa.module.css';
@@ -25,6 +26,20 @@ export default function Milpa() {
       {/* What is Milpa */}
       <section className="section">
         <div className="container">
+          <div className={styles.introMedia}>
+            <GpuImage
+              src="/milpa.jpg"
+              alt="Sistema milpa de ASOVICAM en Yondó: maíz, frijol caupí y sandía cultivados en armonía con técnica de mulch."
+              maxWidth={1280}
+              aspectRatio="16 / 9"
+              eager
+            />
+            <figcaption className={styles.introCaption}>
+              Cultivo asociado de maíz, frijol caupí y sandía en parcelas de
+              ASOVICAM &mdash; Ciénaga de Barbacoas, Yondó.
+            </figcaption>
+          </div>
+
           <div className={styles.intro}>
             <h2 className={styles.sectionTitle}>
               ¿Qué es la milpa?
@@ -193,6 +208,19 @@ export default function Milpa() {
           <p className="section__subtitle">
             Paso a paso, así establecemos nuestra milpa en Yondó
           </p>
+
+          <div className={styles.processMedia}>
+            <GpuImage
+              src="/steps-milpa.jpg"
+              alt="Pasos de siembra de la milpa: preparación del terreno, siembra escalonada de maíz, frijol caupí y sandía, y mantenimiento con mulch."
+              maxWidth={1280}
+              aspectRatio="16 / 9"
+            />
+            <figcaption className={styles.introCaption}>
+              De la preparación del terreno a la cosecha escalonada &mdash; el
+              ciclo completo de la milpa con mulch.
+            </figcaption>
+          </div>
 
           <div className={styles.process}>
             {[

@@ -13,12 +13,48 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import Product3DGallery, {
+  type ProductSlide,
+} from '../components/ui/Product3DGallery';
 import SEO from '../components/SEO';
 import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
 import { programs } from '../data/programs';
 import { impactStats } from '../data/impact';
 import styles from './Home.module.css';
+
+const productSlides: ProductSlide[] = [
+  {
+    id: 'milpa',
+    title: 'Milpa viva',
+    subtitle: 'Maíz · Frijol caupí · Sandía',
+    description:
+      'Tres cultivos en una sola parcela: el maíz como tutor, el frijol que fija nitrógeno y la sandía que tapiza el suelo. Una alianza ancestral, productiva y regenerativa.',
+    image: '/milpa.jpg',
+    badge: 'Producto insignia',
+    accent: 'var(--color-primary)',
+  },
+  {
+    id: 'siembra',
+    title: 'Ciclo de siembra',
+    subtitle: 'Del terreno a la cosecha',
+    description:
+      'Seis pasos cuidadosamente escalonados: preparación, siembra del maíz, asociación con frijol y sandía, mulch continuo y cosecha en cascada a lo largo del año.',
+    image: '/steps-milpa.jpg',
+    badge: 'Proceso',
+    accent: 'var(--color-secondary-light)',
+  },
+  {
+    id: 'mulch',
+    title: 'Técnica de mulch',
+    subtitle: 'Suelo cubierto, suelo vivo',
+    description:
+      'Una capa de materia orgánica que retiene hasta 70% de la humedad, controla arvenses y alimenta la microbiota. La diferencia entre cultivar y regenerar.',
+    image: '/milpa.jpg',
+    badge: 'Cobertura orgánica',
+    accent: 'var(--color-frijol)',
+  },
+];
 
 const programIcons: Record<string, React.ReactNode> = {
   leaf: <Leaf size={24} />,
@@ -166,6 +202,25 @@ export default function Home() {
               </Card>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Product Showcase — 3D scroll gallery */}
+      <section className={`section ${styles.showcase}`}>
+        <div className="container">
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>
+              <Sparkles size={12} /> Nuestro producto
+            </span>
+            <h2 className="section__title">Mira la milpa de cerca</h2>
+            <p className="section__subtitle">
+              Imágenes reales de nuestros cultivos en Yondó. Pasa el cursor sobre
+              cada tarjeta para verlas con perspectiva — optimizadas en tu
+              dispositivo con WebGPU.
+            </p>
+          </div>
+
+          <Product3DGallery slides={productSlides} />
         </div>
       </section>
 
