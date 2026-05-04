@@ -16,6 +16,7 @@ import Card from '../components/ui/Card';
 import Product3DGallery, {
   type ProductSlide,
 } from '../components/ui/Product3DGallery';
+import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
 import SEO from '../components/SEO';
 import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
@@ -73,6 +74,7 @@ export default function Home() {
 
       {/* Hero */}
       <section className={styles.hero}>
+        <HeroGpuCanvas />
         <div className={styles.heroOverlay} />
         <div className={`container ${styles.heroContent}`}>
           <span className={styles.heroBadge}>

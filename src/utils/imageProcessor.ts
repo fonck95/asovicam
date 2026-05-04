@@ -1,61 +1,55 @@
+// WebGPU post-load enhancer: takes an already-loaded <img>, runs a sharpen +
+// saturation pass on the GPU, and returns a blob URL the browser can swap in
+// as a crisper, more vibrant version. Fast because the input is already a
+// small WebP — no giant network fetches here. Falls back to a plain canvas
+// pass if WebGPU isn't available.
 import { getWebGPUDevice } from './webgpu';
 
-export interface ProcessOptions {
-  src: string;
-  maxWidth: number;
-  quality?: number;
-  format?: 'image/webp' | 'image/jpeg';
-}
+const ENHANCE_SHADER = /* wgsl */ `
+struct Params { sharpen: f32, saturation: f32, _pad0: f32, _pad1: f32 };
 
-interface CachedResult {
-  url: string;
-  width: number;
-  height: number;
-}
-
-const cache = new Map<string, Promise<CachedResult>>();
-
-const RESIZE_SHADER = /* wgsl */ `
 @group(0) @binding(0) var inputTex: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
 @group(0) @binding(2) var outputTex: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(3) var<uniform> params: Params;
+
+fn applySaturation(c: vec3<f32>, s: f32) -> vec3<f32> {
+  let luma = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+  return mix(vec3<f32>(luma), c, s);
+}
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let outDim = textureDimensions(outputTex);
-  if (gid.x >= outDim.x || gid.y >= outDim.y) { return; }
+  let dim = textureDimensions(outputTex);
+  if (gid.x >= dim.x || gid.y >= dim.y) { return; }
 
   let uv = (vec2<f32>(f32(gid.x), f32(gid.y)) + 0.5)
-         / vec2<f32>(f32(outDim.x), f32(outDim.y));
+         / vec2<f32>(f32(dim.x), f32(dim.y));
+  let texel = 1.0 / vec2<f32>(f32(dim.x), f32(dim.y));
 
-  let inDim = textureDimensions(inputTex);
-  let texel = 1.0 / vec2<f32>(f32(inDim.x), f32(inDim.y));
+  let center = textureSampleLevel(inputTex, smp, uv, 0.0);
+  let n = textureSampleLevel(inputTex, smp, uv + vec2<f32>( 0.0, -texel.y), 0.0);
+  let s = textureSampleLevel(inputTex, smp, uv + vec2<f32>( 0.0,  texel.y), 0.0);
+  let e = textureSampleLevel(inputTex, smp, uv + vec2<f32>( texel.x, 0.0), 0.0);
+  let w = textureSampleLevel(inputTex, smp, uv + vec2<f32>(-texel.x, 0.0), 0.0);
 
-  // 3x3 weighted (gaussian-ish) downsample for sharp + clean rescale.
-  var sum = vec4<f32>(0.0);
-  var totalW = 0.0;
-  for (var dy = -1; dy <= 1; dy = dy + 1) {
-    for (var dx = -1; dx <= 1; dx = dx + 1) {
-      let offset = vec2<f32>(f32(dx), f32(dy)) * texel;
-      let w = 1.0 / (1.0 + 0.5 * f32(dx * dx + dy * dy));
-      sum = sum + textureSampleLevel(inputTex, smp, uv + offset, 0.0) * w;
-      totalW = totalW + w;
-    }
-  }
-
-  textureStore(outputTex, vec2<i32>(i32(gid.x), i32(gid.y)), sum / totalW);
+  let sharpened = center.rgb + (center.rgb * 4.0 - n.rgb - s.rgb - e.rgb - w.rgb) * params.sharpen;
+  let out = applySaturation(sharpened, params.saturation);
+  textureStore(outputTex, vec2<i32>(i32(gid.x), i32(gid.y)),
+               vec4<f32>(clamp(out, vec3<f32>(0.0), vec3<f32>(1.0)), center.a));
 }
 `;
 
-let pipelinePromise: Promise<{
+interface PipelineCache {
   pipeline: GPUComputePipeline;
   sampler: GPUSampler;
-}> | null = null;
+}
+let pipelineCache: Promise<PipelineCache> | null = null;
 
 function getPipeline(device: GPUDevice) {
-  if (!pipelinePromise) {
-    pipelinePromise = Promise.resolve().then(() => {
-      const module = device.createShaderModule({ code: RESIZE_SHADER });
+  if (!pipelineCache) {
+    pipelineCache = Promise.resolve().then(() => {
+      const module = device.createShaderModule({ code: ENHANCE_SHADER });
       const pipeline = device.createComputePipeline({
         layout: 'auto',
         compute: { module, entryPoint: 'main' },
@@ -69,40 +63,69 @@ function getPipeline(device: GPUDevice) {
       return { pipeline, sampler };
     });
   }
-  return pipelinePromise;
+  return pipelineCache;
 }
 
-function targetSize(naturalW: number, naturalH: number, maxW: number) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cap = Math.min(Math.round(maxW * dpr), naturalW);
-  if (cap >= naturalW) return { w: naturalW, h: naturalH };
-  const ratio = cap / naturalW;
-  return { w: cap, h: Math.max(1, Math.round(naturalH * ratio)) };
+export interface EnhanceOptions {
+  sharpen?: number;
+  saturation?: number;
 }
 
-async function resizeWithGPU(
+const enhanceCache = new Map<string, Promise<string>>();
+
+export function enhanceImage(
+  src: string,
+  bitmap: ImageBitmap,
+  opts: EnhanceOptions = {},
+): Promise<string> {
+  const sharpen = opts.sharpen ?? 0.18;
+  const saturation = opts.saturation ?? 1.08;
+  const key = `${src}|${sharpen}|${saturation}`;
+  const cached = enhanceCache.get(key);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    const w = bitmap.width;
+    const h = bitmap.height;
+
+    const device = await getWebGPUDevice();
+    if (device) {
+      try {
+        return await runWebGPU(device, bitmap, w, h, sharpen, saturation);
+      } catch (err) {
+        console.warn('[enhanceImage] WebGPU enhance failed, falling back', err);
+      }
+    }
+    return runCanvas(bitmap, w, h, saturation);
+  })();
+
+  enhanceCache.set(key, promise);
+  promise.catch(() => enhanceCache.delete(key));
+  return promise;
+}
+
+async function runWebGPU(
   device: GPUDevice,
   bitmap: ImageBitmap,
   w: number,
   h: number,
-  format: string,
-  quality: number,
-): Promise<Blob | null> {
+  sharpen: number,
+  saturation: number,
+): Promise<string> {
   const { pipeline, sampler } = await getPipeline(device);
 
   const inputTex = device.createTexture({
-    size: [bitmap.width, bitmap.height],
+    size: [w, h],
     format: 'rgba8unorm',
     usage:
       GPUTextureUsage.TEXTURE_BINDING |
       GPUTextureUsage.COPY_DST |
       GPUTextureUsage.RENDER_ATTACHMENT,
   });
-
   device.queue.copyExternalImageToTexture(
     { source: bitmap },
     { texture: inputTex },
-    [bitmap.width, bitmap.height],
+    [w, h],
   );
 
   const outputTex = device.createTexture({
@@ -111,12 +134,20 @@ async function resizeWithGPU(
     usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC,
   });
 
+  const params = new Float32Array([sharpen, saturation, 0, 0]);
+  const paramBuf = device.createBuffer({
+    size: params.byteLength,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(paramBuf, 0, params);
+
   const bindGroup = device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: inputTex.createView() },
       { binding: 1, resource: sampler },
       { binding: 2, resource: outputTex.createView() },
+      { binding: 3, resource: { buffer: paramBuf } },
     ],
   });
 
@@ -127,13 +158,11 @@ async function resizeWithGPU(
   pass.dispatchWorkgroups(Math.ceil(w / 8), Math.ceil(h / 8));
   pass.end();
 
-  // 256-byte aligned rows for copyTextureToBuffer.
   const bytesPerRow = Math.ceil((w * 4) / 256) * 256;
   const readBuf = device.createBuffer({
     size: bytesPerRow * h,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
   });
-
   encoder.copyTextureToBuffer(
     { texture: outputTex },
     { buffer: readBuf, bytesPerRow },
@@ -144,12 +173,11 @@ async function resizeWithGPU(
   await readBuf.mapAsync(GPUMapMode.READ);
   const padded = new Uint8ClampedArray(readBuf.getMappedRange().slice(0));
   readBuf.unmap();
-
   inputTex.destroy();
   outputTex.destroy();
+  paramBuf.destroy();
   readBuf.destroy();
 
-  // Strip row padding.
   const tight = new Uint8ClampedArray(w * h * 4);
   const rowBytes = w * 4;
   for (let y = 0; y < h; y++) {
@@ -158,72 +186,23 @@ async function resizeWithGPU(
 
   const offscreen = new OffscreenCanvas(w, h);
   const ctx = offscreen.getContext('2d');
-  if (!ctx) return null;
-  const imageData = new ImageData(tight, w, h);
-  ctx.putImageData(imageData, 0, 0);
-  return await offscreen.convertToBlob({ type: format, quality });
+  if (!ctx) throw new Error('no 2d context');
+  ctx.putImageData(new ImageData(tight, w, h), 0, 0);
+  const blob = await offscreen.convertToBlob({ type: 'image/webp', quality: 0.9 });
+  return URL.createObjectURL(blob);
 }
 
-async function resizeWithCanvas(
+async function runCanvas(
   bitmap: ImageBitmap,
   w: number,
   h: number,
-  format: string,
-  quality: number,
-): Promise<Blob | null> {
+  saturation: number,
+): Promise<string> {
   const offscreen = new OffscreenCanvas(w, h);
   const ctx = offscreen.getContext('2d');
-  if (!ctx) return null;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  if (!ctx) throw new Error('no 2d context');
+  ctx.filter = `saturate(${saturation}) contrast(1.04)`;
   ctx.drawImage(bitmap, 0, 0, w, h);
-  return await offscreen.convertToBlob({ type: format, quality });
-}
-
-export async function processImage({
-  src,
-  maxWidth,
-  quality = 0.85,
-  format = 'image/webp',
-}: ProcessOptions): Promise<CachedResult> {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const key = `${src}|${maxWidth}|${dpr}|${format}|${quality}`;
-
-  const cached = cache.get(key);
-  if (cached) return cached;
-
-  const promise = (async (): Promise<CachedResult> => {
-    const response = await fetch(src);
-    const blob = await response.blob();
-    const bitmap = await createImageBitmap(blob);
-    const { w, h } = targetSize(bitmap.width, bitmap.height, maxWidth);
-
-    if (w === bitmap.width && h === bitmap.height) {
-      bitmap.close();
-      return { url: src, width: w, height: h };
-    }
-
-    let outBlob: Blob | null = null;
-    const device = await getWebGPUDevice();
-    if (device) {
-      try {
-        outBlob = await resizeWithGPU(device, bitmap, w, h, format, quality);
-      } catch (err) {
-        console.warn('[imageProcessor] WebGPU resize failed, falling back', err);
-      }
-    }
-    if (!outBlob) {
-      outBlob = await resizeWithCanvas(bitmap, w, h, format, quality);
-    }
-    bitmap.close();
-
-    if (!outBlob) {
-      return { url: src, width: bitmap.width, height: bitmap.height };
-    }
-    return { url: URL.createObjectURL(outBlob), width: w, height: h };
-  })();
-
-  cache.set(key, promise);
-  promise.catch(() => cache.delete(key));
-  return promise;
+  const blob = await offscreen.convertToBlob({ type: 'image/webp', quality: 0.9 });
+  return URL.createObjectURL(blob);
 }
