@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { imageManifest } from '../../data/imageManifest';
-import { enhanceImage } from '../../utils/imageProcessor';
 import styles from './GpuImage.module.css';
 
 interface GpuImageProps {
@@ -24,9 +23,7 @@ export default function GpuImage({
   rounded = true,
 }: GpuImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
   const [loaded, setLoaded] = useState(false);
-  const [enhancedSrc, setEnhancedSrc] = useState<string | null>(null);
   const [inView, setInView] = useState(eager);
 
   const entry = imageManifest[src];
@@ -52,51 +49,6 @@ export default function GpuImage({
     return () => observer.disconnect();
   }, [eager]);
 
-  useEffect(() => {
-    if (!loaded || !inView || !imgRef.current) return;
-    let cancelled = false;
-    let createdUrl: string | null = null;
-
-    const img = imgRef.current;
-    const run = async () => {
-      try {
-        const bitmap = await createImageBitmap(img);
-        if (cancelled) {
-          bitmap.close();
-          return;
-        }
-        const url = await enhanceImage(src, bitmap);
-        bitmap.close();
-        if (cancelled) {
-          if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-          return;
-        }
-        if (url.startsWith('blob:')) createdUrl = url;
-        setEnhancedSrc(url);
-      } catch {
-        // enhancement is purely cosmetic; ignore failures.
-      }
-    };
-
-    const w = window as Window & {
-      requestIdleCallback?: (cb: () => void) => number;
-      cancelIdleCallback?: (id: number) => void;
-    };
-    const idle: number = w.requestIdleCallback
-      ? w.requestIdleCallback(run)
-      : window.setTimeout(run, 80);
-
-    return () => {
-      cancelled = true;
-      if (w.cancelIdleCallback) {
-        w.cancelIdleCallback(idle);
-      } else {
-        clearTimeout(idle);
-      }
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
-    };
-  }, [loaded, inView, src]);
-
   // Pick the smallest variant >= maxWidth for the default `src`, plus a srcset
   // covering all variants so the browser picks the right one for the viewport.
   const variants = entry?.variants ?? [];
@@ -118,15 +70,13 @@ export default function GpuImage({
         ...(lqip ? { backgroundImage: `url(${lqip})` } : null),
       }}
       data-loaded={loaded ? 'true' : 'false'}
-      data-enhanced={enhancedSrc ? 'true' : 'false'}
     >
       {!loaded && <div className={styles.shimmer} aria-hidden="true" />}
       {inView && (
         <img
-          ref={imgRef}
-          src={enhancedSrc ?? fallbackSrc}
-          srcSet={enhancedSrc ? undefined : srcSet}
-          sizes={enhancedSrc ? undefined : sizes}
+          src={fallbackSrc}
+          srcSet={srcSet}
+          sizes={sizes}
           alt={alt}
           loading={eager ? 'eager' : 'lazy'}
           decoding="async"
