@@ -1,0 +1,12 @@
+/* ========================================
+   Tailwind v4 — solo utilidades y tema.
+   No importamos `tailwindcss` completo para
+   evitar que el preflight pise los estilos
+   globales existentes (CSS Modules + global.css).
+   ======================================== */
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Permitir que Tailwind escanee también archivos .jsx */
+@source "../components/ProductViewer/**/*.{js,jsx,ts,tsx}";
