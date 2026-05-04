@@ -86,8 +86,8 @@ export default function Scene({ product, useFallback }) {
             azimuth={[-Math.PI / 1.6, Math.PI / 1.6]}
           >
             <Stage
-              preset="rembrandt"
-              intensity={0.55}
+              preset="soft"
+              intensity={0.7}
               environment={null}
               shadows={false}
               adjustCamera={false}
