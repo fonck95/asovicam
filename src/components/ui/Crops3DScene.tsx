@@ -1,519 +1,453 @@
-import { useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import styles from './Crops3DScene.module.css';
 
 type CropKey = 'maiz' | 'sandia' | 'frijol';
 
-interface CropMount {
-  group: THREE.Group;
-  pivot: THREE.Group;
-  basePosition: THREE.Vector3;
-  baseScale: number;
-  hover: number;
-  phase: number;
-  spin: number;
+interface CropDef {
   key: CropKey;
+  label: string;
+  scientific: string;
+  tagline: string;
+  accent: string;
+  accentSoft: string;
+  illustration: (active: boolean) => ReactElement;
 }
 
-const PALETTE = {
-  soil: 0x4b2e16,
-  soilTop: 0x6b3f1d,
-  grass: 0x3c8c3f,
-  pollen: 0xfbe26a,
-};
+function CornIllustration({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 200 320" className={styles.svg} aria-hidden="true">
+      <defs>
+        <linearGradient id="cornStalk" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#6da347" />
+          <stop offset="100%" stopColor="#3f6a26" />
+        </linearGradient>
+        <linearGradient id="cornCob" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#fde68a" />
+          <stop offset="60%" stopColor="#f59e0b" />
+          <stop offset="100%" stopColor="#b45309" />
+        </linearGradient>
+        <linearGradient id="cornHusk" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#a3c977" />
+          <stop offset="100%" stopColor="#5e8a36" />
+        </linearGradient>
+        <radialGradient id="cornGlow" cx="0.5" cy="0.5" r="0.6">
+          <stop offset="0%" stopColor="#fde68a" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#fde68a" stopOpacity="0" />
+        </radialGradient>
+      </defs>
 
-interface ModelSpec {
-  url: string;
-  targetHeight: number;
-  yOffset: number;
-}
+      {active && <circle cx="100" cy="160" r="110" fill="url(#cornGlow)" />}
 
-const MODEL_SPECS: Record<CropKey, ModelSpec> = {
-  maiz: { url: '/models/corn.glb', targetHeight: 1.8, yOffset: 0.32 },
-  sandia: { url: '/models/watermelon.glb', targetHeight: 1.0, yOffset: 0.32 },
-  frijol: { url: '/models/beanstalk.glb', targetHeight: 1.9, yOffset: 0.32 },
-};
+      {/* Stalk */}
+      <path
+        d="M100 300 C 96 230, 96 170, 100 90 C 104 170, 104 230, 100 300 Z"
+        fill="url(#cornStalk)"
+      />
 
-function buildSoilIsland(): THREE.Group {
-  const group = new THREE.Group();
+      {/* Leaves */}
+      <path
+        d="M100 200 C 60 190, 30 170, 18 140 C 50 160, 80 175, 100 195 Z"
+        fill="url(#cornHusk)"
+      />
+      <path
+        d="M100 220 C 140 210, 170 188, 184 158 C 154 178, 122 195, 100 215 Z"
+        fill="url(#cornHusk)"
+      />
+      <path
+        d="M100 250 C 70 245, 48 232, 36 210 C 60 222, 86 235, 100 245 Z"
+        fill="url(#cornHusk)"
+        opacity="0.85"
+      />
 
-  const geo = new THREE.CylinderGeometry(1.2, 0.85, 0.6, 32, 1);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i);
-    if (y > 0.25) {
-      const noise = (Math.random() - 0.5) * 0.08;
-      pos.setY(i, y + noise);
-      pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.05);
-      pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.05);
-    }
-  }
-  geo.computeVertexNormals();
+      {/* Cob with kernels */}
+      <g transform="translate(100 130)">
+        <ellipse cx="0" cy="0" rx="22" ry="58" fill="url(#cornCob)" />
+        {Array.from({ length: 7 }).map((_, row) =>
+          Array.from({ length: 4 }).map((__, col) => {
+            const x = -16 + col * 11 + (row % 2 ? 5 : 0);
+            const y = -50 + row * 16;
+            return (
+              <circle
+                key={`${row}-${col}`}
+                cx={x}
+                cy={y}
+                r={3.6}
+                fill="#fcd34d"
+                stroke="#b45309"
+                strokeWidth="0.6"
+              />
+            );
+          }),
+        )}
+      </g>
 
-  const mat = new THREE.MeshStandardMaterial({
-    color: PALETTE.soil,
-    roughness: 0.95,
-    metalness: 0.0,
-    flatShading: true,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  group.add(mesh);
+      {/* Tassel */}
+      <path
+        d="M100 90 C 96 76, 92 64, 88 54 M100 90 C 100 74, 100 60, 100 48 M100 90 C 104 76, 108 64, 112 54"
+        stroke="#e9d271"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        fill="none"
+      />
 
-  const topGeo = new THREE.CircleGeometry(1.18, 32);
-  const topMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.soilTop,
-    roughness: 1.0,
-  });
-  const top = new THREE.Mesh(topGeo, topMat);
-  top.rotation.x = -Math.PI / 2;
-  top.position.y = 0.305;
-  top.receiveShadow = true;
-  group.add(top);
-
-  const tuftMat = new THREE.MeshStandardMaterial({
-    color: PALETTE.grass,
-    roughness: 0.7,
-    side: THREE.DoubleSide,
-  });
-  for (let i = 0; i < 7; i++) {
-    const blade = new THREE.Mesh(
-      new THREE.ConeGeometry(0.04, 0.22, 4, 1),
-      tuftMat
-    );
-    const angle = Math.random() * Math.PI * 2;
-    const r = 0.55 + Math.random() * 0.5;
-    blade.position.set(Math.cos(angle) * r, 0.41, Math.sin(angle) * r);
-    blade.rotation.z = (Math.random() - 0.5) * 0.4;
-    blade.rotation.x = (Math.random() - 0.5) * 0.4;
-    group.add(blade);
-  }
-
-  return group;
-}
-
-function normalizeModel(root: THREE.Object3D, spec: ModelSpec): THREE.Group {
-  const wrapper = new THREE.Group();
-  wrapper.add(root);
-
-  const box = new THREE.Box3().setFromObject(root);
-  const size = new THREE.Vector3();
-  const center = new THREE.Vector3();
-  box.getSize(size);
-  box.getCenter(center);
-
-  const height = Math.max(size.y, 0.001);
-  const scale = spec.targetHeight / height;
-  root.scale.setScalar(scale);
-
-  root.position.x -= center.x * scale;
-  root.position.z -= center.z * scale;
-  root.position.y -= box.min.y * scale;
-  root.position.y += spec.yOffset;
-
-  root.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (mesh.isMesh) {
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      const mat = mesh.material as
-        | THREE.MeshStandardMaterial
-        | THREE.MeshStandardMaterial[]
-        | undefined;
-      const tune = (m: THREE.Material) => {
-        const sm = m as THREE.MeshStandardMaterial;
-        if ('roughness' in sm) sm.roughness = Math.min(1, (sm.roughness ?? 0.7) * 0.9 + 0.1);
-        if ('metalness' in sm) sm.metalness = Math.min(0.2, sm.metalness ?? 0);
-        sm.envMapIntensity = 0.9;
-        sm.needsUpdate = true;
-      };
-      if (Array.isArray(mat)) mat.forEach(tune);
-      else if (mat) tune(mat);
-    }
-  });
-
-  return wrapper;
-}
-
-function buildPlaceholder(key: CropKey): THREE.Group {
-  const group = new THREE.Group();
-  const color = key === 'maiz' ? 0xf6c14a : key === 'sandia' ? 0x1f5b2a : 0x6fa64d;
-  const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.1, 1.2, 12),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
+      {/* Husk wrap */}
+      <path
+        d="M82 78 C 78 100, 78 130, 100 138 C 122 130, 122 100, 118 78 C 110 90, 90 90, 82 78 Z"
+        fill="url(#cornHusk)"
+        opacity="0.92"
+      />
+    </svg>
   );
-  stem.position.y = 0.9;
-  stem.castShadow = true;
-  group.add(stem);
-  return group;
 }
 
-function buildPollen(): THREE.Points {
-  const count = 240;
-  const geo = new THREE.BufferGeometry();
-  const positions = new Float32Array(count * 3);
-  const seeds = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    positions[i * 3] = (Math.random() - 0.5) * 12;
-    positions[i * 3 + 1] = Math.random() * 4 - 0.5;
-    positions[i * 3 + 2] = (Math.random() - 0.5) * 8;
-    seeds[i] = Math.random();
-  }
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
-  const mat = new THREE.PointsMaterial({
-    color: PALETTE.pollen,
-    size: 0.05,
-    transparent: true,
-    opacity: 0.7,
-    sizeAttenuation: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  return new THREE.Points(geo, mat);
+function WatermelonIllustration({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 200 320" className={styles.svg} aria-hidden="true">
+      <defs>
+        <radialGradient id="meloGlow" cx="0.5" cy="0.5" r="0.6">
+          <stop offset="0%" stopColor="#fca5a5" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#fca5a5" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="meloRind" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#65a30d" />
+          <stop offset="55%" stopColor="#3f6212" />
+          <stop offset="100%" stopColor="#1a2e05" />
+        </linearGradient>
+        <linearGradient id="meloFlesh" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#fb7185" />
+          <stop offset="100%" stopColor="#dc2626" />
+        </linearGradient>
+        <linearGradient id="meloVine" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#86c54a" />
+          <stop offset="100%" stopColor="#3f6a26" />
+        </linearGradient>
+      </defs>
+
+      {active && <circle cx="100" cy="200" r="120" fill="url(#meloGlow)" />}
+
+      {/* Vine */}
+      <path
+        d="M100 60 C 70 90, 60 120, 80 160 C 100 200, 60 230, 100 260"
+        stroke="url(#meloVine)"
+        strokeWidth="4"
+        fill="none"
+        strokeLinecap="round"
+      />
+
+      {/* Leaves on vine */}
+      <path
+        d="M70 100 C 50 90, 32 100, 30 120 C 36 134, 56 138, 70 124 Z"
+        fill="#5b8a2e"
+      />
+      <path
+        d="M82 175 C 60 170, 44 184, 50 204 C 64 214, 84 206, 92 188 Z"
+        fill="#6c9c39"
+      />
+
+      {/* Whole watermelon */}
+      <g transform="translate(100 230)">
+        <ellipse cx="0" cy="0" rx="78" ry="62" fill="url(#meloRind)" />
+        {/* Stripes */}
+        {[-50, -28, -8, 14, 36, 56].map((x, i) => (
+          <path
+            key={i}
+            d={`M${x} -55 C ${x - 6} -10, ${x - 6} 10, ${x} 55`}
+            stroke="#1a2e05"
+            strokeWidth="3.2"
+            fill="none"
+            opacity="0.55"
+          />
+        ))}
+        {/* Highlight */}
+        <ellipse cx="-30" cy="-32" rx="22" ry="10" fill="#a3e635" opacity="0.35" />
+      </g>
+
+      {/* Sliced wedge sitting in front */}
+      <g transform="translate(140 270) rotate(18)">
+        <path
+          d="M-30 0 L 30 0 L 0 -42 Z"
+          fill="url(#meloFlesh)"
+          stroke="#86c54a"
+          strokeWidth="4"
+          strokeLinejoin="round"
+        />
+        <path d="M-30 0 L 30 0" stroke="#fef3c7" strokeWidth="3" />
+        <path d="M-30 0 L 30 0" stroke="#86c54a" strokeWidth="2" transform="translate(0 4)" />
+        {/* Seeds */}
+        {[
+          [-12, -10],
+          [4, -8],
+          [-2, -22],
+          [10, -22],
+          [-14, -28],
+        ].map(([cx, cy], i) => (
+          <ellipse key={i} cx={cx} cy={cy} rx="2" ry="3.2" fill="#1a1a1a" />
+        ))}
+      </g>
+    </svg>
+  );
 }
 
-const CROP_LAYOUT: { key: CropKey; x: number }[] = [
-  { key: 'maiz', x: -2.6 },
-  { key: 'sandia', x: 0 },
-  { key: 'frijol', x: 2.6 },
+function BeanIllustration({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 200 320" className={styles.svg} aria-hidden="true">
+      <defs>
+        <radialGradient id="beanGlow" cx="0.5" cy="0.5" r="0.6">
+          <stop offset="0%" stopColor="#86efac" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#86efac" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="beanVine" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#7cb342" />
+          <stop offset="100%" stopColor="#386a1f" />
+        </linearGradient>
+        <linearGradient id="beanLeaf" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#86c54a" />
+          <stop offset="100%" stopColor="#3f6a26" />
+        </linearGradient>
+        <linearGradient id="beanPod" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#a7d18a" />
+          <stop offset="100%" stopColor="#5d8a3a" />
+        </linearGradient>
+        <radialGradient id="beanFlower" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stopColor="#fef9c3" />
+          <stop offset="100%" stopColor="#facc15" />
+        </radialGradient>
+      </defs>
+
+      {active && <circle cx="100" cy="170" r="110" fill="url(#beanGlow)" />}
+
+      {/* Spiraling vine */}
+      <path
+        d="M100 305 C 80 270, 130 240, 90 210 C 60 185, 130 165, 95 135 C 70 110, 130 95, 100 60"
+        stroke="url(#beanVine)"
+        strokeWidth="4.5"
+        fill="none"
+        strokeLinecap="round"
+      />
+
+      {/* Leaves */}
+      {[
+        { x: 70, y: 240, rot: -32 },
+        { x: 132, y: 200, rot: 28 },
+        { x: 66, y: 165, rot: -18 },
+        { x: 132, y: 130, rot: 22 },
+        { x: 78, y: 90, rot: -12 },
+      ].map((leaf, i) => (
+        <g
+          key={i}
+          transform={`translate(${leaf.x} ${leaf.y}) rotate(${leaf.rot})`}
+        >
+          <path
+            d="M0 0 C -22 -6, -34 -22, -28 -38 C -10 -36, 8 -22, 12 -6 C 8 -2, 4 0, 0 0 Z"
+            fill="url(#beanLeaf)"
+          />
+          <path
+            d="M0 0 C -10 -10, -18 -22, -24 -34"
+            stroke="#2f5217"
+            strokeWidth="0.9"
+            fill="none"
+            opacity="0.7"
+          />
+        </g>
+      ))}
+
+      {/* Bean pods */}
+      <g transform="translate(118 232) rotate(28)">
+        <path
+          d="M0 0 C 4 -22, 8 -42, 6 -58 C -4 -56, -10 -38, -8 -20 C -6 -8, -4 -2, 0 0 Z"
+          fill="url(#beanPod)"
+          stroke="#3f6a26"
+          strokeWidth="0.9"
+        />
+        {[-10, -22, -34, -46].map((cy, i) => (
+          <circle key={i} cx="-1" cy={cy} r="2.2" fill="#2f5217" opacity="0.55" />
+        ))}
+      </g>
+      <g transform="translate(74 130) rotate(-22)">
+        <path
+          d="M0 0 C 4 -22, 8 -42, 6 -58 C -4 -56, -10 -38, -8 -20 C -6 -8, -4 -2, 0 0 Z"
+          fill="url(#beanPod)"
+          stroke="#3f6a26"
+          strokeWidth="0.9"
+        />
+        {[-10, -22, -34, -46].map((cy, i) => (
+          <circle key={i} cx="-1" cy={cy} r="2.2" fill="#2f5217" opacity="0.55" />
+        ))}
+      </g>
+
+      {/* Flowers */}
+      {[
+        { x: 138, y: 168 },
+        { x: 60, y: 110 },
+      ].map((f, i) => (
+        <g key={i} transform={`translate(${f.x} ${f.y})`}>
+          {[0, 72, 144, 216, 288].map((rot) => (
+            <ellipse
+              key={rot}
+              cx="0"
+              cy="-6"
+              rx="3.5"
+              ry="6"
+              fill="url(#beanFlower)"
+              transform={`rotate(${rot})`}
+            />
+          ))}
+          <circle cx="0" cy="0" r="2.4" fill="#b45309" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+const CROPS: CropDef[] = [
+  {
+    key: 'maiz',
+    label: 'Maíz',
+    scientific: 'Zea mays',
+    tagline: 'El pilar vertical de la milpa',
+    accent: '#f59e0b',
+    accentSoft: 'rgba(245, 158, 11, 0.15)',
+    illustration: (active) => <CornIllustration active={active} />,
+  },
+  {
+    key: 'frijol',
+    label: 'Frijol caupí',
+    scientific: 'Vigna unguiculata',
+    tagline: 'Trepa el maíz y fija nitrógeno',
+    accent: '#22c55e',
+    accentSoft: 'rgba(34, 197, 94, 0.15)',
+    illustration: (active) => <BeanIllustration active={active} />,
+  },
+  {
+    key: 'sandia',
+    label: 'Sandía',
+    scientific: 'Citrullus lanatus',
+    tagline: 'Tapiza el suelo y conserva humedad',
+    accent: '#ef4444',
+    accentSoft: 'rgba(239, 68, 68, 0.15)',
+    illustration: (active) => <WatermelonIllustration active={active} />,
+  },
 ];
-
-function detectWebGLSupport(): boolean {
-  if (typeof document === 'undefined') return false;
-  try {
-    const probe = document.createElement('canvas');
-    return !!(
-      probe.getContext('webgl2') ||
-      probe.getContext('webgl') ||
-      probe.getContext('experimental-webgl')
-    );
-  } catch {
-    return false;
-  }
-}
-
-const modelCache = new Map<string, Promise<THREE.Group>>();
-function loadModel(spec: ModelSpec): Promise<THREE.Group> {
-  let cached = modelCache.get(spec.url);
-  if (!cached) {
-    const loader = new GLTFLoader();
-    cached = new Promise<THREE.Group>((resolve, reject) => {
-      loader.load(
-        spec.url,
-        (gltf) => resolve(gltf.scene),
-        undefined,
-        (err) => reject(err)
-      );
-    });
-    modelCache.set(spec.url, cached);
-  }
-  return cached.then((scene) => scene.clone(true));
-}
 
 interface Crops3DSceneProps {
   className?: string;
 }
 
 export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [supported] = useState(detectWebGLSupport);
-  const [loading, setLoading] = useState(true);
+  const [active, setActive] = useState<CropKey>('maiz');
+  const stageRef = useRef<HTMLDivElement>(null);
 
+  // Auto-rotate the focused crop until the user takes over.
+  const userInteractedRef = useRef(false);
   useEffect(() => {
-    if (!supported) return;
-    const canvas = canvasRef.current;
-    const wrapper = wrapperRef.current;
-    if (!canvas || !wrapper) return;
-
-    const renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: true,
-      powerPreference: 'high-performance',
-    });
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    renderer.setPixelRatio(dpr);
-    renderer.setClearColor(0x000000, 0);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x0a1d12, 8, 22);
-
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    pmrem.compileEquirectangularShader();
-    const envScene = new THREE.Scene();
-    envScene.background = new THREE.Color(0x223844);
-    const envLightTop = new THREE.Mesh(
-      new THREE.SphereGeometry(50, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffe6b0, side: THREE.BackSide })
-    );
-    envScene.add(envLightTop);
-    const envTarget = pmrem.fromScene(envScene, 0.04);
-    scene.environment = envTarget.texture;
-
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-    camera.position.set(0, 2.6, 8.2);
-    camera.lookAt(0, 1, 0);
-
-    const hemi = new THREE.HemisphereLight(0xfff1c2, 0x1a3a1a, 0.65);
-    scene.add(hemi);
-
-    const sun = new THREE.DirectionalLight(0xffd9a0, 1.5);
-    sun.position.set(4, 6, 3);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -6;
-    sun.shadow.camera.right = 6;
-    sun.shadow.camera.top = 6;
-    sun.shadow.camera.bottom = -6;
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 20;
-    sun.shadow.bias = -0.0008;
-    scene.add(sun);
-
-    const rim = new THREE.DirectionalLight(0x8fffd0, 0.35);
-    rim.position.set(-4, 3, -3);
-    scene.add(rim);
-
-    const root = new THREE.Group();
-    scene.add(root);
-
-    const mounts: CropMount[] = CROP_LAYOUT.map(({ key, x }, i) => {
-      const pivot = new THREE.Group();
-      pivot.position.set(x, 0, 0);
-      const island = buildSoilIsland();
-      pivot.add(island);
-      const placeholder = buildPlaceholder(key);
-      pivot.add(placeholder);
-      root.add(pivot);
-      return {
-        group: placeholder,
-        pivot,
-        basePosition: pivot.position.clone(),
-        baseScale: 1,
-        hover: 0,
-        phase: i * 1.7,
-        spin: key === 'sandia' ? 0.25 : 0.18,
-        key,
-      };
-    });
-
-    let cancelled = false;
-    Promise.all(
-      CROP_LAYOUT.map(({ key }) => loadModel(MODEL_SPECS[key]).then((scene) => ({ key, scene })))
-    )
-      .then((loaded) => {
-        if (cancelled) return;
-        loaded.forEach(({ key, scene: modelScene }) => {
-          const mount = mounts.find((m) => m.key === key);
-          if (!mount) return;
-          mount.pivot.remove(mount.group);
-          const normalized = normalizeModel(modelScene, MODEL_SPECS[key]);
-          mount.pivot.add(normalized);
-          mount.group = normalized;
-        });
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Error loading crop models', err);
-        setLoading(false);
+    if (userInteractedRef.current) return;
+    const id = window.setInterval(() => {
+      if (userInteractedRef.current) return;
+      setActive((prev) => {
+        const i = CROPS.findIndex((c) => c.key === prev);
+        return CROPS[(i + 1) % CROPS.length].key;
       });
+    }, 3800);
+    return () => window.clearInterval(id);
+  }, []);
 
-    const pollen = buildPollen();
-    scene.add(pollen);
-
-    const groundShadow = new THREE.Mesh(
-      new THREE.CircleGeometry(8, 48),
-      new THREE.ShadowMaterial({ opacity: 0.25 })
-    );
-    groundShadow.rotation.x = -Math.PI / 2;
-    groundShadow.position.y = -0.31;
-    groundShadow.receiveShadow = true;
-    scene.add(groundShadow);
-
-    const pointer = new THREE.Vector2(0, 0);
-    const targetPointer = new THREE.Vector2(0, 0);
-    const raycaster = new THREE.Raycaster();
-    let hoveredKey: CropKey | null = null;
-
-    const handlePointerMove = (e: PointerEvent) => {
-      const rect = wrapper.getBoundingClientRect();
-      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-      targetPointer.set(nx, ny);
-
-      raycaster.setFromCamera(targetPointer, camera);
-      const hits = raycaster.intersectObjects(
-        mounts.map((m) => m.pivot),
-        true
-      );
-      if (hits.length > 0) {
-        let obj: THREE.Object3D | null = hits[0].object;
-        while (obj && obj.parent) {
-          const found = mounts.find((m) => m.pivot === obj);
-          if (found) {
-            hoveredKey = found.key;
-            return;
-          }
-          obj = obj.parent;
-        }
-      }
-      hoveredKey = null;
-    };
-    const handlePointerLeave = () => {
-      hoveredKey = null;
-      targetPointer.set(0, 0);
-    };
-
-    const resize = () => {
-      const rect = wrapper.getBoundingClientRect();
-      const w = Math.max(1, rect.width);
-      const h = Math.max(1, rect.height);
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-    };
-    resize();
-    canvas.dataset.active = 'true';
-
-    const ro = new ResizeObserver(resize);
-    ro.observe(wrapper);
-
-    wrapper.addEventListener('pointermove', handlePointerMove);
-    wrapper.addEventListener('pointerleave', handlePointerLeave);
-
-    const reduceMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)'
-    ).matches;
-
-    const clock = new THREE.Clock();
+  // Subtle parallax drift driven by pointer position over the stage.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
     let raf = 0;
-    const tmpVec = new THREE.Vector3();
-
-    const animate = () => {
-      const dt = Math.min(clock.getDelta(), 0.05);
-      const t = clock.elapsedTime;
-
-      pointer.lerp(targetPointer, 0.08);
-      root.rotation.y = pointer.x * 0.35;
-      root.rotation.x = -pointer.y * 0.12;
-      camera.position.x = pointer.x * 0.4;
-      camera.position.y = 2.6 + pointer.y * 0.25;
-      camera.lookAt(0, 1, 0);
-
-      mounts.forEach((mount) => {
-        const isHover = mount.key === hoveredKey ? 1 : 0;
-        mount.hover += (isHover - mount.hover) * Math.min(1, dt * 8);
-        mount.group.rotation.y += mount.spin * dt;
-        const bob = Math.sin(t * 1.2 + mount.phase) * 0.06;
-        mount.pivot.position.y = mount.basePosition.y + bob + mount.hover * 0.18;
-        const s = 1 + mount.hover * 0.12;
-        mount.pivot.scale.setScalar(s);
-      });
-
-      const posAttr = pollen.geometry.getAttribute(
-        'position'
-      ) as THREE.BufferAttribute;
-      const seedAttr = pollen.geometry.getAttribute(
-        'seed'
-      ) as THREE.BufferAttribute;
-      for (let i = 0; i < posAttr.count; i++) {
-        const seed = seedAttr.getX(i);
-        tmpVec.fromBufferAttribute(posAttr, i);
-        tmpVec.y += (0.12 + seed * 0.2) * dt;
-        tmpVec.x += Math.sin(t * 0.6 + seed * 6.28) * 0.002;
-        if (tmpVec.y > 4) {
-          tmpVec.y = -0.5;
-          tmpVec.x = (Math.random() - 0.5) * 12;
-          tmpVec.z = (Math.random() - 0.5) * 8;
-        }
-        posAttr.setXYZ(i, tmpVec.x, tmpVec.y, tmpVec.z);
-      }
-      posAttr.needsUpdate = true;
-
-      renderer.render(scene, camera);
-      if (!reduceMotion) {
-        raf = requestAnimationFrame(animate);
-      }
-    };
-    animate();
-
-    return () => {
-      cancelled = true;
+    const onMove = (e: PointerEvent) => {
+      const rect = stage.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
       cancelAnimationFrame(raf);
-      ro.disconnect();
-      wrapper.removeEventListener('pointermove', handlePointerMove);
-      wrapper.removeEventListener('pointerleave', handlePointerLeave);
-      pmrem.dispose();
-      envTarget.dispose();
-      scene.traverse((obj) => {
-        if ((obj as THREE.Mesh).geometry) {
-          (obj as THREE.Mesh).geometry.dispose();
-        }
-        const mat = (obj as THREE.Mesh).material;
-        if (mat) {
-          if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-          else (mat as THREE.Material).dispose();
-        }
+      raf = requestAnimationFrame(() => {
+        stage.style.setProperty('--px', `${(x * 18).toFixed(2)}px`);
+        stage.style.setProperty('--py', `${(y * 14).toFixed(2)}px`);
+        stage.style.setProperty('--rot', `${(x * 4).toFixed(2)}deg`);
       });
-      renderer.dispose();
     };
-  }, [supported]);
+    const onLeave = () => {
+      cancelAnimationFrame(raf);
+      stage.style.setProperty('--px', '0px');
+      stage.style.setProperty('--py', '0px');
+      stage.style.setProperty('--rot', '0deg');
+    };
+    stage.addEventListener('pointermove', onMove);
+    stage.addEventListener('pointerleave', onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      stage.removeEventListener('pointermove', onMove);
+      stage.removeEventListener('pointerleave', onLeave);
+    };
+  }, []);
+
+  const activeCrop = CROPS.find((c) => c.key === active) ?? CROPS[0];
+
+  const handleSelect = (key: CropKey) => {
+    userInteractedRef.current = true;
+    setActive(key);
+  };
 
   return (
-    <div ref={wrapperRef} className={`${styles.wrapper} ${className}`}>
-      <canvas
-        ref={canvasRef}
-        className={styles.canvas}
-        data-active="false"
-        aria-label="Escena 3D interactiva: maíz, sandía y frijol sobre tierra fértil"
-      />
-      {!supported && (
-        <div className={styles.fallback}>
-          Tu navegador no puede renderizar la escena 3D. Las imágenes y datos de
-          la milpa siguen disponibles abajo.
+    <div
+      className={`${styles.wrapper} ${className}`}
+      style={{ ['--accent' as string]: activeCrop.accent }}
+    >
+      <div className={styles.gradient} aria-hidden="true" />
+      <div className={styles.grain} aria-hidden="true" />
+
+      <div className={styles.stage} ref={stageRef}>
+        <div className={styles.scene}>
+          {CROPS.map((crop) => {
+            const isActive = crop.key === active;
+            return (
+              <div
+                key={crop.key}
+                className={`${styles.cropSlot} ${isActive ? styles.cropActive : ''}`}
+                data-key={crop.key}
+                style={{
+                  ['--accent' as string]: crop.accent,
+                  ['--accentSoft' as string]: crop.accentSoft,
+                }}
+              >
+                <div className={styles.pedestal} aria-hidden="true">
+                  <span className={styles.pedestalRing} />
+                  <span className={styles.pedestalDisc} />
+                  <span className={styles.pedestalShadow} />
+                </div>
+                <div className={styles.figure}>{crop.illustration(isActive)}</div>
+              </div>
+            );
+          })}
         </div>
-      )}
-      {supported && loading && (
-        <div className={styles.loading} aria-hidden="true">
-          Cargando modelos 3D…
+
+        <div className={styles.info}>
+          <span className={styles.infoEyebrow}>{activeCrop.scientific}</span>
+          <h3 className={styles.infoTitle}>{activeCrop.label}</h3>
+          <p className={styles.infoTagline}>{activeCrop.tagline}</p>
         </div>
-      )}
-      <span className={styles.hint}>Mueve el cursor para explorar</span>
-      <div className={styles.legend} aria-hidden="true">
-        <span className={styles.chip}>
-          <span
-            className={styles.dot}
-            style={{ background: 'var(--color-maiz)' }}
-          />
-          Maíz
-        </span>
-        <span className={styles.chip}>
-          <span
-            className={styles.dot}
-            style={{ background: 'var(--color-sandia)' }}
-          />
-          Sandía
-        </span>
-        <span className={styles.chip}>
-          <span
-            className={styles.dot}
-            style={{ background: 'var(--color-frijol)' }}
-          />
-          Frijol caupí
-        </span>
       </div>
+
+      <div className={styles.controls} role="tablist" aria-label="Selecciona un cultivo">
+        {CROPS.map((crop) => (
+          <button
+            key={crop.key}
+            type="button"
+            role="tab"
+            aria-selected={crop.key === active}
+            className={`${styles.chip} ${crop.key === active ? styles.chipActive : ''}`}
+            style={{ ['--accent' as string]: crop.accent }}
+            onClick={() => handleSelect(crop.key)}
+          >
+            <span className={styles.dot} />
+            {crop.label}
+          </button>
+        ))}
+      </div>
+
       <span className={styles.credits}>
-        Modelos 3D: Quaternius (CC0), Kenney (CC0), Poly by Google (CC-BY)
+        Ilustraciones originales — ASOVICAM
       </span>
     </div>
   );
