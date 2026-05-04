@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -18,6 +19,9 @@ import Product3DGallery, {
 } from '../components/ui/Product3DGallery';
 import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
 import SEO from '../components/SEO';
+
+const Crops3DScene = lazy(() => import('../components/ui/Crops3DScene'));
+
 import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
 import { programs } from '../data/programs';
@@ -44,16 +48,6 @@ const productSlides: ProductSlide[] = [
     image: '/steps-milpa.jpg',
     badge: 'Proceso',
     accent: 'var(--color-secondary-light)',
-  },
-  {
-    id: 'mulch',
-    title: 'Técnica de mulch',
-    subtitle: 'Suelo cubierto, suelo vivo',
-    description:
-      'Una capa de materia orgánica que retiene hasta 70% de la humedad, controla arvenses y alimenta la microbiota. La diferencia entre cultivar y regenerar.',
-    image: '/milpa.jpg',
-    badge: 'Cobertura orgánica',
-    accent: 'var(--color-frijol)',
   },
 ];
 
@@ -204,6 +198,27 @@ export default function Home() {
               </Card>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* 3D Diorama — Three.js procedural scene of the milpa */}
+      <section className={`section ${styles.diorama}`}>
+        <div className="container">
+          <div className={styles.sectionHeader}>
+            <span className={styles.eyebrow}>
+              <Sparkles size={12} /> Milpa interactiva
+            </span>
+            <h2 className="section__title">La milpa en 3D</h2>
+            <p className="section__subtitle">
+              Una representación viva de nuestro sistema: maíz, sandía y frijol
+              creciendo sobre tierra fértil. Mueve el cursor para girar la
+              escena y descubre cada cultivo de cerca.
+            </p>
+          </div>
+
+          <Suspense fallback={<div className={styles.dioramaFallback} />}>
+            <Crops3DScene />
+          </Suspense>
         </div>
       </section>
 

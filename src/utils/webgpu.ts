@@ -6,9 +6,13 @@ export function getWebGPUDevice(): Promise<GPUDevice | null> {
   cachedDevice = (async () => {
     if (typeof navigator === 'undefined' || !('gpu' in navigator)) return null;
     try {
-      const adapter = await navigator.gpu.requestAdapter({
-        powerPreference: 'low-power',
-      });
+      // Chromium ignores powerPreference on Windows and logs a console
+      // warning (crbug.com/369219127). Skip the option there to keep the
+      // console clean; on other platforms the hint helps on hybrid GPUs.
+      const isWindows = /Windows/i.test(navigator.userAgent ?? '');
+      const adapter = await navigator.gpu.requestAdapter(
+        isWindows ? undefined : { powerPreference: 'low-power' }
+      );
       if (!adapter) return null;
       const device = await adapter.requestDevice();
       device.lost.then(() => {
