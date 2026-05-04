@@ -36,6 +36,12 @@
   opacity: 0;
 }
 
+.frame picture {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
 .img {
   position: relative;
   z-index: 0;

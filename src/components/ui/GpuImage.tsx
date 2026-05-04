@@ -1,92 +1,55 @@
-import { useEffect, useRef, useState } from 'react';
-import { processImage } from '../../utils/imageProcessor';
+import { useState, type CSSProperties } from 'react';
+import { IMAGES, buildSrcSet, type ImageKey } from '../../utils/imageManifest';
 import styles from './GpuImage.module.css';
 
 interface GpuImageProps {
-  src: string;
+  image: ImageKey;
   alt: string;
-  maxWidth?: number;
+  /** Render-size hint in CSS pixels. Used for the `sizes` attribute so the browser picks the right srcset entry. */
+  sizes?: string;
   className?: string;
+  /** Override the layout aspect ratio (defaults to intrinsic). */
   aspectRatio?: string;
   eager?: boolean;
   rounded?: boolean;
 }
 
 export default function GpuImage({
-  src,
+  image,
   alt,
-  maxWidth = 1280,
+  sizes = '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 920px',
   className = '',
   aspectRatio,
   eager = false,
   rounded = true,
 }: GpuImageProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [optimizedSrc, setOptimizedSrc] = useState<string | null>(null);
+  const meta = IMAGES[image];
   const [loaded, setLoaded] = useState(false);
-  const [inView, setInView] = useState(eager);
 
-  useEffect(() => {
-    if (eager || !containerRef.current) return;
-    const node = containerRef.current;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setInView(true);
-            observer.disconnect();
-            break;
-          }
-        }
-      },
-      { rootMargin: '300px 0px' },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [eager]);
-
-  useEffect(() => {
-    if (!inView) return;
-    let cancelled = false;
-    let createdUrl: string | null = null;
-
-    processImage({ src, maxWidth })
-      .then((res) => {
-        if (cancelled) {
-          if (res.url.startsWith('blob:')) URL.revokeObjectURL(res.url);
-          return;
-        }
-        if (res.url.startsWith('blob:')) createdUrl = res.url;
-        setOptimizedSrc(res.url);
-      })
-      .catch(() => {
-        if (!cancelled) setOptimizedSrc(src);
-      });
-
-    return () => {
-      cancelled = true;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
-    };
-  }, [inView, src, maxWidth]);
+  const style: CSSProperties = {
+    aspectRatio: aspectRatio ?? meta.aspectRatio,
+  };
 
   return (
     <div
-      ref={containerRef}
       className={`${styles.frame} ${rounded ? styles.rounded : ''} ${className}`}
-      style={aspectRatio ? { aspectRatio } : undefined}
+      style={style}
       data-loaded={loaded ? 'true' : 'false'}
     >
       <div className={styles.shimmer} aria-hidden="true" />
-      {optimizedSrc && (
+      <picture>
+        <source type="image/avif" srcSet={buildSrcSet(meta.name, 'avif')} sizes={sizes} />
+        <source type="image/webp" srcSet={buildSrcSet(meta.name, 'webp')} sizes={sizes} />
         <img
-          src={optimizedSrc}
+          src={`/optimized/${meta.name}-${meta.fallbackWidth}.webp`}
           alt={alt}
           loading={eager ? 'eager' : 'lazy'}
           decoding="async"
+          fetchPriority={eager ? 'high' : 'auto'}
           className={styles.img}
           onLoad={() => setLoaded(true)}
         />
-      )}
+      </picture>
     </div>
   );
 }

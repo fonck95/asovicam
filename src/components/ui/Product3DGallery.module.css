@@ -6,7 +6,17 @@
   perspective-origin: 50% 30%;
 }
 
+/* Outer card is the perspective slot — NO overflow:hidden here so 3D survives. */
 .card {
+  position: relative;
+  display: block;
+  /* Stagger entrance per index. */
+  animation: cardEnter 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--idx, 0) * 90ms);
+}
+
+/* Inner wrapper does the visible work + tilt. overflow:hidden lives here. */
+.inner {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -14,28 +24,22 @@
   border-radius: var(--radius-2xl);
   border: 1px solid var(--color-gray-200);
   overflow: hidden;
-  transform-style: preserve-3d;
   transform:
-    perspective(1200px)
     rotateX(var(--rx, 0deg))
     rotateY(var(--ry, 0deg))
-    translateZ(0);
+    translateY(calc(var(--lift, 0) * -6px));
+  transform-origin: 50% 50%;
   transition:
-    transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 280ms ease;
+    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 320ms ease;
   will-change: transform;
   box-shadow:
     0 1px 2px rgba(20, 20, 10, 0.05),
     0 8px 24px -12px rgba(20, 20, 10, 0.10);
-
-  /* Scroll-driven 3D entrance — modern browsers (Chromium, Safari 26+, FF). */
-  animation: cardEnter linear both;
-  animation-timeline: view();
-  animation-range: entry 0% cover 45%;
 }
 
-.card:hover {
+.card:hover .inner {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--color-gray-200));
   box-shadow:
     0 1px 2px rgba(20, 20, 10, 0.05),
@@ -45,16 +49,14 @@
 
 .media {
   position: relative;
-  overflow: hidden;
   isolation: isolate;
-  transform: translateZ(40px);
 }
 
 .glare {
   position: absolute;
   inset: 0;
   background: radial-gradient(
-    520px circle at var(--mx, 50%) var(--my, 50%),
+    420px circle at var(--mx, 50%) var(--my, 50%),
     rgba(255, 255, 255, 0.32),
     rgba(255, 255, 255, 0) 55%
   );
@@ -72,7 +74,7 @@
   inset: 0;
   background: linear-gradient(
     180deg,
-    transparent 50%,
+    transparent 55%,
     color-mix(in srgb, var(--accent) 18%, rgba(0, 0, 0, 0.45)) 100%
   );
   pointer-events: none;
@@ -82,7 +84,6 @@
 .body {
   position: relative;
   padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-2xl);
-  transform: translateZ(60px);
 }
 
 .badge {
@@ -126,36 +127,21 @@
 @keyframes cardEnter {
   from {
     opacity: 0;
-    transform:
-      perspective(1200px)
-      translateY(60px)
-      translateZ(-160px)
-      rotateX(14deg)
-      rotateY(calc(var(--idx, 0) * 6deg - 12deg));
+    transform: translateY(40px) rotateX(8deg);
   }
   to {
     opacity: 1;
-    transform:
-      perspective(1200px)
-      translateY(0)
-      translateZ(0)
-      rotateX(0)
-      rotateY(0);
+    transform: translateY(0) rotateX(0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card {
-    animation: none;
-    transform: none;
-    transition: box-shadow 200ms ease;
-  }
+  .card { animation: none; }
+  .inner { transform: none; transition: box-shadow 200ms ease; }
   .glare { display: none; }
 }
 
 @media (max-width: 768px) {
-  .stage {
-    grid-template-columns: 1fr;
-  }
-  .card { transform: none; }
+  .stage { grid-template-columns: 1fr; }
+  .inner { transform: none; }
 }

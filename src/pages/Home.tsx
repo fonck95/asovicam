@@ -16,6 +16,7 @@ import Card from '../components/ui/Card';
 import Product3DGallery, {
   type ProductSlide,
 } from '../components/ui/Product3DGallery';
+import WebGPUBackdrop from '../components/ui/WebGPUBackdrop';
 import SEO from '../components/SEO';
 import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
@@ -30,7 +31,7 @@ const productSlides: ProductSlide[] = [
     subtitle: 'Maíz · Frijol caupí · Sandía',
     description:
       'Tres cultivos en una sola parcela: el maíz como tutor, el frijol que fija nitrógeno y la sandía que tapiza el suelo. Una alianza ancestral, productiva y regenerativa.',
-    image: '/milpa.jpg',
+    image: 'milpa',
     badge: 'Producto insignia',
     accent: 'var(--color-primary)',
   },
@@ -40,7 +41,7 @@ const productSlides: ProductSlide[] = [
     subtitle: 'Del terreno a la cosecha',
     description:
       'Seis pasos cuidadosamente escalonados: preparación, siembra del maíz, asociación con frijol y sandía, mulch continuo y cosecha en cascada a lo largo del año.',
-    image: '/steps-milpa.jpg',
+    image: 'stepsMilpa',
     badge: 'Proceso',
     accent: 'var(--color-secondary-light)',
   },
@@ -50,7 +51,7 @@ const productSlides: ProductSlide[] = [
     subtitle: 'Suelo cubierto, suelo vivo',
     description:
       'Una capa de materia orgánica que retiene hasta 70% de la humedad, controla arvenses y alimenta la microbiota. La diferencia entre cultivar y regenerar.',
-    image: '/milpa.jpg',
+    image: 'milpa',
     badge: 'Cobertura orgánica',
     accent: 'var(--color-frijol)',
   },
@@ -205,18 +206,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Product Showcase — 3D scroll gallery */}
+      {/* Product Showcase — 3D gallery on a live WebGPU shader backdrop */}
       <section className={`section ${styles.showcase}`}>
-        <div className="container">
-          <div className={styles.sectionHeader}>
-            <span className={styles.eyebrow}>
+        <WebGPUBackdrop className={styles.showcaseBackdrop} />
+        <div className={`container ${styles.showcaseInner}`}>
+          <div className={`${styles.sectionHeader} ${styles.showcaseHeader}`}>
+            <span className={`${styles.eyebrow} ${styles.eyebrowOnDark}`}>
               <Sparkles size={12} /> Nuestro producto
             </span>
-            <h2 className="section__title">Mira la milpa de cerca</h2>
-            <p className="section__subtitle">
-              Imágenes reales de nuestros cultivos en Yondó. Pasa el cursor sobre
-              cada tarjeta para verlas con perspectiva — optimizadas en tu
-              dispositivo con WebGPU.
+            <h2 className={`section__title ${styles.showcaseTitle}`}>
+              Mira la milpa de cerca
+            </h2>
+            <p className={`section__subtitle ${styles.showcaseSubtitle}`}>
+              Imágenes reales de nuestros cultivos en Yondó, presentadas con
+              perspectiva 3D sobre un fondo renderizado en tiempo real con
+              WebGPU. Las imágenes se sirven en formato AVIF/WebP y se
+              re-escalan al tamaño exacto de tu dispositivo.
             </p>
           </div>
 
