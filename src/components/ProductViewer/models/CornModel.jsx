@@ -2,71 +2,82 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const COB_HEIGHT = 1.7;
-const COB_RADIUS = 0.42;
-const KERNEL_ROWS = 22;
-const KERNEL_COLS = 18;
+const COB_HEIGHT = 1.9;
+const COB_RADIUS = 0.38;
+const KERNEL_ROWS = 26;
+const KERNEL_COLS = 20;
 
 function buildKernelGeometry() {
-  const geo = new THREE.SphereGeometry(1, 12, 10);
-  geo.scale(1, 1.25, 0.55);
+  const geo = new THREE.SphereGeometry(1, 14, 11);
+  geo.scale(1.05, 1.38, 0.58);
   return geo;
 }
 
-function buildHuskGeometry() {
-  const length = 1.6;
-  const width = 0.45;
-  const segs = 24;
+// Husk leaf: hangs from cob base, fans outward and droops
+function buildHuskLeaf() {
+  const segs = 32;
   const positions = [];
   const uvs = [];
   const indices = [];
 
   for (let i = 0; i <= segs; i++) {
-    const t = i / segs;
-    const y = -length * 0.55 + t * length;
-    const taper = Math.sin(t * Math.PI) * 0.85 + 0.15;
-    const curl = Math.sin(t * Math.PI * 0.9) * 0.18;
-    const w = width * taper;
-    positions.push(-w, y, curl);
-    positions.push(w, y, curl + 0.04);
-    uvs.push(0, t, 1, t);
+    const t = i / segs; // 0 = attachment (top), 1 = tip (bottom)
+    const y = 0.28 - t * 2.1;
+
+    // Width envelope: zero at top, peaks at t≈0.25, tapers to point
+    const wEnv = t < 0.25 ? t / 0.25 : 1 - (t - 0.25) / 0.75;
+    const w = 0.34 * Math.sin(wEnv * Math.PI * 0.95) + 0.008;
+
+    // Radial outward spread (Z axis, becomes radial after Y rotation)
+    const spread = 0.10 + Math.pow(t, 1.4) * 0.55;
+
+    // Midrib slightly raised; edges cup inward toward cob
+    const edgeDip = wEnv * 0.025;
+
+    // Three vertices: left edge, midrib spine, right edge
+    positions.push(-w, y, spread - edgeDip);
+    positions.push(0,   y, spread + 0.04);
+    positions.push( w, y, spread - edgeDip);
+
+    uvs.push(0, t,  0.5, t,  1, t);
   }
+
   for (let i = 0; i < segs; i++) {
-    const a = i * 2;
-    indices.push(a, a + 1, a + 2);
-    indices.push(a + 1, a + 3, a + 2);
+    const a = i * 3, b = (i + 1) * 3;
+    // left quad
+    indices.push(a, b, a + 1,  a + 1, b, b + 1);
+    // right quad
+    indices.push(a + 1, b + 1, a + 2,  a + 2, b + 1, b + 2);
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;
 }
 
 function CobBase() {
-  // Cob core via lathe so the silhouette is rounded, not a plain cylinder
   const geometry = useMemo(() => {
     const points = [];
-    const segs = 20;
+    const segs = 28;
     for (let i = 0; i <= segs; i++) {
       const t = i / segs;
       const y = -COB_HEIGHT / 2 + t * COB_HEIGHT;
-      // taper at the tips
       const taper =
-        Math.sin(t * Math.PI) * 0.92 +
-        0.08 -
-        Math.max(0, (t - 0.92) * 4) ** 2 * 0.4;
-      const r = COB_RADIUS * 0.78 * Math.max(0.05, taper);
+        Math.sin(t * Math.PI) * 0.90 +
+        0.10 -
+        Math.max(0, (t - 0.90) * 5) ** 2 * 0.55;
+      const r = COB_RADIUS * 0.83 * Math.max(0.04, taper);
       points.push(new THREE.Vector2(r, y));
     }
-    return new THREE.LatheGeometry(points, 32);
+    return new THREE.LatheGeometry(points, 40);
   }, []);
 
   return (
     <mesh geometry={geometry} castShadow receiveShadow>
-      <meshStandardMaterial color="#fef3c7" roughness={0.9} metalness={0} />
+      <meshPhysicalMaterial color="#f0dda0" roughness={0.94} metalness={0} />
     </mesh>
   );
 }
@@ -76,20 +87,21 @@ function Kernels() {
   const kernelGeo = useMemo(buildKernelGeometry, []);
   const count = KERNEL_ROWS * KERNEL_COLS;
 
-  // Color palette: amber to gold with subtle variation
+  // Varied palette: deep amber → bright gold → warm orange-yellow
   const palette = useMemo(
     () => [
-      new THREE.Color('#facc15'),
-      new THREE.Color('#eab308'),
-      new THREE.Color('#fde047'),
-      new THREE.Color('#f59e0b'),
-      new THREE.Color('#fcd34d'),
+      new THREE.Color('#e8a010'),
+      new THREE.Color('#f4c030'),
+      new THREE.Color('#fad040'),
+      new THREE.Color('#d49018'),
+      new THREE.Color('#f8ce38'),
+      new THREE.Color('#e09820'),
+      new THREE.Color('#fce050'),
     ],
     [],
   );
 
   const { matrices, colors } = useMemo(() => {
-    const m = new THREE.Matrix4();
     const dummy = new THREE.Object3D();
     const matricesOut = [];
     const colorsOut = new Float32Array(count * 3);
@@ -97,28 +109,28 @@ function Kernels() {
 
     for (let row = 0; row < KERNEL_ROWS; row++) {
       const t = row / (KERNEL_ROWS - 1);
-      const y = -COB_HEIGHT / 2 + 0.12 + t * (COB_HEIGHT - 0.24);
-      const taper = Math.sin(t * Math.PI) * 0.92 + 0.08;
-      const radius = COB_RADIUS * Math.max(0.18, taper);
-      // skip the very tip rows (no kernels at the pointy ends)
-      if (t < 0.05 || t > 0.95) continue;
+      const y = -COB_HEIGHT / 2 + 0.09 + t * (COB_HEIGHT - 0.18);
+      const taper = Math.sin(t * Math.PI) * 0.90 + 0.10;
+      const radius = COB_RADIUS * Math.max(0.14, taper);
+      if (t < 0.035 || t > 0.965) continue;
 
       for (let col = 0; col < KERNEL_COLS; col++) {
-        const ang = (col / KERNEL_COLS) * Math.PI * 2 + row * 0.18; // spiral offset
+        const ang = (col / KERNEL_COLS) * Math.PI * 2 + row * 0.158;
         const x = Math.cos(ang) * radius;
         const z = Math.sin(ang) * radius;
 
         dummy.position.set(x, y, z);
-        // orient kernel outward
-        dummy.lookAt(x * 3, y, z * 3);
+        dummy.lookAt(x * 5, y, z * 5);
         dummy.rotateX(Math.PI / 2);
-        const scale = 0.085 + Math.sin(t * Math.PI) * 0.025;
-        dummy.scale.set(scale, scale, scale * 0.85);
+        const sc = 0.068 + Math.sin(t * Math.PI) * 0.018;
+        dummy.scale.set(sc * 1.08, sc, sc * 0.80);
         dummy.updateMatrix();
         matricesOut.push(dummy.matrix.clone());
 
-        const c = palette[(row + col) % palette.length];
-        colorsOut[idx * 3] = c.r;
+        const noise = Math.abs(Math.sin(row * 6.1 + col * 4.3 + 1.7));
+        const cIdx = Math.floor(noise * palette.length) % palette.length;
+        const c = palette[cIdx];
+        colorsOut[idx * 3]     = c.r;
         colorsOut[idx * 3 + 1] = c.g;
         colorsOut[idx * 3 + 2] = c.b;
         idx++;
@@ -127,7 +139,6 @@ function Kernels() {
     return { matrices: matricesOut, colors: colorsOut.slice(0, idx * 3) };
   }, [count, palette]);
 
-  // Apply matrices once
   useFrame(() => {
     if (!meshRef.current) return;
     const inst = meshRef.current;
@@ -144,45 +155,44 @@ function Kernels() {
       castShadow
       receiveShadow
     >
-      <meshStandardMaterial
-        vertexColors={false}
-        color="#facc15"
-        roughness={0.35}
-        metalness={0.05}
-        envMapIntensity={0.7}
+      {/* Clearcoat simulates the waxy sheen of fresh corn kernels */}
+      <meshPhysicalMaterial
+        color="#f4c030"
+        roughness={0.16}
+        metalness={0}
+        clearcoat={0.60}
+        clearcoatRoughness={0.22}
+        envMapIntensity={1.5}
       />
-      <instancedBufferAttribute
-        attach="instanceColor"
-        args={[colors, 3]}
-      />
+      <instancedBufferAttribute attach="instanceColor" args={[colors, 3]} />
     </instancedMesh>
   );
 }
 
 function Husks() {
-  const huskGeo = useMemo(buildHuskGeometry, []);
-  const husks = useMemo(() => {
-    const arr = [];
-    const count = 6;
-    for (let i = 0; i < count; i++) {
+  const huskGeo = useMemo(buildHuskLeaf, []);
+
+  const huskData = useMemo(() => {
+    const count = 9;
+    const huskPalette = [
+      '#4d7c1a', '#3d6b14', '#5a8c22', '#466e16',
+      '#527a1c', '#3a6010', '#4e7e1c', '#426514', '#54861e',
+    ];
+    return Array.from({ length: count }, (_, i) => {
       const ang = (i / count) * Math.PI * 2;
-      arr.push({
-        position: [
-          Math.cos(ang) * (COB_RADIUS * 0.55),
-          -COB_HEIGHT * 0.18,
-          Math.sin(ang) * (COB_RADIUS * 0.55),
-        ],
-        rotation: [0.18, ang + Math.PI / 2, -0.05 + Math.sin(i) * 0.1],
-        scale: 0.85 + (i % 2) * 0.18,
-        color: i % 2 === 0 ? '#65a30d' : '#4d7c0f',
-      });
-    }
-    return arr;
+      return {
+        // All husks originate near cob base; Y rotation fans them around
+        position: [0, -COB_HEIGHT * 0.10, 0],
+        rotation: [Math.sin(i * 2.1) * 0.06, ang, 0],
+        scale: [1, 0.96 + (i % 3) * 0.06, 1],
+        color: huskPalette[i % huskPalette.length],
+      };
+    });
   }, []);
 
   return (
     <group>
-      {husks.map((h, i) => (
+      {huskData.map((h, i) => (
         <mesh
           key={i}
           geometry={huskGeo}
@@ -192,10 +202,11 @@ function Husks() {
           castShadow
           receiveShadow
         >
-          <meshStandardMaterial
+          <meshPhysicalMaterial
             color={h.color}
-            roughness={0.75}
+            roughness={0.82}
             metalness={0}
+            clearcoat={0.06}
             side={THREE.DoubleSide}
           />
         </mesh>
@@ -204,33 +215,52 @@ function Husks() {
   );
 }
 
+function Stalk() {
+  // Short green stalk visible below the husks
+  const geometry = useMemo(
+    () => new THREE.CylinderGeometry(0.052, 0.068, 0.52, 14),
+    [],
+  );
+  return (
+    <mesh
+      geometry={geometry}
+      position={[0, -COB_HEIGHT / 2 - 0.30, 0]}
+      castShadow
+      receiveShadow
+    >
+      <meshPhysicalMaterial color="#4a6820" roughness={0.87} clearcoat={0.06} />
+    </mesh>
+  );
+}
+
 function Silk() {
-  // Corn silk strands at the top
   const strands = useMemo(() => {
-    const arr = [];
-    for (let i = 0; i < 28; i++) {
-      const ang = (i / 28) * Math.PI * 2;
-      const r = 0.05 + (i % 3) * 0.03;
-      arr.push({
+    return Array.from({ length: 48 }, (_, i) => {
+      const ang = (i / 48) * Math.PI * 2;
+      const r = 0.032 + (i % 6) * 0.018;
+      return {
         x: Math.cos(ang) * r,
         z: Math.sin(ang) * r,
-        len: 0.18 + (i % 4) * 0.06,
-        tilt: 0.3 + (i % 3) * 0.15,
-      });
-    }
-    return arr;
+        len: 0.18 + (i % 7) * 0.06,
+        tilt: 0.20 + (i % 5) * 0.09,
+      };
+    });
   }, []);
 
   return (
-    <group position={[0, COB_HEIGHT / 2 - 0.05, 0]}>
+    <group position={[0, COB_HEIGHT / 2 - 0.02, 0]}>
       {strands.map((s, i) => (
         <mesh
           key={i}
           position={[s.x, s.len / 2, s.z]}
-          rotation={[s.tilt * Math.sin(i), i, s.tilt * Math.cos(i)]}
+          rotation={[
+            s.tilt * Math.sin(i * 0.62),
+            i * 0.42,
+            s.tilt * Math.cos(i * 0.62),
+          ]}
         >
-          <cylinderGeometry args={[0.005, 0.003, s.len, 4]} />
-          <meshStandardMaterial color="#fde68a" roughness={0.9} />
+          <cylinderGeometry args={[0.0028, 0.001, s.len, 3]} />
+          <meshStandardMaterial color="#d8b840" roughness={0.96} />
         </mesh>
       ))}
     </group>
@@ -239,10 +269,11 @@ function Silk() {
 
 export default function CornModel() {
   return (
-    <group>
+    <group position={[0, 0.28, 0]}>
       <CobBase />
       <Kernels />
       <Husks />
+      <Stalk />
       <Silk />
     </group>
   );
