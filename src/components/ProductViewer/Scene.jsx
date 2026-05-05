@@ -86,8 +86,8 @@ export default function Scene({ product, useFallback }) {
             azimuth={[-Math.PI / 1.6, Math.PI / 1.6]}
           >
             <Stage
-              preset="soft"
-              intensity={0.7}
+              preset="portrait"
+              intensity={0.85}
               environment={null}
               shadows={false}
               adjustCamera={false}
@@ -103,17 +103,18 @@ export default function Scene({ product, useFallback }) {
 
           {/* HDRI gratuito de Poly Haven cargado desde URL pública.
               Da reflejos y ambient lighting realista sin asset local. */}
+          {/* Meadow HDRI: green ambient light complements the plant models */}
           <Environment
-            files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr"
+            files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/meadow_2_1k.hdr"
             background={false}
           />
 
           <ContactShadows
             position={[0, -1.05, 0]}
-            opacity={0.4}
-            scale={8}
-            blur={2.5}
-            far={3}
+            opacity={0.50}
+            scale={9}
+            blur={2.8}
+            far={3.5}
             resolution={1024}
           />
 

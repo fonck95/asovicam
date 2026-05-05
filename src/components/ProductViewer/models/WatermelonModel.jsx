@@ -1,102 +1,102 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 
-const RADIUS = 1.05;
+const RADIUS = 1.12;
 
-// Custom striped shader so the rind shows realistic curved bands
+// MeshPhysicalMaterial + custom stripe shader injected via onBeforeCompile.
+// Clearcoat simulates the waxy, sunlit sheen of a fresh watermelon rind.
 function StripedRind() {
   const material = useMemo(() => {
-    const mat = new THREE.MeshStandardMaterial({
-      color: '#16a34a',
-      roughness: 0.42,
-      metalness: 0.05,
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: '#228b22',
+      roughness: 0.28,
+      metalness: 0,
+      clearcoat: 0.65,
+      clearcoatRoughness: 0.18,
     });
 
     mat.onBeforeCompile = (shader) => {
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        `
-          #include <common>
-          varying vec3 vLocalPos;
-        `,
+        `#include <common>
+         varying vec3 vLocalPos;`,
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
-        `
-          #include <begin_vertex>
-          vLocalPos = position;
-        `,
+        `#include <begin_vertex>
+         vLocalPos = position;`,
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <common>',
-        `
-          #include <common>
-          varying vec3 vLocalPos;
+        `#include <common>
+         varying vec3 vLocalPos;
 
-          // simple value noise for the mottle along stripes
-          float hash(vec3 p) {
-            p = fract(p * 0.3183099 + 0.1);
-            p *= 17.0;
-            return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-          }
-          float noise(vec3 p) {
-            vec3 i = floor(p);
-            vec3 f = fract(p);
-            f = f * f * (3.0 - 2.0 * f);
-            return mix(
-              mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
-                  mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-              mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
-                  mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y),
-              f.z);
-          }
-        `,
+         float hash(vec3 p){
+           p = fract(p*0.3183099+0.1); p*=17.0;
+           return fract(p.x*p.y*p.z*(p.x+p.y+p.z));
+         }
+         float noise(vec3 p){
+           vec3 i=floor(p), f=fract(p);
+           f=f*f*(3.0-2.0*f);
+           return mix(
+             mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),
+                 mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),
+                 mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),
+             f.z);
+         }`,
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
-        `
-          #include <color_fragment>
-          // Longitude angle around Y for stripe direction
-          float lon = atan(vLocalPos.z, vLocalPos.x);
-          // distort stripes a bit using noise so they're not perfectly straight
-          float wob = noise(vLocalPos * 4.0) * 0.35;
-          float stripe = sin(lon * 12.0 + wob * 2.0);
-          // Smooth stripe band: dark green where stripe<0
-          float band = smoothstep(-0.15, 0.15, stripe);
-          vec3 darkGreen = vec3(0.04, 0.18, 0.06);
-          vec3 lightGreen = vec3(0.32, 0.62, 0.20);
-          // mottle texture inside stripes
-          float mottle = noise(vLocalPos * 8.0);
-          lightGreen = mix(lightGreen, lightGreen * 0.85, mottle);
-          darkGreen = mix(darkGreen, darkGreen * 1.4, mottle * 0.7);
-          vec3 rindColor = mix(darkGreen, lightGreen, band);
-          diffuseColor.rgb = rindColor;
-        `,
+        `#include <color_fragment>
+         float lon = atan(vLocalPos.z, vLocalPos.x);
+         float latN = vLocalPos.y / ${RADIUS.toFixed(3)};
+
+         // Two-octave domain warp gives organic stripe wiggle
+         float wob = noise(vLocalPos*3.2)*0.42 + noise(vLocalPos*7.5)*0.14;
+         float stripe = sin(lon*10.0 + wob*2.8 + latN*0.6);
+         float band = smoothstep(-0.22, 0.22, stripe);
+
+         vec3 darkGreen  = vec3(0.045, 0.18, 0.035);
+         vec3 lightGreen = vec3(0.24, 0.58, 0.14);
+
+         // Mottle within each zone
+         float mottle = noise(vLocalPos*9.5)*0.10;
+         lightGreen = lightGreen*(0.90+mottle);
+         darkGreen  = darkGreen *(1.00+mottle*0.6);
+
+         vec3 rindColor = mix(darkGreen, lightGreen, band);
+
+         // Creamy belly: underside where the melon rested on soil
+         float belly = smoothstep(0.50, 0.80, -latN)
+                     * smoothstep(0.90, 0.30, abs(lon)/3.14159)
+                     * 0.55;
+         rindColor = mix(rindColor, vec3(0.90, 0.84, 0.60), belly);
+
+         diffuseColor.rgb = rindColor;`,
       );
     };
 
     return mat;
   }, []);
 
-  // Slightly oblong sphere for an authentic watermelon shape
+  // Slightly oblong: longer on X, flatter on Y — typical field watermelon shape
   const geometry = useMemo(() => {
     const geo = new THREE.SphereGeometry(RADIUS, 96, 64);
-    // subtle bumpy surface via vertex displacement
+    geo.scale(1.18, 0.88, 1.0);
     const pos = geo.attributes.position;
     const v = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
-      const len = v.length();
-      const noise =
-        Math.sin(v.x * 8) * Math.cos(v.y * 7) * Math.sin(v.z * 6) * 0.012;
-      v.setLength(len + noise);
+      const bump =
+        Math.sin(v.x * 7.5) * Math.cos(v.y * 8.2) * Math.sin(v.z * 6.1) * 0.013;
+      v.setLength(v.length() + bump);
       pos.setXYZ(i, v.x, v.y, v.z);
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
-    geo.scale(1, 0.92, 1);
     return geo;
   }, []);
 
@@ -109,68 +109,68 @@ function Stem() {
   const curve = useMemo(
     () =>
       new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0, RADIUS * 0.92, 0),
-        new THREE.Vector3(0.05, RADIUS * 0.92 + 0.12, 0.04),
-        new THREE.Vector3(-0.02, RADIUS * 0.92 + 0.22, -0.05),
-        new THREE.Vector3(0.08, RADIUS * 0.92 + 0.35, 0.02),
+        new THREE.Vector3(0,     RADIUS * 0.88, 0),
+        new THREE.Vector3( 0.04, RADIUS * 0.88 + 0.11,  0.03),
+        new THREE.Vector3(-0.02, RADIUS * 0.88 + 0.22, -0.04),
+        new THREE.Vector3( 0.06, RADIUS * 0.88 + 0.34,  0.02),
       ]),
     [],
   );
   const geometry = useMemo(
-    () => new THREE.TubeGeometry(curve, 20, 0.04, 10, false),
+    () => new THREE.TubeGeometry(curve, 18, 0.035, 10, false),
     [curve],
   );
   return (
     <mesh geometry={geometry} castShadow receiveShadow>
-      <meshStandardMaterial color="#3f6212" roughness={0.85} />
+      <meshPhysicalMaterial color="#4a6a10" roughness={0.86} clearcoat={0.08} />
     </mesh>
   );
 }
 
 function Tendril() {
-  // Spiral curl
   const curve = useMemo(() => {
-    const points = [];
-    for (let i = 0; i <= 40; i++) {
-      const t = i / 40;
-      const a = t * Math.PI * 5;
-      const r = 0.04 + t * 0.06;
-      points.push(
+    const pts = [];
+    for (let i = 0; i <= 54; i++) {
+      const t = i / 54;
+      const a = t * Math.PI * 6.5;
+      const r = 0.028 + t * 0.072;
+      pts.push(
         new THREE.Vector3(
-          0.18 + Math.cos(a) * r,
-          RADIUS * 0.92 + 0.12 + t * 0.18,
+          0.24 + Math.cos(a) * r,
+          RADIUS * 0.88 + 0.10 + t * 0.24,
           Math.sin(a) * r,
         ),
       );
     }
-    return new THREE.CatmullRomCurve3(points);
+    return new THREE.CatmullRomCurve3(pts);
   }, []);
   const geometry = useMemo(
-    () => new THREE.TubeGeometry(curve, 60, 0.012, 6, false),
+    () => new THREE.TubeGeometry(curve, 72, 0.009, 6, false),
     [curve],
   );
   return (
     <mesh geometry={geometry} castShadow>
-      <meshStandardMaterial color="#65a30d" roughness={0.85} />
+      <meshPhysicalMaterial color="#5a8a16" roughness={0.90} clearcoat={0.08} />
     </mesh>
   );
 }
 
-function Leaf({ position, rotation, scale }) {
+function WatermelonLeaf({ position, rotation, scale = 1 }) {
   const geometry = useMemo(() => {
     const shape = new THREE.Shape();
-    // Lobed watermelon leaf approximation
+    // Five-lobed watermelon leaf silhouette
     shape.moveTo(0, 0);
-    shape.bezierCurveTo(0.4, 0.1, 0.55, 0.4, 0.45, 0.7);
-    shape.bezierCurveTo(0.35, 0.85, 0.2, 0.95, 0.05, 1.0);
-    shape.bezierCurveTo(-0.05, 1.0, -0.2, 0.95, -0.35, 0.85);
-    shape.bezierCurveTo(-0.55, 0.4, -0.4, 0.1, 0, 0);
-    const geo = new THREE.ShapeGeometry(shape, 18);
+    shape.bezierCurveTo( 0.52,  0.06,  0.72,  0.48,  0.58,  0.82);
+    shape.bezierCurveTo( 0.45,  1.05,  0.20,  1.12,  0,     1.06);
+    shape.bezierCurveTo(-0.20,  1.12, -0.45,  1.05, -0.58,  0.82);
+    shape.bezierCurveTo(-0.72,  0.48, -0.52,  0.06,  0,     0);
+    const geo = new THREE.ShapeGeometry(shape, 28);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const y = pos.getY(i);
       const x = pos.getX(i);
-      pos.setZ(i, Math.sin(y * 2.2) * 0.07 + Math.cos(x * 3.1) * 0.04);
+      // Gentle dish + edge ripple
+      pos.setZ(i, Math.sin(y * 2.6) * 0.065 + Math.cos(x * 2.8) * 0.04);
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
@@ -186,9 +186,12 @@ function Leaf({ position, rotation, scale }) {
       castShadow
       receiveShadow
     >
-      <meshStandardMaterial
-        color="#4ade80"
-        roughness={0.6}
+      <meshPhysicalMaterial
+        color="#3a8020"
+        roughness={0.52}
+        metalness={0}
+        clearcoat={0.28}
+        clearcoatRoughness={0.48}
         side={THREE.DoubleSide}
       />
     </mesh>
@@ -196,21 +199,15 @@ function Leaf({ position, rotation, scale }) {
 }
 
 export default function WatermelonModel() {
+  const top = RADIUS * 0.87;
   return (
-    <group rotation={[0.05, 0, 0.08]}>
+    <group rotation={[0.04, 0.18, 0.06]}>
       <StripedRind />
       <Stem />
       <Tendril />
-      <Leaf
-        position={[0.18, RADIUS * 0.92 + 0.05, -0.12]}
-        rotation={[0.6, -0.3, 0.2]}
-        scale={0.4}
-      />
-      <Leaf
-        position={[-0.14, RADIUS * 0.92 + 0.08, 0.1]}
-        rotation={[0.4, 0.5, -0.3]}
-        scale={0.35}
-      />
+      <WatermelonLeaf position={[ 0.22, top + 0.05, -0.16]} rotation={[ 0.62, -0.38,  0.30]} scale={0.52} />
+      <WatermelonLeaf position={[-0.20, top + 0.09,  0.14]} rotation={[ 0.46,  0.52, -0.42]} scale={0.44} />
+      <WatermelonLeaf position={[ 0.12, top + 0.14,  0.22]} rotation={[ 0.54, -0.18,  0.62]} scale={0.38} />
     </group>
   );
 }
