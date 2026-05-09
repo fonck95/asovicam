@@ -60,7 +60,8 @@ export function makeCornColorTexture() {
     for (let col = -1; col <= COLS; col++) {
       const cx = col * cellW + stagger + cellW / 2;
       const cy = row * cellH + cellH / 2;
-      const seed = (row * 31 + col * 17) % palette.length;
+      const rawSeed = (row * 31 + col * 17) % palette.length;
+      const seed = (rawSeed + palette.length) % palette.length;
       const baseColor = palette[seed];
 
       // Highlight gradient on each kernel

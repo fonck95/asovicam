@@ -5,8 +5,6 @@ import {
   Environment,
   OrbitControls,
 } from '@react-three/drei';
-import { Bloom, EffectComposer, SMAA } from '@react-three/postprocessing';
-import { SMAAPreset } from 'postprocessing';
 import * as THREE from 'three';
 import Model from './Model';
 import Loader from './Loader';
@@ -16,7 +14,9 @@ import Loader from './Loader';
 // - Una key light direccional + ambient + Environment preset.
 // - ContactShadows para anclar el modelo al "suelo".
 // - OrbitControls con rangos limitados y auto-rotate sutil.
-// - Post-processing al mínimo: SMAA + un toque de bloom.
+// - Antialiasing nativo MSAA del WebGL: sin EffectComposer
+//   para evitar el conflicto de depth/stencil attachments
+//   que provoca "Context Lost" con Bloom + shadows.
 // =====================================================
 
 export default function Scene({ product }) {
@@ -87,16 +87,6 @@ export default function Scene({ product }) {
           autoRotate
           autoRotateSpeed={0.7}
         />
-
-        <EffectComposer multisampling={0}>
-          <Bloom
-            intensity={0.18}
-            luminanceThreshold={0.88}
-            luminanceSmoothing={0.2}
-            mipmapBlur
-          />
-          <SMAA preset={SMAAPreset.HIGH} />
-        </EffectComposer>
       </Canvas>
 
       <Loader />
