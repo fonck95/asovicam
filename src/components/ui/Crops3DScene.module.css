@@ -21,13 +21,14 @@
     radial-gradient(circle at 50% 70%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 55%);
   transition: background 700ms ease;
   z-index: 0;
+  pointer-events: none;
 }
 
 .grain {
   position: absolute;
   inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  opacity: 0.7;
+  opacity: 0.55;
   mix-blend-mode: overlay;
   pointer-events: none;
   z-index: 1;
@@ -36,122 +37,26 @@
 .stage {
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-rows: 1fr auto;
-  padding: clamp(2rem, 5vw, 3rem) clamp(1.5rem, 4vw, 3rem);
-  z-index: 2;
-  perspective: 1400px;
-  --px: 0px;
-  --py: 0px;
-  --rot: 0deg;
-}
-
-.scene {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: clamp(0.5rem, 2vw, 2rem);
-  align-items: end;
-  justify-items: center;
-  transform: translate3d(var(--px), var(--py), 0) rotateY(var(--rot));
-  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  transform-style: preserve-3d;
-}
-
-.cropSlot {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  width: 100%;
-  max-width: 220px;
-  filter: saturate(0.85) brightness(0.85);
-  transform: translateY(8px) scale(0.86);
-  transition:
-    filter 480ms ease,
-    transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  cursor: pointer;
-  --accent: #f59e0b;
-  --accentSoft: rgba(245, 158, 11, 0.15);
-}
-
-.cropActive {
-  filter: saturate(1.1) brightness(1.05) drop-shadow(0 12px 28px var(--accentSoft));
-  transform: translateY(-12px) scale(1.04);
   z-index: 2;
 }
 
-.figure {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 200 / 320;
-  max-height: clamp(220px, 38vh, 360px);
+.canvasHolder {
+  position: absolute;
+  inset: 0;
   z-index: 1;
 }
 
-.svg {
-  width: 100%;
-  height: 100%;
+.canvasHolder canvas {
   display: block;
-  overflow: visible;
-}
-
-.cropActive .svg {
-  animation: bob 4s ease-in-out infinite;
-}
-
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-
-.pedestal {
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 78%;
-  height: 36px;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.pedestalRing {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, rgba(255, 255, 255, 0.06));
-  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%);
-}
-
-.pedestalDisc {
-  position: absolute;
-  left: 50%;
-  bottom: 6px;
-  transform: translateX(-50%);
-  width: 70%;
-  height: 18px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 30%, rgba(255, 255, 255, 0.05)), transparent 75%);
-  filter: blur(2px);
-}
-
-.pedestalShadow {
-  position: absolute;
-  left: 50%;
-  bottom: -12px;
-  transform: translateX(-50%);
-  width: 90%;
-  height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55), transparent 70%);
-  filter: blur(8px);
+  width: 100% !important;
+  height: 100% !important;
+  outline: none;
 }
 
 .info {
   position: absolute;
   left: clamp(1.5rem, 4vw, 3rem);
-  bottom: clamp(5rem, 11vh, 7rem);
+  top: clamp(1.5rem, 4vw, 2.75rem);
   max-width: 360px;
   color: white;
   z-index: 3;
@@ -166,6 +71,7 @@
   color: color-mix(in srgb, var(--accent) 70%, white);
   letter-spacing: 0.02em;
   margin-bottom: 0.375rem;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
 }
 
 .infoTitle {
@@ -176,13 +82,15 @@
   color: white;
   line-height: 1.05;
   margin-bottom: 0.375rem;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
 }
 
 .infoTagline {
   font-size: 0.9375rem;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.85);
   line-height: 1.5;
   text-wrap: pretty;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
 }
 
 .controls {
@@ -243,7 +151,7 @@
 .credits {
   position: absolute;
   top: var(--spacing-md);
-  left: var(--spacing-md);
+  right: var(--spacing-md);
   padding: 4px 10px;
   border-radius: var(--radius-full);
   background: rgba(10, 22, 14, 0.45);
@@ -258,50 +166,45 @@
   z-index: 3;
 }
 
+.hint {
+  position: absolute;
+  bottom: calc(var(--spacing-md) + 2.75rem);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(10, 22, 14, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 3;
+  white-space: nowrap;
+}
+
 @media (max-width: 880px) {
   .wrapper {
     aspect-ratio: 4 / 5;
     max-height: 640px;
   }
 
-  .stage {
-    grid-template-rows: 1fr auto;
-  }
-
-  .scene {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(3, 1fr);
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .cropSlot {
-    max-width: 180px;
-    transform: scale(0.7);
-  }
-
-  .cropActive {
-    transform: scale(1);
-  }
-
   .info {
-    position: static;
-    margin: 0 auto;
+    left: 50%;
+    transform: translateX(-50%);
     text-align: center;
-    padding-top: var(--spacing-md);
+    max-width: 90%;
   }
 
   .credits {
     font-size: 9px;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .scene,
-  .cropSlot {
-    transition: none;
-  }
-  .cropActive .svg {
-    animation: none;
+  .hint {
+    bottom: calc(var(--spacing-md) + 3.25rem);
+    font-size: 9.5px;
   }
 }
