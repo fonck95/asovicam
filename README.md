@@ -18,39 +18,13 @@ npm run dev
 
 Visita <http://localhost:5173/productos>.
 
-> El visor funciona desde el primer arranque incluso sin modelos `.glb`:
-> usa geometrías primitivas como fallback hasta que coloques los archivos.
+### Arquitectura del visor
 
-### Cómo agregar los modelos `.glb` reales
-
-1. Coloca los archivos en `public/models/` con estos nombres exactos:
-   - `corn.glb` — Maíz
-   - `bean.glb` — Frijol
-   - `watermelon.glb` — Sandía
-2. El visor detecta automáticamente que existen (vía `HEAD` request) y
-   deja de usar los fallbacks primitivos.
-
-### Dónde descargar modelos gratis
-
-- **[Sketchfab](https://sketchfab.com/3d-models)** filtrando por
-  `Downloadable` + licencia `Creative Commons - Attribution`.
-  Búsquedas sugeridas: `corn cob low poly`, `bean plant`,
-  `watermelon realistic`.
-- **[Poly Haven](https://polyhaven.com/models)** — modelos CC0.
-- **[Quaternius](https://quaternius.com/)** — packs CC0.
-
-### Optimización
-
-Comprime los `.glb` antes de subirlos (Draco / Meshopt):
-
-- **Web (sin instalar nada):** <https://gltf.report/>
-- **CLI:**
-  ```bash
-  npm install -g @gltf-transform/cli
-  gltf-transform optimize raw.glb corn.glb --compress draco
-  ```
-
-Más detalles en [`public/models/README.md`](./public/models/README.md).
+Los modelos 3D son **100% procedurales**: se construyen en el cliente con
+primitivas de Three.js (cilindro, esfera, tubo) y se decoran con texturas
+generadas en `<canvas>` 2D (color + bump). No hay archivos `.glb`, no se
+descargan assets externos pesados y no se inyectan shaders custom — todo
+es código JavaScript determinista, fácil de mantener.
 
 ### Editar textos del visor
 
@@ -61,19 +35,22 @@ vive en un solo archivo:
 src/components/ProductViewer/products.js
 ```
 
-Cambia ahí los strings y los `modelPath` si renombras los `.glb`.
-
 ### Estructura del módulo
 
 ```
 src/components/ProductViewer/
 ├── index.jsx           # Componente principal exportable
-├── Scene.jsx           # Canvas, luces, postprocessing y zoom limitado
-├── Model.jsx           # Carga del .glb + fallbacks primitivos
+├── Scene.jsx           # Canvas, luces, sombras y post-processing
+├── Model.jsx           # Dispatcher por id de producto
+├── models/
+│   ├── CornModel.jsx
+│   ├── BeanModel.jsx
+│   └── WatermelonModel.jsx
+├── textures.js         # Generadores de texturas en canvas 2D
 ├── ProductSelector.jsx # Tarjetas de selección
 ├── InfoPanel.jsx       # Panel lateral con datos
-├── Loader.jsx          # Overlay de carga con barra de progreso
-└── products.js         # Datos editables (textos, paths)
+├── Loader.jsx          # Overlay de carga
+└── products.js         # Datos editables (textos)
 ```
 
 ### Despliegue en Vercel
@@ -84,12 +61,9 @@ El proyecto ya es compatible con Vercel sin configuración extra:
 2. Framework preset: **Vite** (auto-detectado).
 3. Build command: `npm run build` (default).
 4. Output directory: `dist` (default).
-5. Asegúrate de que `public/models/*.glb` esté commiteado en el repo
-   — Vercel lo servirá como assets estáticos en `https://tu-dominio.com/models/...`.
 
-> El HDRI se descarga en runtime desde Poly Haven CDN. Si prefieres
-> servirlo localmente, descarga `studio_small_09_1k.hdr` a
-> `public/hdr/` y cambia la URL en `src/components/ProductViewer/Scene.jsx`.
+> El HDRI ambiental usa el preset `apartment` que `@react-three/drei`
+> sirve desde su CDN. No requiere configuración manual.
 
 ## Scripts
 

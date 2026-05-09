@@ -1,6 +1,7 @@
 // =====================================================
 // Datos de los productos del visor 3D.
-// Edita aquí textos, paths a los .glb y datos clave.
+// Edita aquí textos y datos clave; los modelos se construyen
+// proceduralmente, así que no hay archivos .glb que mantener.
 // =====================================================
 
 export const products = [
@@ -12,7 +13,6 @@ export const products = [
     description:
       'Variedad criolla adaptada al trópico húmedo del Magdalena Medio. ' +
       'Aporta la estructura vertical del sistema milpa y es la base alimentaria de la región.',
-    modelPath: '/models/corn.glb',
     color: '#f59e0b',
     accent: 'from-amber-400 via-yellow-500 to-amber-600',
     facts: [
@@ -30,7 +30,6 @@ export const products = [
     description:
       'Leguminosa tropical de ciclo corto, ideal para suelos de baja fertilidad. ' +
       'Fija nitrógeno atmosférico mejorando el suelo de forma natural.',
-    modelPath: '/models/bean.glb',
     color: '#059669',
     accent: 'from-emerald-400 via-green-500 to-emerald-600',
     facts: [
@@ -48,7 +47,6 @@ export const products = [
     description:
       'Cobertura rastrera que protege el suelo, conserva la humedad y entrega un fruto ' +
       'de alto valor comercial para los mercados locales.',
-    modelPath: '/models/watermelon.glb',
     color: '#dc2626',
     accent: 'from-rose-400 via-red-500 to-rose-600',
     facts: [
