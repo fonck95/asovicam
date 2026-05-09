@@ -92,6 +92,10 @@ function useHuskMaterial(baseColor) {
       metalness: 0,
       side: THREE.DoubleSide,
     });
+    // USE_UV hace que three.js declare `vUv` (varying) y la asigne en el
+    // vertex shader; sin esto, MeshStandardMaterial no tiene `vUv` cuando
+    // no hay textura mapeada y el shader inyectado falla al compilar.
+    mat.defines = { ...(mat.defines || {}), USE_UV: '' };
     mat.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',

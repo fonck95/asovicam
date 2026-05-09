@@ -135,6 +135,7 @@ function usePodMaterial() {
       sheenColor: '#bbf7d0',
       envMapIntensity: 1.0,
     });
+    mat.defines = { ...(mat.defines || {}), USE_UV: '' };
     mat.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
@@ -203,13 +204,13 @@ function useLeafMaterial(color = '#4ade80') {
       clearcoatRoughness: 0.6,
       side: THREE.DoubleSide,
     });
+    mat.defines = { ...(mat.defines || {}), USE_UV: '' };
     mat.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
         `
           #include <color_fragment>
           // Central vein along x=0 (uv.x near 0.5) and side veins
-          float midV = 1.0 - smoothstep(0.495, 0.505, vUv.x) * smoothstep(0.495, 0.505, 1.0 - vUv.x);
           float central = smoothstep(0.49, 0.5, vUv.x) - smoothstep(0.5, 0.51, vUv.x);
           float ribAngle = abs(vUv.x - 0.5) * 2.0;
           float side = sin(vUv.y * 9.0) * 0.5 + 0.5;

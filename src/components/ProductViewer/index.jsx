@@ -14,6 +14,10 @@ import { products, getProductById } from './products';
 // Comprueba si los .glb están realmente disponibles. Si no,
 // activa los fallbacks primitivos para que el visor funcione
 // desde el primer `npm run dev`.
+//
+// NOTA: si no hay archivos .glb en /public/models/, este HEAD
+// devolverá 404 y el navegador lo mostrará en consola — es
+// esperado y NO es un error: el visor cae al modelo procedural.
 async function checkModelsAvailable() {
   try {
     const checks = await Promise.all(

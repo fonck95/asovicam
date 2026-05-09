@@ -228,6 +228,7 @@ function useLeafMaterial(color = '#4ade80') {
       clearcoatRoughness: 0.55,
       side: THREE.DoubleSide,
     });
+    mat.defines = { ...(mat.defines || {}), USE_UV: '' };
     mat.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
