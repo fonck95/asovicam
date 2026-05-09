@@ -11,43 +11,43 @@ import { products, getProductById } from './products';
 // derecha en desktop; apilados en móvil.
 // =====================================================
 
-// Comprueba si los .glb están realmente disponibles. Si no,
-// activa los fallbacks primitivos para que el visor funcione
-// desde el primer `npm run dev`.
-//
-// NOTA: si no hay archivos .glb en /public/models/, este HEAD
-// devolverá 404 y el navegador lo mostrará en consola — es
-// esperado y NO es un error: el visor cae al modelo procedural.
-async function checkModelsAvailable() {
+// Determina si hay .glb disponibles leyendo /models/manifest.json.
+// El manifest es una lista de nombres de archivo (ej. ["corn.glb"]).
+// Cuando el manifest está vacío o no existe, el visor usa los
+// modelos procedurales sin generar 404s de cada .glb en consola.
+async function getAvailableGlbModels() {
   try {
-    const checks = await Promise.all(
-      products.map((p) =>
-        fetch(p.modelPath, { method: 'HEAD' })
-          .then((r) => r.ok && Number(r.headers.get('content-length')) > 1024)
-          .catch(() => false),
-      ),
-    );
-    return checks.every(Boolean);
+    const res = await fetch('/models/manifest.json', {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return new Set();
+    const manifest = await res.json();
+    if (!Array.isArray(manifest)) return new Set();
+    return new Set(manifest.filter((f) => typeof f === 'string'));
   } catch {
-    return false;
+    return new Set();
   }
 }
 
 export default function ProductViewer() {
   const [activeId, setActiveId] = useState(products[0].id);
-  const [useFallback, setUseFallback] = useState(true);
+  const [glbAvailable, setGlbAvailable] = useState(() => new Set());
 
   const product = getProductById(activeId);
+  const productFile = product.modelPath.split('/').pop();
+  const useFallback = !glbAvailable.has(productFile);
 
   useEffect(() => {
     let cancelled = false;
-    checkModelsAvailable().then((ok) => {
+    getAvailableGlbModels().then((available) => {
       if (cancelled) return;
-      setUseFallback(!ok);
-      if (ok) {
-        // Precargar los tres modelos para transiciones rápidas
-        products.forEach((p) => useGLTF.preload(p.modelPath));
-      }
+      setGlbAvailable(available);
+      products.forEach((p) => {
+        const file = p.modelPath.split('/').pop();
+        if (available.has(file)) {
+          useGLTF.preload(p.modelPath);
+        }
+      });
     });
     return () => {
       cancelled = true;

@@ -19,9 +19,20 @@ nombres esperados y el visor los detecta automáticamente.
 | `bean.glb`         | Frijol   |
 | `watermelon.glb`   | Sandía   |
 
-Cuando los `.glb` existen y pesan más de 1 KB, el visor los carga
-automáticamente; en caso contrario muestra los modelos
-procedurales HD.
+## Activar los `.glb`
+
+Para evitar 404s en consola cuando los archivos no existen, el visor
+no hace probes a `/models/*.glb`: en su lugar lee la lista de modelos
+disponibles desde `manifest.json` (en este mismo directorio).
+
+Cuando coloques un `.glb` real, agregá su nombre al manifest:
+
+```json
+["corn.glb", "bean.glb", "watermelon.glb"]
+```
+
+Los productos cuyo archivo aparezca en el manifest cargan el `.glb`;
+el resto sigue usando el modelo procedural HD.
 
 ## Dónde descargar modelos gratuitos verificados
 

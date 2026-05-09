@@ -14,10 +14,11 @@ import {
   EffectComposer,
   HueSaturation,
   N8AO,
+  SMAA,
   ToneMapping,
   Vignette,
 } from '@react-three/postprocessing';
-import { ToneMappingMode } from 'postprocessing';
+import { SMAAPreset, ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import Model from './Model';
 import Loader from './Loader';
@@ -226,8 +227,12 @@ export default function Scene({ product, useFallback }) {
           <ScrollZoom />
         </Suspense>
 
-        {/* Postprocessing — modern AO + cinematic finish */}
-        <EffectComposer multisampling={4} enableNormalPass>
+        {/* Postprocessing — modern AO + cinematic finish.
+            multisampling={0} + SMAA evita el conflicto MSAA vs N8AO depth
+            (glBlitFramebuffer: read/write depth-stencil cannot be the
+            same image). N8AO deriva las normales desde depth, así que
+            no hace falta enableNormalPass. */}
+        <EffectComposer multisampling={0}>
           <N8AO
             aoRadius={0.6}
             distanceFalloff={0.4}
@@ -248,6 +253,7 @@ export default function Scene({ product, useFallback }) {
             darkness={0.55}
           />
           <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          <SMAA preset={SMAAPreset.HIGH} />
         </EffectComposer>
       </Canvas>
 
