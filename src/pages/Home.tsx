@@ -20,7 +20,9 @@ import Product3DGallery, {
 import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
 import SEO from '../components/SEO';
 
-const Crops3DScene = lazy(() => import('../components/ui/Crops3DScene'));
+const MilpaShowcase3D = lazy(
+  () => import('../components/ui/MilpaShowcase3D'),
+);
 
 import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
@@ -201,23 +203,25 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 3D Diorama — Three.js procedural scene of the milpa */}
+      {/* 3D Showcase — modelos reales del catálogo /productos */}
       <section className={`section ${styles.diorama}`}>
         <div className="container">
           <div className={styles.sectionHeader}>
             <span className={styles.eyebrow}>
-              <Sparkles size={12} /> Milpa interactiva
+              <Sparkles size={12} /> Catálogo agrícola en 3D
             </span>
-            <h2 className="section__title">La milpa en 3D</h2>
+            <h2 className="section__title">
+              Cosechas que cuentan historias
+            </h2>
             <p className="section__subtitle">
-              Una representación viva de nuestro sistema: maíz, sandía y frijol
-              creciendo sobre tierra fértil. Mueve el cursor para girar la
-              escena y descubre cada cultivo de cerca.
+              Maíz, frijol caupí y sandía cultivados con prácticas agroecológicas
+              en Yondó. Modelos interactivos: arrastra para rotar, haz scroll
+              para acercarte y descubre cada cultivo en detalle.
             </p>
           </div>
 
           <Suspense fallback={<div className={styles.dioramaFallback} />}>
-            <Crops3DScene />
+            <MilpaShowcase3D />
           </Suspense>
         </div>
       </section>
