@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   Leaf,
@@ -9,14 +8,9 @@ import {
   BookOpen,
   Wheat,
   TreePine,
-  Sparkles,
   Heart,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
-import Product3DGallery, {
-  type ProductSlide,
-} from '../components/ui/Product3DGallery';
 import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
 import SEO from '../components/SEO';
 
@@ -24,34 +18,10 @@ const MilpaShowcase3D = lazy(
   () => import('../components/ui/MilpaShowcase3D'),
 );
 
-import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
 import { programs } from '../data/programs';
 import { impactStats } from '../data/impact';
 import styles from './Home.module.css';
-
-const productSlides: ProductSlide[] = [
-  {
-    id: 'milpa',
-    title: 'Milpa viva',
-    subtitle: 'Maíz · Frijol caupí · Sandía',
-    description:
-      'Tres cultivos en una sola parcela: el maíz como tutor, el frijol que fija nitrógeno y la sandía que tapiza el suelo. Una alianza ancestral, productiva y regenerativa.',
-    image: '/milpa.jpg',
-    badge: 'Producto insignia',
-    accent: 'var(--color-primary)',
-  },
-  {
-    id: 'siembra',
-    title: 'Ciclo de siembra',
-    subtitle: 'Del terreno a la cosecha',
-    description:
-      'Seis pasos cuidadosamente escalonados: preparación, siembra del maíz, asociación con frijol y sandía, mulch continuo y cosecha en cascada a lo largo del año.',
-    image: '/steps-milpa.jpg',
-    badge: 'Proceso',
-    accent: 'var(--color-secondary-light)',
-  },
-];
 
 const programIcons: Record<string, React.ReactNode> = {
   leaf: <Leaf size={24} />,
@@ -120,12 +90,18 @@ export default function Home() {
         </span>
       </section>
 
+      {/* 3D Showcase — modelos reales del catálogo /productos.
+          Va inmediatamente después del hero como pieza protagonista. */}
+      <Suspense fallback={<div className={styles.dioramaFallback} />}>
+        <MilpaShowcase3D />
+      </Suspense>
+
       {/* Features */}
-      <section className="section">
+      <section className="section section--alt">
         <div className="container">
           <div className={styles.sectionHeader}>
             <span className={styles.eyebrow}>
-              <Sparkles size={12} /> Nuestra esencia
+              <Leaf size={12} /> Nuestra esencia
             </span>
             <h2 className="section__title">Un modelo que cuida la tierra</h2>
             <p className="section__subtitle">
@@ -170,78 +146,6 @@ export default function Home() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Crops Preview */}
-      <section className="section section--alt">
-        <div className="container">
-          <div className={styles.sectionHeader}>
-            <span className={styles.eyebrow}>
-              <Wheat size={12} /> Sistema milpa
-            </span>
-            <h2 className="section__title">Los tres pilares de la milpa</h2>
-            <p className="section__subtitle">
-              Maíz, frijol caupí y sandía: una alianza natural que ha alimentado
-              comunidades durante generaciones.
-            </p>
-          </div>
-
-          <div className={styles.cropsGrid}>
-            {crops.map((crop) => (
-              <Card key={crop.id} accentColor={crop.color}>
-                <span className={styles.cropIcon}>{crop.icon}</span>
-                <h3 className={styles.cropName}>{crop.name}</h3>
-                <p className={styles.cropScientific}>{crop.scientificName}</p>
-                <p className={styles.cropDescription}>{crop.description}</p>
-                <Link to="/milpa" className={styles.cropLink}>
-                  Saber más <ArrowRight size={14} />
-                </Link>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 3D Showcase — modelos reales del catálogo /productos */}
-      <section className={`section ${styles.diorama}`}>
-        <div className="container">
-          <div className={styles.sectionHeader}>
-            <span className={styles.eyebrow}>
-              <Sparkles size={12} /> Catálogo agrícola en 3D
-            </span>
-            <h2 className="section__title">
-              Cosechas que cuentan historias
-            </h2>
-            <p className="section__subtitle">
-              Maíz, frijol caupí y sandía cultivados con prácticas agroecológicas
-              en Yondó. Modelos interactivos: arrastra para rotar, haz scroll
-              para acercarte y descubre cada cultivo en detalle.
-            </p>
-          </div>
-
-          <Suspense fallback={<div className={styles.dioramaFallback} />}>
-            <MilpaShowcase3D />
-          </Suspense>
-        </div>
-      </section>
-
-      {/* Product Showcase — 3D scroll gallery */}
-      <section className={`section ${styles.showcase}`}>
-        <div className="container">
-          <div className={styles.sectionHeader}>
-            <span className={styles.eyebrow}>
-              <Sparkles size={12} /> Nuestro producto
-            </span>
-            <h2 className="section__title">Mira la milpa de cerca</h2>
-            <p className="section__subtitle">
-              Imágenes reales de nuestros cultivos en Yondó. Pasa el cursor sobre
-              cada tarjeta para verlas con perspectiva — optimizadas en tu
-              dispositivo con WebGPU.
-            </p>
-          </div>
-
-          <Product3DGallery slides={productSlides} />
         </div>
       </section>
 
