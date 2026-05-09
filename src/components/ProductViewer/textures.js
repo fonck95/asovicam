@@ -62,7 +62,9 @@ export function makeCornColorTexture() {
       const cy = row * cellH + cellH / 2;
       const rawSeed = (row * 31 + col * 17) % palette.length;
       const seed = (rawSeed + palette.length) % palette.length;
-      const baseColor = palette[seed];
+      // Defensive fallback: if the palette ever changes shape, never
+      // pass `undefined` to addColorStop — that throws a SyntaxError.
+      const baseColor = palette[seed] ?? palette[0];
 
       // Highlight gradient on each kernel
       const grad = ctx.createRadialGradient(
