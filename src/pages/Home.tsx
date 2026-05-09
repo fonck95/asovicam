@@ -201,7 +201,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 3D Diorama — Three.js procedural scene of the milpa */}
+      {/* 3D Diorama — Real Three.js procedural models of the milpa */}
       <section className={`section ${styles.diorama}`}>
         <div className="container">
           <div className={styles.sectionHeader}>
@@ -210,9 +210,9 @@ export default function Home() {
             </span>
             <h2 className="section__title">La milpa en 3D</h2>
             <p className="section__subtitle">
-              Una representación viva de nuestro sistema: maíz, sandía y frijol
-              creciendo sobre tierra fértil. Mueve el cursor para girar la
-              escena y descubre cada cultivo de cerca.
+              Maíz, frijol caupí y sandía modelados en 3D. Selecciona un
+              cultivo, arrastra para rotarlo y haz scroll para acercarte —
+              los mismos modelos que viven en nuestro catálogo de productos.
             </p>
           </div>
 
