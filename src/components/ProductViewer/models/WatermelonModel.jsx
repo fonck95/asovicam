@@ -329,42 +329,55 @@ export default function WatermelonModel() {
 
       {/* === Rebanada (a la derecha, ligeramente al frente) === */}
       <group position={[1.1, -0.55, 0.4]} rotation={[-Math.PI / 2.4, 0.05, -0.18]}>
-        {/* Pulpa con SSS realista vía transmisión + atenuación.
-            Las celdas Voronoi del normal map dan relieve al jugo;
-            el clearcoat alto + roughness map por celda producen el
-            highlight "joya" en cada burbuja. iridescence muy sutil
-            simula el shimmer de la película de jugo bajo luz oblicua. */}
+        {/* Pulpa con SSS realista. Iteración 2026:
+            - color emissive sutil rojo: contrarresta el wash-out de la
+              transmission cuando la luz atraviesa el slice y ayuda a
+              que la pulpa se vea SATURADA en sombra.
+            - attenuationDistance < SLICE_DEPTH (0.34) para garantizar
+              tinte rojo claro al atravesar la rebanada. Antes 0.42 estaba
+              por encima del grosor → atenuación casi nula → look pálido.
+            - sheen rojo cálido (no rosado-blanco) para que los highlights
+              de borde tinten en rojo en lugar de desaturar.
+            - clearcoat reducido para evitar reflejos blancos del environment
+              que estaban "lavando" la pulpa.
+            - iridescencia desactivada (creaba shimmer azulado en sombras). */}
         <mesh geometry={sliceFleshGeo} castShadow receiveShadow>
           <meshPhysicalMaterial
             attach="material-0"
             map={fleshMap}
             normalMap={fleshNormal}
-            normalScale={[0.85, 0.85]}
+            normalScale={[1.05, 1.05]}
             roughnessMap={fleshRoughness}
-            roughness={0.5}
+            roughness={0.48}
             metalness={0.0}
-            clearcoat={0.85}
-            clearcoatRoughness={0.18}
-            transmission={0.32}
-            thickness={0.62}
-            attenuationColor="#e83a55"
-            attenuationDistance={0.42}
-            ior={1.37}
-            sheen={0.65}
-            sheenColor="#ffd6d6"
-            sheenRoughness={0.45}
-            iridescence={0.08}
-            iridescenceIOR={1.34}
-            iridescenceThicknessRange={[120, 380]}
-            envMapIntensity={1.35}
+            clearcoat={0.55}
+            clearcoatRoughness={0.32}
+            transmission={0.22}
+            thickness={0.40}
+            attenuationColor="#c8203a"
+            attenuationDistance={0.18}
+            ior={1.39}
+            sheen={0.55}
+            sheenColor="#e8505a"
+            sheenRoughness={0.38}
+            emissive="#3a0612"
+            emissiveIntensity={0.18}
+            envMapIntensity={1.0}
           />
+          {/* Material lateral: representa la "rebanada vista de canto".
+              Antes era cream #fbf3e8 → cuando la cámara pillaba el lateral
+              del slice se veía un sandwich blanco. Ahora rojo profundo con
+              roughness alta (cut surface seca) para coherencia visual. */}
           <meshPhysicalMaterial
             attach="material-1"
-            color="#fbf3e8"
-            roughness={0.88}
+            color="#a01a30"
+            roughness={0.78}
             metalness={0}
-            sheen={0.25}
-            sheenColor="#fbe4d8"
+            sheen={0.30}
+            sheenColor="#c8404a"
+            sheenRoughness={0.55}
+            emissive="#2a0510"
+            emissiveIntensity={0.12}
           />
         </mesh>
 
@@ -393,12 +406,15 @@ export default function WatermelonModel() {
             castShadow
           >
             <meshPhysicalMaterial
-              color="#1c0a00"
-              roughness={0.28}
-              metalness={0.18}
+              color="#0c0500"
+              roughness={0.22}
+              metalness={0.22}
               clearcoat={1.0}
-              clearcoatRoughness={0.12}
-              envMapIntensity={1.4}
+              clearcoatRoughness={0.10}
+              envMapIntensity={1.5}
+              sheen={0.4}
+              sheenColor="#5c1a10"
+              sheenRoughness={0.35}
             />
           </mesh>
         ))}
@@ -413,35 +429,41 @@ export default function WatermelonModel() {
             castShadow
           >
             <meshPhysicalMaterial
-              color="#1c0a00"
-              roughness={0.28}
-              metalness={0.18}
+              color="#0c0500"
+              roughness={0.22}
+              metalness={0.22}
               clearcoat={1.0}
-              clearcoatRoughness={0.12}
-              envMapIntensity={1.4}
+              clearcoatRoughness={0.10}
+              envMapIntensity={1.5}
+              sheen={0.4}
+              sheenColor="#5c1a10"
+              sheenRoughness={0.35}
             />
           </mesh>
         ))}
 
-        {/* Gotitas de jugo sobre la pulpa (look fresco) */}
+        {/* Gotitas de jugo sobre la pulpa (look fresco).
+            Tono rojo más saturado y atenuación más cerrada para que
+            las gotas se lean como "jugo de sandía", no como gotas
+            transparentes con tinte rosa. */}
         {juiceDrops.map((d, i) => (
           <mesh
             key={`drop-${i}`}
             position={d.position}
-            scale={[d.scale * 0.013, d.scale * 0.013, d.scale * 0.006]}
+            scale={[d.scale * 0.014, d.scale * 0.014, d.scale * 0.0075]}
           >
-            <sphereGeometry args={[1, 16, 12]} />
+            <sphereGeometry args={[1, 18, 14]} />
             <meshPhysicalMaterial
-              color="#f43f5e"
-              roughness={0.06}
+              color="#dc2845"
+              roughness={0.05}
               metalness={0}
               clearcoat={1.0}
               clearcoatRoughness={0.04}
-              transmission={0.85}
-              thickness={0.5}
-              ior={1.34}
-              attenuationColor="#fb7185"
-              attenuationDistance={0.5}
+              transmission={0.90}
+              thickness={0.4}
+              ior={1.36}
+              attenuationColor="#a8182e"
+              attenuationDistance={0.18}
               envMapIntensity={1.6}
             />
           </mesh>
