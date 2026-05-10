@@ -329,33 +329,42 @@ export default function WatermelonModel() {
 
       {/* === Rebanada (a la derecha, ligeramente al frente) === */}
       <group position={[1.1, -0.55, 0.4]} rotation={[-Math.PI / 2.4, 0.05, -0.18]}>
-        {/* Pulpa con SSS realista vía transmisión + atenuación */}
+        {/* Pulpa con SSS realista vía transmisión + atenuación.
+            Las celdas Voronoi del normal map dan relieve al jugo;
+            el clearcoat alto + roughness map por celda producen el
+            highlight "joya" en cada burbuja. iridescence muy sutil
+            simula el shimmer de la película de jugo bajo luz oblicua. */}
         <mesh geometry={sliceFleshGeo} castShadow receiveShadow>
           <meshPhysicalMaterial
             attach="material-0"
             map={fleshMap}
             normalMap={fleshNormal}
-            normalScale={[0.55, 0.55]}
+            normalScale={[0.85, 0.85]}
             roughnessMap={fleshRoughness}
-            roughness={0.48}
+            roughness={0.5}
             metalness={0.0}
-            clearcoat={0.55}
-            clearcoatRoughness={0.32}
-            transmission={0.22}
-            thickness={0.5}
-            attenuationColor="#f23a55"
-            attenuationDistance={0.55}
-            ior={1.36}
-            sheen={0.45}
-            sheenColor="#fee2e2"
-            sheenRoughness={0.55}
-            envMapIntensity={1.15}
+            clearcoat={0.85}
+            clearcoatRoughness={0.18}
+            transmission={0.32}
+            thickness={0.62}
+            attenuationColor="#e83a55"
+            attenuationDistance={0.42}
+            ior={1.37}
+            sheen={0.65}
+            sheenColor="#ffd6d6"
+            sheenRoughness={0.45}
+            iridescence={0.08}
+            iridescenceIOR={1.34}
+            iridescenceThicknessRange={[120, 380]}
+            envMapIntensity={1.35}
           />
           <meshPhysicalMaterial
             attach="material-1"
-            color="#f8fafc"
-            roughness={0.92}
+            color="#fbf3e8"
+            roughness={0.88}
             metalness={0}
+            sheen={0.25}
+            sheenColor="#fbe4d8"
           />
         </mesh>
 
