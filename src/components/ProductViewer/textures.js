@@ -113,6 +113,52 @@ function cellular2D(x, y) {
   return Math.sqrt(minDist);
 }
 
+// Voronoi avanzado: devuelve F1 (distancia al más cercano), F2 (segundo más
+// cercano), un id estable de la celda y la posición del feature point.
+// Es el motor que da realismo a la pulpa de la sandía: cada celda es una
+// "burbuja de jugo" con su tono propio y bordes oscuros donde se tocan dos
+// celdas (justo lo que se ve al hacer macro a una sandía real).
+//
+// Usa distancia al cuadrado durante la comparación (evita ~7 sqrt por
+// pixel × 9 vecinos) y sólo aplica sqrt a los valores finales f1, f2.
+// Para texturas 1536² esto ahorra ~600ms en V8.
+function voronoi2D(x, y) {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  let f1sq = 9.0;
+  let f2sq = 9.0;
+  let cellId = 0;
+  let fpx = 0;
+  let fpy = 0;
+  for (let oy = -1; oy <= 1; oy++) {
+    for (let ox = -1; ox <= 1; ox++) {
+      const cx = xi + ox;
+      const cy = yi + oy;
+      const px = cx + hash2(cx, cy);
+      const py = cy + hash2(cx + 13, cy + 7);
+      const dx = px - x;
+      const dy = py - y;
+      const dsq = dx * dx + dy * dy;
+      if (dsq < f1sq) {
+        f2sq = f1sq;
+        f1sq = dsq;
+        cellId = hash2(cx + 11, cy + 5);
+        fpx = px;
+        fpy = py;
+      } else if (dsq < f2sq) {
+        f2sq = dsq;
+      }
+    }
+  }
+  return {
+    f1: Math.sqrt(f1sq),
+    f2: Math.sqrt(f2sq),
+    cellId,
+    fpx,
+    fpy,
+  };
+}
+
 // ---------- Sobel: height → normal ----------
 
 function heightToNormalCanvas(heightCanvas, strength = 1.0) {
@@ -584,252 +630,456 @@ export function makeWatermelonNormalTexture() {
 // =====================================================
 // SANDÍA — pulpa interior (foco principal de realismo)
 //
+// La pulpa de la sandía es tejido placentario: miles de células grandes,
+// poligonales, llenas de agua con sacarosa. A simple vista cada celda es
+// una "joyita" cristalina: brilla en su centro, se separa por una pared
+// celular ligeramente más oscura y varía sutilmente de tono respecto a
+// sus vecinas.
+//
 // Capas (de fondo a frente):
-//  1. Gradiente radial de color: rojo profundo → coral → blanco
-//     (con fina banda verde de la cáscara interior)
-//  2. FBM de "celularidad" (la pulpa de la sandía no es uniforme:
-//     tiene zonas más densas y zonas con más jugo).
-//  3. Vetas radiales (fibras conectoras) muy finas
-//  4. Burbujas/destellos de jugo (especulares pintados)
-//  5. Granitos minúsculos rojos más oscuros (cell pockets)
+//  1. Gradiente radial fotométrico: corazón rubí → rojo sandía → coral
+//     → rosa pálido → crema-blanco fibroso (interior de la cáscara).
+//  2. **Voronoi cellular real**: cada celda obtiene su tono propio, un
+//     borde oscuro y un highlight especular interno (esto es la firma
+//     visual de la pulpa de sandía).
+//  3. Haces vasculares radiando del centro (donde se anclan las semillas).
+//  4. Anillo de transición fibroso al blanco interior de la cáscara.
+//  5. Micro-gotas de jugo y glaze de humedad sobre toda la superficie.
 // =====================================================
+
+// Paleta de la pulpa: stops del gradiente radial. Diseñada a partir de
+// fotos macro reales (corazón vino → coral saturado → rosa lácteo →
+// transición crema antes del blanco interior).
+const FLESH_STOPS = [
+  { r: 0.00, c: [122, 10, 30] },   // corazón ruby/vino
+  { r: 0.10, c: [184, 24, 54] },   // rojo profundo
+  { r: 0.22, c: [216, 44, 70] },   // rojo sandía clásico
+  { r: 0.38, c: [232, 72, 96] },   // rojo coral vivo
+  { r: 0.58, c: [240, 130, 144] }, // coral pálido
+  { r: 0.74, c: [248, 184, 192] }, // rosa pálido (mostly-water)
+  { r: 0.84, c: [251, 224, 220] }, // pre-corteza rosado-crema
+  { r: 0.91, c: [248, 240, 220] }, // blanco crema fibroso
+  { r: 0.97, c: [228, 226, 192] }, // crema-amarillento (rind interior)
+  { r: 1.00, c: [180, 200, 130] }, // verde tenue (cáscara interna)
+];
+
+function fleshRadialColor(t) {
+  // Devuelve [r, g, b] interpolado en la paleta para t ∈ [0, 1]
+  const tt = Math.max(0, Math.min(1, t));
+  for (let i = 1; i < FLESH_STOPS.length; i++) {
+    if (tt <= FLESH_STOPS[i].r) {
+      const a = FLESH_STOPS[i - 1];
+      const b = FLESH_STOPS[i];
+      const lt = (tt - a.r) / (b.r - a.r);
+      // Smooth Hermite — evita bandeo lineal en los gradientes
+      const ls = lt * lt * (3 - 2 * lt);
+      return [
+        a.c[0] + (b.c[0] - a.c[0]) * ls,
+        a.c[1] + (b.c[1] - a.c[1]) * ls,
+        a.c[2] + (b.c[2] - a.c[2]) * ls,
+      ];
+    }
+  }
+  return FLESH_STOPS[FLESH_STOPS.length - 1].c;
+}
 
 function paintWatermelonFlesh(ctx, W, H) {
   const cx = W / 2;
   const cy = H / 2;
+  // El UV mapping de la rebanada hace que sólo el disco interior
+  // (texture-radius ≤ 0.5) sea visible — pintamos el patrón radial dentro
+  // de un círculo de radio cx. El gradiente 0..1 cubre desde el centro
+  // de la rebanada hasta el borde curvo.
   const maxR = Math.min(W, H) * 0.5;
 
-  // -- 1. Gradiente radial. Las sandías reales tienen un degradado
-  //       suave del corazón (rojo intenso) hacia la corteza,
-  //       pasando por coral y luego un anillo blanco-rosado y
-  //       finalmente verde de la cáscara interior. --
-  const center = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
-  center.addColorStop(0.00, '#a30b22');     // corazón vino
-  center.addColorStop(0.15, '#c81e3a');
-  center.addColorStop(0.40, '#e23e54');
-  center.addColorStop(0.62, '#f06477');     // coral
-  center.addColorStop(0.80, '#f9b4b4');
-  center.addColorStop(0.91, '#fde9e7');     // pre-corteza (casi blanco)
-  center.addColorStop(0.965, '#fafdf2');    // corteza blanca
-  center.addColorStop(1.00, '#bee78b');     // verde interior
-  ctx.fillStyle = center;
-  ctx.fillRect(0, 0, W, H);
+  // --- Pase 1: por píxel calculamos color base + Voronoi + variaciones ---
+  // Una sola escritura ImageData = ~4× más rápido que múltiples passes.
+  const img = ctx.createImageData(W, H);
+  const data = img.data;
 
-  // -- 2. FBM grueso para variar densidad (zonas más oscuras / zonas más claras) --
-  // Pintado con "multiply" en alpha para no destruir el gradiente.
-  const img = ctx.getImageData(0, 0, W, H);
+  // Escala Voronoi: cada celda ≈ 1.2 mm en el modelo (radio rebanada
+  // 0.78 unidades ≈ 7.8cm). Con scale=22 sobre 1536px, cada celda
+  // ocupa ~1.5% del diámetro de la rebanada — se ve nítida pero no abruma.
+  const VORONOI_SCALE = 22;
+  // Anillo donde domina la pulpa rosada (pre-corteza empieza después)
+  const FLESH_END = 0.83;
+
   for (let y = 0; y < H; y++) {
+    const dyN = (y - cy) / maxR;
     for (let x = 0; x < W; x++) {
-      const dx = (x - cx) / maxR;
-      const dy = (y - cy) / maxR;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 1) continue;
-
+      const dxN = (x - cx) / maxR;
+      const dist = Math.sqrt(dxN * dxN + dyN * dyN);
       const i = (y * W + x) * 4;
 
-      // FBM grande: variación a gran escala
-      const big = fbm2D(x / W * 4 + 13, y / H * 4 + 7, 4);
-      // FBM medio: detalle de "celdas"
-      const mid = fbm2D(x / W * 16 + 1, y / H * 16 + 9, 4);
-      // FBM fino: micro-grano
-      const fine = fbm2D(x / W * 80, y / H * 80, 3);
-
-      // Combinamos: el dist nos dice cuánta pulpa estamos pintando
-      // (cerca del centro queremos más oscuro/saturado)
-      const radialBoost = (1 - dist) * 0.6;
-      const variance = (big - 0.5) * 0.18 + (mid - 0.5) * 0.10 + (fine - 0.5) * 0.05;
-
-      // Solo modulamos en la zona de pulpa rosada (no en la corteza/verde)
-      if (dist < 0.88) {
-        const factor = 1 + variance + radialBoost * 0.04;
-        img.data[i + 0] = Math.max(0, Math.min(255, img.data[i + 0] * factor));
-        img.data[i + 1] = Math.max(0, Math.min(255, img.data[i + 1] * (factor - radialBoost * 0.05)));
-        img.data[i + 2] = Math.max(0, Math.min(255, img.data[i + 2] * (factor - radialBoost * 0.05)));
+      // Fuera del disco visible — pintamos un fondo neutro claro
+      // (no se ve, pero ayuda al mipmap a no sangrar magenta en bordes)
+      if (dist > 1.02) {
+        data[i + 0] = 235;
+        data[i + 1] = 230;
+        data[i + 2] = 200;
+        data[i + 3] = 255;
+        continue;
       }
+
+      const angle = Math.atan2(dyN, dxN);
+
+      // 1. Color radial base (gradiente fotométrico)
+      let [r, g, b] = fleshRadialColor(dist);
+
+      // 2. Voronoi celular — sólo en la zona de pulpa rosada
+      if (dist < FLESH_END) {
+        const v = voronoi2D((x / W) * VORONOI_SCALE, (y / H) * VORONOI_SCALE);
+
+        // 2a. Tono propio por celda — cada celda recibe un offset cromático
+        // pequeño (algunas más oscuras, otras más rosadas) para imitar la
+        // variación natural de la madurez celular.
+        const tone = (v.cellId - 0.5) * 0.18;       // ±9% en R
+        const toneG = (hash2(v.cellId * 100, 7) - 0.5) * 0.14;
+        const toneB = (hash2(v.cellId * 50, 23) - 0.5) * 0.10;
+        r *= 1 + tone;
+        g *= 1 + tone * 0.55 + toneG * 0.4;
+        b *= 1 + tone * 0.35 + toneB * 0.5;
+
+        // 2b. Borde celular — donde dos celdas se tocan (F2-F1 pequeño)
+        // queda una pared más oscura. Imita la lignina/fibra entre células.
+        const edge = v.f2 - v.f1;
+        const borderStrength = 1 - smoothstep(0.0, 0.06, edge);
+        r *= 1 - borderStrength * 0.22;
+        g *= 1 - borderStrength * 0.30;
+        b *= 1 - borderStrength * 0.32;
+
+        // 2c. Highlight intra-celda — el "punto de luz" de cada celda,
+        // ubicado cerca del feature point. Esto es lo que da el aspecto
+        // de "joyas" o "perlas" cristalinas en una macro real.
+        const cellLight = (1 - smoothstep(0.0, 0.42, v.f1)) *
+                          (0.35 + v.cellId * 0.55);
+        r += cellLight * 70;
+        g += cellLight * 50;
+        b += cellLight * 50;
+
+        // 2d. Algunas celdas son notablemente más claras (sobremaduras /
+        // saturadas de jugo) — distribución probabilística por id
+        if (v.cellId > 0.85) {
+          const overripe = (v.cellId - 0.85) / 0.15;
+          r += overripe * 22;
+          g += overripe * 14;
+          b += overripe * 18;
+        }
+        // Y otras más oscuras (zonas con micro-cavidad de aire / sombra)
+        if (v.cellId < 0.10) {
+          const dark = (0.10 - v.cellId) / 0.10;
+          r *= 1 - dark * 0.14;
+          g *= 1 - dark * 0.22;
+          b *= 1 - dark * 0.22;
+        }
+      }
+
+      // 3. Haces vasculares radiales — la sandía tiene 3-4 placentas
+      // donde se anclan las semillas. De ellas salen fibras tenues hacia
+      // la corteza. Modeladas como FBM angular modulado por radio.
+      if (dist > 0.04 && dist < FLESH_END) {
+        // 6 "rayos" principales con FBM aleatorio para ondulación
+        const fiberAng = angle * 6;
+        const fiberFract = fiberAng - Math.floor(fiberAng);
+        const fiberMid = Math.min(fiberFract, 1 - fiberFract);
+        const fiberJitter = fbm2D(angle * 5, dist * 12, 3);
+        const fiberCloseness = 1 - smoothstep(0.05, 0.20, fiberMid);
+        const fiberFalloff = 1 - smoothstep(0.0, FLESH_END, dist);
+        const fiberStrength = fiberCloseness * fiberJitter * fiberFalloff * 0.18;
+        r *= 1 - fiberStrength * 0.20;
+        g *= 1 - fiberStrength * 0.32;
+        b *= 1 - fiberStrength * 0.30;
+      }
+
+      // 4. Micro-grano FBM — ruido fino que rompe regularidad Voronoi
+      const fineN = fbm2D((x / W) * 110, (y / H) * 110, 3) - 0.5;
+      const grainAmt = dist < FLESH_END ? 9 : 4;
+      r += fineN * grainAmt;
+      g += fineN * grainAmt * 0.85;
+      b += fineN * grainAmt * 0.7;
+
+      // 5. Pre-corteza fibrosa (anillo blanco entre pulpa y cáscara)
+      // El blanco interno de la sandía no es uniforme: tiene fibras
+      // radiales claramente visibles que apuntan a la cáscara.
+      if (dist >= FLESH_END && dist < 0.96) {
+        const t = (dist - FLESH_END) / (0.96 - FLESH_END); // 0..1
+        // Fibras estiradas radialmente
+        const fiberN = fbm2D(angle * 80, dist * 90, 3);
+        const fiberN2 = valueNoise2D(angle * 140, dist * 30);
+        const fibrousMod = (fiberN - 0.5) * 38 + (fiberN2 - 0.5) * 22;
+        r += fibrousMod * (1 - t * 0.3);
+        g += fibrousMod * (1 - t * 0.3);
+        b += fibrousMod * 0.5;
+
+        // Pequeña veteado verdoso conforme se acerca a la cáscara
+        if (t > 0.5) {
+          const greenTint = (t - 0.5) * 2 * 18;
+          r -= greenTint * 0.4;
+          b -= greenTint * 0.6;
+        }
+      }
+
+      data[i + 0] = Math.max(0, Math.min(255, r));
+      data[i + 1] = Math.max(0, Math.min(255, g));
+      data[i + 2] = Math.max(0, Math.min(255, b));
+      data[i + 3] = 255;
     }
   }
   ctx.putImageData(img, 0, 0);
 
-  // -- 3. Vetas radiales (fibras de pulpa). Son tenues pero visibles. --
+  // --- Pase 2: detalles que se pintan mejor con primitivas ---
+
+  // 6. Estrellas vasculares centrales — donde nacen los haces de semillas.
+  // Tres líneas suaves que parten del centro y se diluyen en la pulpa.
   ctx.save();
   ctx.translate(cx, cy);
-  for (let i = 0; i < 480; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r1 = Math.random() * maxR * 0.20;
-    const r2 = r1 + maxR * (0.2 + Math.random() * 0.55);
-    const t1 = Math.cos(angle) * r1;
-    const t2 = Math.sin(angle) * r1;
-    const t3 = Math.cos(angle) * r2;
-    const t4 = Math.sin(angle) * r2;
-    const grad = ctx.createLinearGradient(t1, t2, t3, t4);
-    grad.addColorStop(0, 'rgba(120, 8, 30, 0.0)');
-    grad.addColorStop(0.4, `rgba(140, 12, 36, ${0.05 + Math.random() * 0.14})`);
-    grad.addColorStop(1, 'rgba(255, 200, 200, 0.0)');
+  for (let bundle = 0; bundle < 6; bundle++) {
+    const baseAng = (bundle / 6) * Math.PI * 2 + (hash2(bundle, 17) - 0.5) * 0.4;
+    const len = maxR * (0.55 + hash2(bundle, 31) * 0.20);
+    // Curva con ligera ondulación
+    const ctrlAng = baseAng + (hash2(bundle, 47) - 0.5) * 0.25;
+    const cxa = Math.cos(ctrlAng) * len * 0.5;
+    const cya = Math.sin(ctrlAng) * len * 0.5;
+    const tipx = Math.cos(baseAng) * len;
+    const tipy = Math.sin(baseAng) * len;
+
+    const grad = ctx.createLinearGradient(0, 0, tipx, tipy);
+    grad.addColorStop(0, 'rgba(95, 6, 22, 0.55)');
+    grad.addColorStop(0.35, 'rgba(120, 14, 32, 0.20)');
+    grad.addColorStop(1, 'rgba(255, 200, 190, 0)');
     ctx.strokeStyle = grad;
-    ctx.lineWidth = 0.4 + Math.random() * 1.2;
+    ctx.lineWidth = 1.6 + hash2(bundle, 73) * 1.2;
     ctx.beginPath();
-    ctx.moveTo(t1, t2);
-    // Curva ligera
-    ctx.quadraticCurveTo(
-      Math.cos(angle + 0.05) * (r1 + r2) / 2,
-      Math.sin(angle + 0.05) * (r1 + r2) / 2,
-      t3, t4,
-    );
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(cxa, cya, tipx, tipy);
     ctx.stroke();
+
+    // Filamentos secundarios alrededor de cada haz principal
+    for (let s = 0; s < 5; s++) {
+      const sa = baseAng + (hash2(bundle * 7 + s, 13) - 0.5) * 0.55;
+      const sl = len * (0.55 + hash2(s, bundle) * 0.4);
+      const stx = Math.cos(sa) * sl;
+      const sty = Math.sin(sa) * sl;
+      ctx.strokeStyle = `rgba(115, 12, 30, ${0.10 + hash2(s, bundle * 3) * 0.10})`;
+      ctx.lineWidth = 0.4 + hash2(s, bundle * 5) * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(
+        stx * 0.5 + (hash2(s, bundle * 11) - 0.5) * sl * 0.2,
+        sty * 0.5 + (hash2(s, bundle * 13) - 0.5) * sl * 0.2,
+        stx, sty,
+      );
+      ctx.stroke();
+    }
   }
   ctx.restore();
 
-  // -- 4. "Cells" — pequeños puntitos más oscuros (los compartimentos
-  //       celulares de la pulpa). Distribución radial. --
-  for (let i = 0; i < 1100; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = Math.pow(Math.random(), 0.6) * maxR * 0.85;
-    const x = cx + Math.cos(angle) * r;
-    const y = cy + Math.sin(angle) * r;
-    const radial = r / maxR;
-    if (radial > 0.9) continue;
-    const dark = 0.10 + Math.random() * 0.18;
-    ctx.fillStyle = `rgba(110, 6, 24, ${dark})`;
-    ctx.beginPath();
-    ctx.arc(x, y, 0.4 + Math.random() * 1.4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // -- 5. Highlights de jugo (puntos brillantes especulares pequeñísimos) --
-  for (let i = 0; i < 1800; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = Math.pow(Math.random(), 0.7) * maxR * 0.85;
-    const x = cx + Math.cos(angle) * r;
-    const y = cy + Math.sin(angle) * r;
-    const sz = 0.5 + Math.random() * 1.6;
-    ctx.fillStyle = `rgba(255, 240, 240, ${0.30 + Math.random() * 0.45})`;
+  // 7. Gotitas de jugo — destellos especulares pintados directamente.
+  // Más numerosas y pequeñas que antes, distribuidas con bias radial
+  // (más densas hacia el centro donde la pulpa es más jugosa).
+  for (let i = 0; i < 1400; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const rt = Math.pow(Math.random(), 0.55) * maxR * FLESH_END;
+    const x = cx + Math.cos(a) * rt;
+    const y = cy + Math.sin(a) * rt;
+    const sz = 0.5 + Math.random() * 1.5;
+    const alpha = 0.32 + Math.random() * 0.45;
+    ctx.fillStyle = `rgba(255, 245, 240, ${alpha})`;
     ctx.beginPath();
     ctx.arc(x, y, sz, 0, Math.PI * 2);
     ctx.fill();
-    // halo suave
-    ctx.fillStyle = `rgba(255, 240, 240, ${0.06 + Math.random() * 0.08})`;
+    // Halo difuso
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, sz * 4);
+    halo.addColorStop(0, 'rgba(255, 240, 235, 0.12)');
+    halo.addColorStop(1, 'rgba(255, 240, 235, 0)');
+    ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(x, y, sz * 2.6, 0, Math.PI * 2);
+    ctx.arc(x, y, sz * 4, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // -- 6. Anillo blanco-pre-corteza con textura más fibrosa (rind interior) --
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, maxR * 0.965, 0, Math.PI * 2);
-  ctx.arc(cx, cy, maxR * 0.88, 0, Math.PI * 2, true);
-  ctx.clip();
-  for (let i = 0; i < 600; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const rr = maxR * (0.88 + Math.random() * 0.085);
-    const x = cx + Math.cos(angle) * rr;
-    const y = cy + Math.sin(angle) * rr;
-    ctx.strokeStyle = `rgba(${200 + Math.random() * 30 | 0}, ${190 + Math.random() * 25 | 0}, ${140 + Math.random() * 30 | 0}, ${0.18 + Math.random() * 0.22})`;
-    ctx.lineWidth = 0.4 + Math.random() * 0.8;
-    const len = 4 + Math.random() * 12;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
-    ctx.stroke();
+  // 8. Marcas de cavidad de semilla — pequeñas zonas un poco más
+  // oscuras donde se asentaría una semilla. Tres anillos en el
+  // semicírculo superior (que es la parte visible de la rebanada
+  // según el UV mapping). Las posiciones coinciden visualmente con
+  // las semillas del modelo aunque la geometría no las clava al píxel.
+  const seedRings = [
+    { r: maxR * 0.42, count: 7 },
+    { r: maxR * 0.58, count: 9 },
+    { r: maxR * 0.74, count: 11 },
+  ];
+  for (const ring of seedRings) {
+    for (let k = 0; k < ring.count; k++) {
+      const t = (k + 0.5) / ring.count;
+      const a = Math.PI - t * Math.PI; // sólo semicírculo superior
+      const jitter = (hash2(ring.r, k) - 0.5) * 0.04 * maxR;
+      const x = cx + Math.cos(a) * (ring.r + jitter);
+      const y = cy + Math.sin(a) * (ring.r + jitter);
+      const haloR = 16;
+      const halo = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+      halo.addColorStop(0, 'rgba(75, 5, 18, 0.50)');
+      halo.addColorStop(0.55, 'rgba(95, 8, 22, 0.18)');
+      halo.addColorStop(1, 'rgba(95, 8, 22, 0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(x, y, haloR, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  ctx.restore();
 
-  // -- 7. Glaze sutil sobre el centro (humedad fresca) --
+  // 9. Glaze global — capa de humedad oblicua, simula reflejo del
+  // softbox superior-izquierdo para look de marketing.
   const glaze = ctx.createRadialGradient(
-    cx + maxR * 0.12, cy - maxR * 0.20, 0,
-    cx + maxR * 0.12, cy - maxR * 0.20, maxR * 0.55,
+    cx + maxR * 0.18, cy - maxR * 0.22, 0,
+    cx + maxR * 0.18, cy - maxR * 0.22, maxR * 0.65,
   );
-  glaze.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
-  glaze.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  glaze.addColorStop(0, 'rgba(255, 252, 245, 0.12)');
+  glaze.addColorStop(0.6, 'rgba(255, 252, 245, 0.04)');
+  glaze.addColorStop(1, 'rgba(255, 252, 245, 0)');
   ctx.fillStyle = glaze;
   ctx.beginPath();
-  ctx.arc(cx, cy, maxR * 0.9, 0, Math.PI * 2);
+  ctx.arc(cx, cy, maxR * 0.95, 0, Math.PI * 2);
   ctx.fill();
 }
 
 export function makeWatermelonFleshTexture() {
-  // 1536² es el sweet-spot entre calidad y tiempo de generación FBM
-  // (~1.5s en mid-range). A 2048² subiría a ~3s y la diferencia visual
-  // a la distancia del visor 3D es imperceptible.
+  // 1536² es el sweet-spot calidad/tiempo. La función Voronoi añade ~1s
+  // sobre el costo del pase FBM original, pero la diferencia visual
+  // (cellularidad real y bordes oscuros entre células) es la base del
+  // realismo fotográfico — bien vale la espera durante el loader.
   const W = 1536, H = 1536;
   const canvas = makeCanvas(W, H);
   paintWatermelonFlesh(canvas.getContext('2d'), W, H);
   return toColorTexture(canvas);
 }
 
-// Mapa de altura para la pulpa (muy sutil — la pulpa tiene textura
-// granular pero no surcos profundos)
+// Mapa de altura para la pulpa: cada célula Voronoi se eleva como
+// una pequeña burbuja plump (el centro alto), separada de sus vecinas
+// por valles oscuros (donde está la pared celular). La escala Voronoi
+// debe coincidir con la del color para que normal/color queden alineados.
 function paintWatermelonFleshHeight(ctx, W, H) {
   const cx = W / 2, cy = H / 2;
   const maxR = Math.min(W, H) * 0.5;
+  const VORONOI_SCALE = 22;
+  const FLESH_END = 0.83;
 
-  // Base mid-gray
   ctx.fillStyle = '#888888';
   ctx.fillRect(0, 0, W, H);
 
-  // FBM cellular pattern para los compartimentos celulares
   const img = ctx.getImageData(0, 0, W, H);
+  const data = img.data;
   for (let y = 0; y < H; y++) {
+    const dyN = (y - cy) / maxR;
     for (let x = 0; x < W; x++) {
-      const dx = (x - cx) / maxR;
-      const dy = (y - cy) / maxR;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dxN = (x - cx) / maxR;
+      const dist = Math.sqrt(dxN * dxN + dyN * dyN);
       if (dist > 0.97) continue;
       const i = (y * W + x) * 4;
 
-      // Cellular noise para celdas
-      const cell = cellular2D(x / W * 38, y / H * 38);
-      const cellVal = Math.max(0, 1 - cell * 1.4); // 0..1
-      // FBM detalle fino
-      const fine = fbm2D(x / W * 120, y / H * 120, 3);
+      let h = 128;
 
-      // Centro: relieve más alto (celdas más visibles); corteza: plano
-      const fade = dist < 0.88 ? 1 : (1 - (dist - 0.88) / 0.09);
-      let v = 128 + (cellVal * 80 + (fine - 0.5) * 30) * fade;
-      v = Math.max(20, Math.min(235, v));
-      img.data[i + 0] = v;
-      img.data[i + 1] = v;
-      img.data[i + 2] = v;
+      if (dist < FLESH_END) {
+        const v = voronoi2D((x / W) * VORONOI_SCALE, (y / H) * VORONOI_SCALE);
+        // Centro de celda: alto (plump); borde de celda: hundido
+        const cellRise = 1 - smoothstep(0.0, 0.45, v.f1);
+        const edge = v.f2 - v.f1;
+        const valley = 1 - smoothstep(0.0, 0.07, edge);
+        // Cada celda tiene su altura propia (algunas más infladas)
+        const cellMaxH = 0.7 + v.cellId * 0.5;
+        h = 110 + cellRise * 65 * cellMaxH - valley * 55;
+        // Detalle fino para que la superficie no parezca cera
+        const fine = fbm2D((x / W) * 130, (y / H) * 130, 3);
+        h += (fine - 0.5) * 24;
+      } else if (dist < 0.96) {
+        // Pre-corteza fibrosa — fibras radiales finas
+        const angle = Math.atan2(dyN, dxN);
+        const fibers = fbm2D(angle * 72, dist * 80, 3);
+        const fibers2 = valueNoise2D(angle * 140, dist * 28);
+        h = 118 + (fibers - 0.5) * 70 + (fibers2 - 0.5) * 40;
+      }
+
+      const v = Math.max(20, Math.min(235, h));
+      data[i + 0] = v;
+      data[i + 1] = v;
+      data[i + 2] = v;
     }
   }
   ctx.putImageData(img, 0, 0);
 }
 
 export function makeWatermelonFleshNormalTexture() {
-  const W = 768, H = 768;
+  // Sube la resolución del normal map: las celdas Voronoi (~1.5% del
+  // diámetro) se aliasean en 768². 1024² da bordes nítidos sin coste alto.
+  const W = 1024, H = 1024;
   const canvas = makeCanvas(W, H);
   paintWatermelonFleshHeight(canvas.getContext('2d'), W, H);
-  return normalTextureFromHeightCanvas(canvas, 1.1);
+  return normalTextureFromHeightCanvas(canvas, 1.4);
 }
 
-// Roughness variable: las gotas de jugo y zonas húmedas son más reflectivas;
-// el blanco de la corteza es muy mate
+// Roughness variable: el centro de cada célula Voronoi es muy brillante
+// (jugo expuesto), las paredes celulares son ligeramente más mates,
+// y la pre-corteza blanca es muy mate (textura fibrosa-seca).
 export function makeWatermelonFleshRoughnessTexture() {
   const W = 1024, H = 1024;
   const canvas = makeCanvas(W, H);
   const ctx = canvas.getContext('2d');
   const cx = W / 2, cy = H / 2;
   const maxR = Math.min(W, H) * 0.5;
+  const VORONOI_SCALE = 22;
+  const FLESH_END = 0.83;
 
-  // Base: la pulpa centro es ligeramente brillante
-  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
-  grad.addColorStop(0, '#5a5a5a');     // centro: rough medio (jugoso)
-  grad.addColorStop(0.6, '#6a6a6a');
-  grad.addColorStop(0.88, '#9a9a9a');  // corteza: rough alto (blanco mate)
-  grad.addColorStop(1, '#c8c8c8');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
+  const img = ctx.createImageData(W, H);
+  const data = img.data;
+  for (let y = 0; y < H; y++) {
+    const dyN = (y - cy) / maxR;
+    for (let x = 0; x < W; x++) {
+      const dxN = (x - cx) / maxR;
+      const dist = Math.sqrt(dxN * dxN + dyN * dyN);
+      const i = (y * W + x) * 4;
 
-  // Puntos brillantes (gotas de jugo)
-  for (let i = 0; i < 1500; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = Math.pow(Math.random(), 0.7) * maxR * 0.85;
-    const x = cx + Math.cos(angle) * r;
-    const y = cy + Math.sin(angle) * r;
-    const sz = 1 + Math.random() * 3;
+      let rough = 0.55;
+
+      if (dist < FLESH_END) {
+        const v = voronoi2D((x / W) * VORONOI_SCALE, (y / H) * VORONOI_SCALE);
+        // Centro celular: muy brillante (jugo). Borde: ligeramente mate.
+        const cellWet = 1 - smoothstep(0.0, 0.40, v.f1);
+        const edge = v.f2 - v.f1;
+        const borderDry = 1 - smoothstep(0.0, 0.06, edge);
+        rough = 0.55 - cellWet * 0.40 + borderDry * 0.18;
+        // Variación FBM fina (algunas zonas más jugosas que otras)
+        rough += (fbm2D((x / W) * 90, (y / H) * 90, 3) - 0.5) * 0.10;
+      } else if (dist < 0.96) {
+        // Pre-corteza: bastante mate, con micro-variación
+        const fiber = fbm2D((x / W) * 80, (y / H) * 80, 3);
+        rough = 0.85 + (fiber - 0.5) * 0.10;
+      } else {
+        rough = 0.78;
+      }
+
+      // Bias adicional cerca del centro: el corazón es ligeramente
+      // más brillante (más maduro = más agua libre)
+      if (dist < 0.4) rough -= (0.4 - dist) * 0.10;
+
+      rough = Math.max(0.12, Math.min(0.95, rough));
+      const r255 = (rough * 255) | 0;
+      data[i + 0] = r255;
+      data[i + 1] = r255;
+      data[i + 2] = r255;
+      data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Gotitas brillantes adicionales (mismo seed-look que el color)
+  for (let i = 0; i < 800; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const rt = Math.pow(Math.random(), 0.55) * maxR * FLESH_END;
+    const x = cx + Math.cos(a) * rt;
+    const y = cy + Math.sin(a) * rt;
+    const sz = 1 + Math.random() * 2.5;
     const g = ctx.createRadialGradient(x, y, 0, x, y, sz);
-    g.addColorStop(0, 'rgba(15,15,15,0.85)');
-    g.addColorStop(1, 'rgba(15,15,15,0)');
+    g.addColorStop(0, 'rgba(10,10,10,0.85)');
+    g.addColorStop(1, 'rgba(10,10,10,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, sz, 0, Math.PI * 2);
