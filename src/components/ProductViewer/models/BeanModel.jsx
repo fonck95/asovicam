@@ -2,10 +2,12 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
+  makeBeanSeedNormalTexture,
   makeBeanSeedTexture,
   makeLeafColorTexture,
   makeLeafNormalTexture,
   makePodColorTexture,
+  makePodInteriorTexture,
   makePodNormalTexture,
 } from '../textures';
 
@@ -137,7 +139,7 @@ function buildStemGeometry() {
 
 function buildBeanSeedGeometry() {
   // Frijol individual: esfera achatada y curvada (kidney bean).
-  const geo = new THREE.SphereGeometry(0.085, 28, 18);
+  const geo = new THREE.SphereGeometry(0.085, 40, 24);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
@@ -146,10 +148,30 @@ function buildBeanSeedGeometry() {
     v.y *= 0.65;
     v.x *= 1.5;
     v.z += Math.sin(v.x * 4) * 0.012;
+    // Hilum: pequeña indentación en el centro inferior (lateral)
+    const hilumDist = Math.sqrt(v.x * v.x + (v.y + 0.04) * (v.y + 0.04));
+    if (v.z > 0 && hilumDist < 0.03) {
+      v.z -= 0.005 * Math.exp(-hilumDist * 80);
+    }
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
+
+  // UV cilíndrico alrededor del eje Y. El offset 0.25 garantiza que el
+  // centro de la textura (u=0.5) corresponda al lado +z del frijol —
+  // que es justo donde está la indentación del hilum, alineando textura
+  // y geometría. v cubre todo el rango vertical del frijol.
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const u = ((Math.atan2(z, x) + Math.PI) / (Math.PI * 2) + 0.25) % 1;
+    const v2 = (y + 0.0553) / 0.1106; // y ∈ ±0.0553 (0.085 * 0.65)
+    uv.setXY(i, u, Math.max(0, Math.min(1, v2)));
+  }
+  uv.needsUpdate = true;
   return geo;
 }
 
@@ -164,9 +186,11 @@ export default function BeanModel() {
 
   const podMap = useMemo(makePodColorTexture, []);
   const podNormal = useMemo(makePodNormalTexture, []);
+  const podInteriorMap = useMemo(makePodInteriorTexture, []);
   const leafMap = useMemo(makeLeafColorTexture, []);
   const leafNormal = useMemo(makeLeafNormalTexture, []);
   const seedMap = useMemo(makeBeanSeedTexture, []);
+  const seedNormal = useMemo(makeBeanSeedNormalTexture, []);
 
   // Posiciones de los frijoles dentro de la vaina abierta
   const seedPositions = useMemo(() => {
@@ -191,15 +215,36 @@ export default function BeanModel() {
     <meshPhysicalMaterial
       map={podMap}
       normalMap={podNormal}
-      normalScale={[1.0, 1.0]}
-      roughness={0.42}
+      normalScale={[1.2, 1.2]}
+      roughness={0.38}
       metalness={0.04}
-      clearcoat={0.55}
-      clearcoatRoughness={0.35}
-      sheen={0.3}
+      clearcoat={0.7}
+      clearcoatRoughness={0.28}
+      sheen={0.4}
       sheenColor="#a3e635"
+      sheenRoughness={0.5}
+      envMapIntensity={1.15}
+      transmission={0.12}
+      thickness={0.1}
+      attenuationColor="#84cc16"
+      attenuationDistance={0.4}
+      ior={1.4}
+      side={THREE.DoubleSide}
+    />
+  );
+
+  const podInteriorMaterial = (
+    <meshPhysicalMaterial
+      map={podInteriorMap}
+      roughness={0.65}
+      metalness={0.0}
+      clearcoat={0.45}
+      clearcoatRoughness={0.4}
+      sheen={0.3}
+      sheenColor="#e9f3c9"
       sheenRoughness={0.55}
       envMapIntensity={1.0}
+      side={THREE.BackSide}
     />
   );
 
@@ -212,10 +257,27 @@ export default function BeanModel() {
 
       {/* Vaina abierta (mitad superior) — revela los frijoles */}
       <group position={[0, 0, -0.36]} rotation={[0, 0, 0]}>
+        {/* Membrana interior: render BackSide debajo de cada mitad para
+            que cuando mires hacia adentro, veas el verde pálido del
+            interior de la vaina (no el verde brillante exterior) */}
+        <mesh geometry={openTopGeo} castShadow={false} receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
+          {podInteriorMaterial}
+        </mesh>
+        <mesh
+          geometry={openTopGeo}
+          castShadow={false}
+          receiveShadow
+          rotation={[Math.PI - 0.25, 0, 0]}
+          position={[0, -0.05, 0]}
+        >
+          {podInteriorMaterial}
+        </mesh>
+
+        {/* Capa exterior: mitad superior */}
         <mesh geometry={openTopGeo} castShadow receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
           {podMaterial}
         </mesh>
-        {/* Mitad inferior: misma media-vaina rotada 180° en el eje X */}
+        {/* Capa exterior: mitad inferior rotada */}
         <mesh
           geometry={openTopGeo}
           castShadow
@@ -232,19 +294,22 @@ export default function BeanModel() {
             key={i}
             geometry={seedGeo}
             position={[p[0], p[1] - 0.02, p[2]]}
-            rotation={[0, (i % 2) * 0.3, (i % 3) * 0.15]}
+            rotation={[0, (i % 2) * 0.3 + (i * 0.13), (i % 3) * 0.15]}
             castShadow
             receiveShadow
           >
             <meshPhysicalMaterial
               map={seedMap}
-              roughness={0.32}
-              metalness={0.05}
-              clearcoat={0.85}
-              clearcoatRoughness={0.18}
-              sheen={0.2}
+              normalMap={seedNormal}
+              normalScale={[0.8, 0.8]}
+              roughness={0.34}
+              metalness={0.06}
+              clearcoat={0.95}
+              clearcoatRoughness={0.14}
+              sheen={0.25}
               sheenColor="#fbbf24"
-              envMapIntensity={1.1}
+              sheenRoughness={0.5}
+              envMapIntensity={1.25}
             />
           </mesh>
         ))}

@@ -21,7 +21,7 @@ const COB_RADIUS = 0.46;
 
 function buildCobGeometry() {
   const points = [];
-  const segs = 36;
+  const segs = 64;
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
     const y = -COB_HEIGHT / 2 + t * COB_HEIGHT;
@@ -29,9 +29,40 @@ function buildCobGeometry() {
       Math.sin(Math.pow(t, 0.92) * Math.PI) * 0.96 +
       0.04 -
       Math.max(0, (t - 0.94) * 8) ** 2 * 0.4;
-    points.push(new THREE.Vector2(COB_RADIUS * Math.max(0.04, taper), y));
+    // Pequeña ondulación radial para no parecer un cilindro perfecto
+    const wob = Math.sin(t * 28) * 0.006;
+    points.push(new THREE.Vector2(COB_RADIUS * Math.max(0.04, taper) + wob, y));
   }
-  return new THREE.LatheGeometry(points, 96);
+  // Más segmentos radiales = los granos se ven con relieve real
+  const geo = new THREE.LatheGeometry(points, 192);
+
+  // Pequeño desplazamiento de vértices para "hinchar" los granos
+  // siguiendo el patrón de hex-tiles. Es muy sutil pero el ojo
+  // capta el alivio incluso antes del normal map.
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const r = Math.sqrt(v.x * v.x + v.z * v.z);
+    if (r < 1e-4) continue;
+    const theta = Math.atan2(v.z, v.x);
+    const yNorm = (v.y + COB_HEIGHT / 2) / COB_HEIGHT;
+    // Patrón hex de 22 columnas × 28 filas (alineado con la textura)
+    const COLS = 22, ROWS = 28;
+    const col = (theta / (Math.PI * 2)) * COLS;
+    const stagger = (Math.floor(yNorm * ROWS) % 2) * 0.5;
+    const colMod = (col + stagger) - Math.floor(col + stagger) - 0.5;
+    const rowMod = (yNorm * ROWS) - Math.floor(yNorm * ROWS) - 0.5;
+    // Bumpear el grano hacia afuera con campana 2D
+    const bump = Math.exp(-(colMod * colMod + rowMod * rowMod) * 14) * 0.018;
+    const newR = r + bump;
+    v.x = Math.cos(theta) * newR;
+    v.z = Math.sin(theta) * newR;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
 }
 
 function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
@@ -193,16 +224,22 @@ export default function CornModel() {
         <meshPhysicalMaterial
           map={cornColor}
           normalMap={cornNormal}
-          normalScale={[0.85, 0.85]}
+          normalScale={[1.5, 1.5]}
           roughnessMap={cornRoughness}
-          roughness={0.55}
+          roughness={0.45}
           metalness={0.02}
-          clearcoat={0.65}
-          clearcoatRoughness={0.32}
-          envMapIntensity={1.1}
-          sheen={0.18}
+          clearcoat={0.85}
+          clearcoatRoughness={0.18}
+          envMapIntensity={1.25}
+          sheen={0.25}
           sheenColor="#fef3c7"
-          sheenRoughness={0.7}
+          sheenRoughness={0.55}
+          // SSS sutil — los granos lácteos dejan pasar algo de luz
+          transmission={0.05}
+          thickness={0.15}
+          attenuationColor="#fbbf24"
+          attenuationDistance={0.4}
+          ior={1.42}
         />
       </mesh>
 
