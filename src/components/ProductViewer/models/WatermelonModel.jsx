@@ -5,6 +5,8 @@ import {
   makeLeafColorTexture,
   makeLeafNormalTexture,
   makeWatermelonColorTexture,
+  makeWatermelonFleshNormalTexture,
+  makeWatermelonFleshRoughnessTexture,
   makeWatermelonFleshTexture,
   makeWatermelonNormalTexture,
 } from '../textures';
@@ -184,20 +186,69 @@ function generateSeedPositions() {
 }
 
 function buildSeedGeometry() {
-  // Semilla aplanada: esferoide muy achatado.
-  const geo = new THREE.SphereGeometry(0.028, 14, 10);
+  // Forma de gota/lágrima: la base es ancha, la punta superior estrecha.
+  // Una semilla real de sandía tiene un extremo puntiagudo y otro redondo.
+  const geo = new THREE.SphereGeometry(0.032, 18, 14);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
-    v.x *= 1.2;
-    v.y *= 1.6;
-    v.z *= 0.45;
+    // Aplastar lateralmente y alargar verticalmente
+    v.z *= 0.35;
+    v.x *= 1.1;
+    v.y *= 1.7;
+    // Punta arriba: estrechar
+    if (v.y > 0) {
+      const k = 1 - Math.pow(Math.max(0, v.y) / 0.06, 1.4) * 0.55;
+      v.x *= k;
+      v.z *= k;
+    }
+    // Surco central muy sutil
+    v.z += Math.cos((v.y / 0.06) * Math.PI * 2) * 0.0015;
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
   return geo;
+}
+
+// Pequeñas gotitas de agua sobre la cáscara — efecto "fresco recién cortado"
+function buildWaterDropletGeometry() {
+  // Hemisferio achatado (gota tensa por gravedad)
+  const geo = new THREE.SphereGeometry(1, 14, 10);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    if (v.y < 0) v.y *= 0.18;  // base casi plana
+    else v.y *= 0.65;          // cúpula achatada
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function generateDropletsOnSphere(count, R, seed = 1) {
+  const out = [];
+  let s = seed;
+  const rand = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  for (let i = 0; i < count; i++) {
+    // Distribución hemisférica superior (más gotas arriba que abajo)
+    const u = rand();
+    const phi = Math.acos(1 - u * 1.4); // sesgo al hemisferio superior
+    const theta = rand() * Math.PI * 2;
+    const x = R * Math.sin(phi) * Math.cos(theta);
+    const y = R * Math.cos(phi);
+    const z = R * Math.sin(phi) * Math.sin(theta);
+    if (y < -R * 0.4) continue; // evitar la base
+    const radius = 0.012 + rand() * 0.025;
+    out.push({ x, y: y * 0.92, z, radius });
+  }
+  return out;
 }
 
 export default function WatermelonModel() {
@@ -210,10 +261,14 @@ export default function WatermelonModel() {
   const sliceRindGeo = useMemo(buildSliceRindGeometry, []);
   const seedGeo = useMemo(buildSeedGeometry, []);
   const seedPositions = useMemo(generateSeedPositions, []);
+  const dropletGeo = useMemo(buildWaterDropletGeometry, []);
+  const droplets = useMemo(() => generateDropletsOnSphere(38, RADIUS, 17), []);
 
   const rindMap = useMemo(makeWatermelonColorTexture, []);
   const rindNormal = useMemo(makeWatermelonNormalTexture, []);
   const fleshMap = useMemo(makeWatermelonFleshTexture, []);
+  const fleshNormal = useMemo(makeWatermelonFleshNormalTexture, []);
+  const fleshRoughness = useMemo(makeWatermelonFleshRoughnessTexture, []);
   const leafMap = useMemo(makeLeafColorTexture, []);
   const leafNormal = useMemo(makeLeafNormalTexture, []);
 
@@ -247,6 +302,40 @@ export default function WatermelonModel() {
           <ringGeometry args={[0.012, 0.04, 24]} />
           <meshStandardMaterial color="#3f6212" roughness={0.85} side={THREE.DoubleSide} />
         </mesh>
+
+        {/* Gotitas de agua sobre la cáscara — efecto fresco recién lavado */}
+        {droplets.map((d, i) => {
+          // Orientar la gota normal a la superficie esférica
+          const normal = new THREE.Vector3(d.x, d.y / 0.92, d.z).normalize();
+          const up = new THREE.Vector3(0, 1, 0);
+          const quat = new THREE.Quaternion().setFromUnitVectors(up, normal);
+          const euler = new THREE.Euler().setFromQuaternion(quat);
+          return (
+            <mesh
+              key={`drop-${i}`}
+              geometry={dropletGeo}
+              position={[d.x, d.y, d.z]}
+              rotation={[euler.x, euler.y, euler.z]}
+              scale={d.radius}
+            >
+              <meshPhysicalMaterial
+                color="#ffffff"
+                roughness={0.05}
+                metalness={0}
+                transmission={0.9}
+                thickness={0.1}
+                ior={1.33}
+                clearcoat={1}
+                clearcoatRoughness={0.05}
+                attenuationColor="#dbeafe"
+                attenuationDistance={0.5}
+                envMapIntensity={1.4}
+                transparent
+                opacity={0.85}
+              />
+            </mesh>
+          );
+        })}
 
         {/* Tallo */}
         <mesh geometry={stemGeo} castShadow receiveShadow>
@@ -313,18 +402,22 @@ export default function WatermelonModel() {
           <meshPhysicalMaterial
             attach="material-0"
             map={fleshMap}
-            roughness={0.52}
+            normalMap={fleshNormal}
+            normalScale={[0.85, 0.85]}
+            roughnessMap={fleshRoughness}
+            roughness={0.42}
             metalness={0.02}
-            clearcoat={0.45}
-            clearcoatRoughness={0.42}
-            transmission={0.08}
-            thickness={0.4}
+            clearcoat={0.55}
+            clearcoatRoughness={0.32}
+            transmission={0.12}
+            thickness={0.5}
             attenuationColor="#fda4af"
-            attenuationDistance={0.7}
-            ior={1.33}
-            sheen={0.35}
+            attenuationDistance={0.6}
+            ior={1.36}
+            sheen={0.4}
             sheenColor="#ffe4e6"
-            sheenRoughness={0.55}
+            sheenRoughness={0.5}
+            envMapIntensity={1.05}
           />
           <meshPhysicalMaterial
             attach="material-1"

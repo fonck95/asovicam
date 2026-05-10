@@ -42,6 +42,97 @@ function toLinearTexture(canvas, { repeat = [1, 1], anisotropy = 8 } = {}) {
   return tex;
 }
 
+// ---------- Worley/cellular noise (grid-based F1, F2) ----------
+//
+// Genera una malla de "células" tipo Worley: para cada pixel calcula
+// la distancia F1 al punto más cercano (cell-center) y F2 al segundo
+// más cercano (cell-edge). Wrap-around para que la textura sea tiled.
+//
+// Devuelve dos Float32Array (f1, f2) en rango [0..gridSize] aprox.
+
+function generateWorleyField(W, H, cellSize) {
+  const cellsX = Math.ceil(W / cellSize);
+  const cellsY = Math.ceil(H / cellSize);
+  // Grid de seeds (uno por celda)
+  const seeds = new Float32Array(cellsX * cellsY * 2);
+  for (let cy = 0; cy < cellsY; cy++) {
+    for (let cx = 0; cx < cellsX; cx++) {
+      const idx = (cy * cellsX + cx) * 2;
+      seeds[idx + 0] = cx * cellSize + Math.random() * cellSize;
+      seeds[idx + 1] = cy * cellSize + Math.random() * cellSize;
+    }
+  }
+  const f1 = new Float32Array(W * H);
+  const f2 = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const cy = Math.floor(y / cellSize);
+    for (let x = 0; x < W; x++) {
+      const cx = Math.floor(x / cellSize);
+      let m1 = Infinity, m2 = Infinity;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = ((cx + dx) % cellsX + cellsX) % cellsX;
+          const ny = ((cy + dy) % cellsY + cellsY) % cellsY;
+          const idx = (ny * cellsX + nx) * 2;
+          let sx = seeds[idx + 0];
+          let sy = seeds[idx + 1];
+          // Compensar wrap (sumar/restar W o H si la celda quedó del otro lado)
+          if (cx + dx < 0) sx -= W;
+          else if (cx + dx >= cellsX) sx += W;
+          if (cy + dy < 0) sy -= H;
+          else if (cy + dy >= cellsY) sy += H;
+          const dxx = x - sx, dyy = y - sy;
+          const d = Math.sqrt(dxx * dxx + dyy * dyy);
+          if (d < m1) { m2 = m1; m1 = d; }
+          else if (d < m2) { m2 = d; }
+        }
+      }
+      const i = y * W + x;
+      f1[i] = m1;
+      f2[i] = m2;
+    }
+  }
+  return { f1, f2, cellSize };
+}
+
+// ---------- value noise (suave, multi-octava) ----------
+
+function makeValueNoise2D(seed = 1) {
+  // Hashing simple para value noise (no Perlin perfect, pero decente).
+  const random = (() => {
+    let s = seed * 9301 + 49297;
+    return () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  })();
+  const SIZE = 256;
+  const grid = new Float32Array(SIZE * SIZE);
+  for (let i = 0; i < grid.length; i++) grid[i] = random();
+  const at = (ix, iy) => grid[((iy % SIZE) + SIZE) % SIZE * SIZE + ((ix % SIZE) + SIZE) % SIZE];
+  const fade = (t) => t * t * (3 - 2 * t);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  return (x, y) => {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const a = at(ix, iy), b = at(ix + 1, iy);
+    const c = at(ix, iy + 1), d = at(ix + 1, iy + 1);
+    const u = fade(fx), v = fade(fy);
+    return lerp(lerp(a, b, u), lerp(c, d, u), v);
+  };
+}
+
+function fbm2D(noise, x, y, octaves = 4, lacunarity = 2.0, gain = 0.5) {
+  let amp = 0.5, freq = 1.0, sum = 0.0, norm = 0.0;
+  for (let i = 0; i < octaves; i++) {
+    sum += amp * noise(x * freq, y * freq);
+    norm += amp;
+    amp *= gain;
+    freq *= lacunarity;
+  }
+  return sum / norm;
+}
+
 // ---------- Sobel: height → normal ----------
 
 function heightToNormalCanvas(heightCanvas, strength = 1.0) {
@@ -373,55 +464,273 @@ export function makeWatermelonNormalTexture() {
 }
 
 // =====================================================
-// SANDÍA — pulpa interior (color rosado + semillas)
+// SANDÍA — pulpa interior fotorrealista
+//
+// Capa 1: gradiente radial complejo (rojo profundo → rosa
+//         → blanco corteza → halo verde).
+// Capa 2: células Worley (F2-F1) que dan el patrón celular
+//         vivo de la pulpa, modulado por fbm para que no
+//         parezca regular.
+// Capa 3: red vascular ramificada que sale del corazón
+//         con subramas (algoritmo recursivo).
+// Capa 4: marcas de corte horizontales (cuchillo).
+// Capa 5: gotitas de jugo (highlights especulares).
+// Capa 6: aro blanco-verde de la corteza.
 // =====================================================
 
-function paintWatermelonFlesh(ctx, W, H) {
-  // Gradiente radial: corazón rosado oscuro → exterior rosado claro → blanco rind interior
-  const center = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.5);
-  center.addColorStop(0, '#e11d48');
-  center.addColorStop(0.45, '#fb7185');
-  center.addColorStop(0.78, '#fda4af');
-  center.addColorStop(0.92, '#fef2f2');
-  center.addColorStop(1, '#f0fdf4');
-  ctx.fillStyle = center;
-  ctx.fillRect(0, 0, W, H);
+const WM_FLESH_W = 1024;
+const WM_FLESH_H = 1024;
 
-  // Vetas radiales muy sutiles (fibras de la pulpa)
+// Distancia normalizada al centro [0..1]
+function radialT(x, y, W, H) {
+  const dx = x - W / 2;
+  const dy = y - H / 2;
+  return Math.sqrt(dx * dx + dy * dy) / (W * 0.5);
+}
+
+function lerpHex(c1, c2, t) {
+  const a = parseInt(c1.slice(1), 16);
+  const b = parseInt(c2.slice(1), 16);
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return [r, g, bl];
+}
+
+function fleshColorAt(t, cellEdge, fbmVal) {
+  // t ∈ [0..1] desde el centro
+  // Curva de gradiente con stops realistas
+  let r, g, b;
+  if (t < 0.18) {
+    [r, g, b] = lerpHex('#a30b1e', '#dc2626', t / 0.18);
+  } else if (t < 0.45) {
+    [r, g, b] = lerpHex('#dc2626', '#f87171', (t - 0.18) / 0.27);
+  } else if (t < 0.7) {
+    [r, g, b] = lerpHex('#f87171', '#fda4af', (t - 0.45) / 0.25);
+  } else if (t < 0.86) {
+    [r, g, b] = lerpHex('#fda4af', '#fef2f2', (t - 0.7) / 0.16);
+  } else if (t < 0.93) {
+    [r, g, b] = lerpHex('#fef2f2', '#f5f5f4', (t - 0.86) / 0.07);
+  } else {
+    [r, g, b] = lerpHex('#bbf7d0', '#65a30d', (t - 0.93) / 0.07);
+  }
+  // Modular con celularidad: bordes de células ligeramente más oscuros
+  const cellMod = 1 - cellEdge * 0.18;
+  // Y con fbm para evitar regularidad
+  const noiseMod = 0.92 + fbmVal * 0.16;
+  r = Math.max(0, Math.min(255, r * cellMod * noiseMod));
+  g = Math.max(0, Math.min(255, g * cellMod * noiseMod));
+  b = Math.max(0, Math.min(255, b * cellMod * noiseMod));
+  return [r, g, b];
+}
+
+function paintWatermelonFlesh(ctx, W, H) {
+  // Field celular F1, F2 — F2-F1 es el patrón de bordes de célula
+  const { f1, f2, cellSize } = generateWorleyField(W, H, 28);
+  const noise = makeValueNoise2D(7);
+  const img = ctx.createImageData(W, H);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const t = radialT(x, y, W, H);
+      // Edge factor: alto en bordes de células, bajo en centros
+      const cellEdge = Math.max(0, Math.min(1, (cellSize - (f2[i] - f1[i])) / cellSize));
+      // En el centro del melón las células son más grandes/menos visibles
+      const cellWeight = Math.min(1, t * 1.3);
+      const cellEdgeWeighted = cellEdge * cellWeight;
+      const fbmVal = fbm2D(noise, x / 60, y / 60, 4);
+      const [r, g, b] = fleshColorAt(t, cellEdgeWeighted, fbmVal);
+      const idx = i * 4;
+      img.data[idx + 0] = r;
+      img.data[idx + 1] = g;
+      img.data[idx + 2] = b;
+      img.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // ---- Red vascular ramificada (vasos del placentar) ----
   ctx.save();
   ctx.translate(W / 2, H / 2);
-  for (let i = 0; i < 220; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r1 = Math.random() * W * 0.18;
-    const r2 = r1 + 30 + Math.random() * W * 0.32;
-    ctx.strokeStyle = `rgba(190, 24, 60, ${0.05 + Math.random() * 0.08})`;
-    ctx.lineWidth = 0.6 + Math.random();
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(angle) * r1, Math.sin(angle) * r1);
-    ctx.lineTo(Math.cos(angle) * r2, Math.sin(angle) * r2);
-    ctx.stroke();
+  drawVascularBranches(ctx, W);
+  ctx.restore();
+
+  // ---- Marcas finas del corte (cuchillo) ----
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  for (let i = 0; i < 8; i++) {
+    const y = Math.random() * H;
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.3, 'rgba(255,240,240,0.18)');
+    grad.addColorStop(0.7, 'rgba(255,240,240,0.18)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y, W, 0.8 + Math.random() * 1.6);
   }
   ctx.restore();
 
-  // Pequeñas burbujas de jugo (highlights)
-  for (let i = 0; i < 400; i++) {
+  // ---- Gotitas de jugo (highlights) ----
+  for (let i = 0; i < 900; i++) {
     const x = Math.random() * W;
     const y = Math.random() * H;
-    const dx = x - W / 2, dy = y - H / 2;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > W * 0.42) continue;
-    ctx.fillStyle = `rgba(255, 240, 240, ${0.18 + Math.random() * 0.18})`;
+    const t = radialT(x, y, W, H);
+    if (t > 0.85) continue;
+    const a = (1 - t) * (0.18 + Math.random() * 0.32);
+    const r = 0.4 + Math.random() * 1.4;
+    ctx.fillStyle = `rgba(255, 250, 245, ${a.toFixed(3)})`;
     ctx.beginPath();
-    ctx.arc(x, y, 0.6 + Math.random() * 1.6, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // ---- Pequeñas vetas finas blanquecinas en zona del corazón ----
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  for (let i = 0; i < 80; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r1 = Math.random() * W * 0.05;
+    const r2 = r1 + 4 + Math.random() * 18;
+    ctx.strokeStyle = `rgba(255, 240, 240, ${0.18 + Math.random() * 0.22})`;
+    ctx.lineWidth = 0.4 + Math.random() * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+    ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Red vascular — algoritmo recursivo de ramas con sub-ramas
+function drawVascularBranches(ctx, W) {
+  const branches = 14;
+  const innerRadius = W * 0.04;
+  const outerRadius = W * 0.42;
+  for (let i = 0; i < branches; i++) {
+    const baseAngle = (i / branches) * Math.PI * 2 + Math.random() * 0.18;
+    drawBranch(ctx, 0, 0, baseAngle, outerRadius, 1.3, 0);
+    // Pequeñas vetas adicionales que arrancan desde el corazón
+    if (i % 2 === 0) {
+      const a2 = baseAngle + 0.15;
+      drawBranch(ctx, Math.cos(a2) * innerRadius, Math.sin(a2) * innerRadius, a2 + 0.3, outerRadius * 0.7, 0.9, 0);
+    }
+  }
+}
+
+function drawBranch(ctx, x0, y0, angle, length, width, depth) {
+  if (length < 12 || depth > 3) return;
+  const segments = 14;
+  const points = [{ x: x0, y: y0 }];
+  let cx = x0, cy = y0, ca = angle;
+  for (let i = 1; i <= segments; i++) {
+    const stepLen = length / segments;
+    cx += Math.cos(ca) * stepLen;
+    cy += Math.sin(ca) * stepLen;
+    ca += (Math.random() - 0.5) * 0.22;
+    points.push({ x: cx, y: cy });
+  }
+  // Dibujar el path con grosor decreciente
+  for (let i = 1; i < points.length; i++) {
+    const t = i / points.length;
+    const w = width * (1 - t * 0.85);
+    ctx.strokeStyle = `rgba(140, 14, 30, ${0.32 - depth * 0.1})`;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(points[i - 1].x, points[i - 1].y);
+    ctx.lineTo(points[i].x, points[i].y);
+    ctx.stroke();
+  }
+  // Sub-ramas
+  if (depth < 2) {
+    const branchPoints = [Math.floor(segments * 0.3), Math.floor(segments * 0.6), Math.floor(segments * 0.85)];
+    for (const idx of branchPoints) {
+      if (Math.random() < 0.62) {
+        const p = points[idx];
+        const t = idx / segments;
+        const subAngle = angle + (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.5);
+        drawBranch(ctx, p.x, p.y, subAngle, length * (0.35 - depth * 0.08) * (1 - t * 0.5), width * 0.55, depth + 1);
+      }
+    }
   }
 }
 
 export function makeWatermelonFleshTexture() {
+  const canvas = makeCanvas(WM_FLESH_W, WM_FLESH_H);
+  paintWatermelonFlesh(canvas.getContext('2d'), WM_FLESH_W, WM_FLESH_H);
+  return toColorTexture(canvas);
+}
+
+// Height map de la pulpa: las células se elevan ligeramente, los bordes
+// se hunden, el corazón es más profundo. Se convierte en normal map.
+function paintWatermelonFleshHeight(ctx, W, H) {
+  const { f1, f2, cellSize } = generateWorleyField(W, H, 28);
+  const noise = makeValueNoise2D(11);
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const t = radialT(x, y, W, H);
+      // F1 normalizado: 0 en centros de célula, alto en bordes
+      const center = 1 - Math.min(1, f1[i] / (cellSize * 0.6));
+      // Edge: sólo activo cerca de bordes
+      const edge = Math.max(0, Math.min(1, (cellSize - (f2[i] - f1[i])) / cellSize));
+      // FBM para granulado fino
+      const fbmVal = fbm2D(noise, x / 18, y / 18, 4);
+      // Combinar: célula central elevada, borde hundido, ruido para textura
+      let h = 0.55 + center * 0.35 - edge * 0.4 + (fbmVal - 0.5) * 0.18;
+      // Cerca del centro la pulpa es más uniforme
+      h = h * (1 - t * 0.25);
+      // Cerca de la corteza más plana
+      if (t > 0.85) h = 0.55 + (fbmVal - 0.5) * 0.05;
+      h = Math.max(0, Math.min(1, h));
+      const v = h * 255;
+      const idx = i * 4;
+      img.data[idx + 0] = v;
+      img.data[idx + 1] = v;
+      img.data[idx + 2] = v;
+      img.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+export function makeWatermelonFleshNormalTexture() {
   const W = 1024, H = 1024;
   const canvas = makeCanvas(W, H);
-  paintWatermelonFlesh(canvas.getContext('2d'), W, H);
-  return toColorTexture(canvas);
+  paintWatermelonFleshHeight(canvas.getContext('2d'), W, H);
+  return normalTextureFromHeightCanvas(canvas, 1.8);
+}
+
+// Roughness: bordes de células más rugosos (mate), centros pulidos (jugo)
+export function makeWatermelonFleshRoughnessTexture() {
+  const W = 512, H = 512;
+  const { f1, f2, cellSize } = generateWorleyField(W, H, 14);
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const t = radialT(x, y, W, H);
+      const edge = Math.max(0, Math.min(1, (cellSize - (f2[i] - f1[i])) / cellSize));
+      // Centros: 0.25 (brillante), bordes: 0.75 (mate)
+      let r = 0.25 + edge * 0.5;
+      // Cerca de la corteza más mate
+      if (t > 0.86) r = Math.min(1, r + 0.2);
+      const v = Math.round(r * 255);
+      const idx = i * 4;
+      img.data[idx + 0] = v;
+      img.data[idx + 1] = v;
+      img.data[idx + 2] = v;
+      img.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toLinearTexture(canvas);
 }
 
 // =====================================================

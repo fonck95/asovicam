@@ -135,17 +135,99 @@ function buildStemGeometry() {
   return new THREE.TubeGeometry(curve, 24, 0.022, 10, false);
 }
 
+// Geometría tipo "kidney bean":
+//   - Eje largo: X. Eje arqueado: Y (panza arriba +Y, hilum abajo -Y).
+//     Eje delgado: Z.
+//   - Sección elíptica con la panza más amplia en el medio.
+//   - Lado cóncavo (-Y) tiene indentación central donde va el hilum.
+//   - Hombro sutil que insinúa los dos cotiledones.
+//
+// Centrado en origen, listo para colocar en escena con rotación neutra.
+const BEAN_HALF_LEN = 0.075;
+const BEAN_ARC_ANGLE = Math.PI * 0.9;
+const BEAN_ARC_R = 0.075;
+
 function buildBeanSeedGeometry() {
-  // Frijol individual: esfera achatada y curvada (kidney bean).
-  const geo = new THREE.SphereGeometry(0.085, 28, 18);
+  const SEGS = 40;
+  const RADIAL = 24;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+
+  // Y0: desplazamiento vertical para que el centroide quede cerca de y=0.
+  // Usamos cos(arcAngle/2) como base y restamos para centrar.
+  const baseCos = Math.cos(BEAN_ARC_ANGLE / 2);
+
+  for (let i = 0; i <= SEGS; i++) {
+    const t = i / SEGS;
+    // X recto a lo largo del eje
+    const x = -BEAN_HALF_LEN + t * 2 * BEAN_HALF_LEN;
+    // Curvatura: máxima en el centro (panza arquea hacia +Y)
+    const a = (t - 0.5) * BEAN_ARC_ANGLE;
+    const yCurve = BEAN_ARC_R * (Math.cos(a) - baseCos);
+    // Taper en extremos
+    const taper = Math.sin(t * Math.PI) * 0.78 + 0.22;
+
+    const radiusUp = 0.058 * taper;      // panza (lado convexo +Y)
+    const radiusDown = 0.044 * taper;    // lado cóncavo (-Y, donde el hilum)
+    const radiusZ = 0.04 * taper;        // grosor en Z
+
+    for (let j = 0; j < RADIAL; j++) {
+      const phi = (j / RADIAL) * Math.PI * 2;
+      const cy = Math.cos(phi);  // +1 = panza, -1 = hilum
+      const cz = Math.sin(phi);
+      const r = cy >= 0 ? radiusUp : radiusDown;
+
+      // Indentación del hilum: en lado cóncavo, centro longitudinal, frente delgado
+      let hilumDip = 0;
+      if (cy < -0.5 && Math.abs(t - 0.5) < 0.2 && Math.abs(cz) < 0.6) {
+        const dipT =
+          (1 - Math.abs(cy + 0.5) / 0.5) *
+          (1 - Math.abs(t - 0.5) / 0.2) *
+          (1 - Math.abs(cz) / 0.6);
+        hilumDip = -0.008 * dipT;
+      }
+      // Hombro suavísimo: dos cotiledones
+      const shoulder = Math.cos(phi * 2) * 0.0014 * (1 - Math.abs(t - 0.5) * 1.4);
+
+      const dy = cy * (r + hilumDip) + shoulder;
+      const dz = cz * radiusZ;
+
+      positions.push(x, yCurve + dy, dz);
+      uvs.push(j / RADIAL, t);
+    }
+  }
+
+  for (let i = 0; i < SEGS; i++) {
+    for (let j = 0; j < RADIAL; j++) {
+      const a = i * RADIAL + j;
+      const b = i * RADIAL + ((j + 1) % RADIAL);
+      const c = (i + 1) * RADIAL + j;
+      const d = (i + 1) * RADIAL + ((j + 1) % RADIAL);
+      indices.push(a, c, b);
+      indices.push(b, c, d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Hilum: óvalo oscuro plano sobre el lado cóncavo (-Y) del frijol.
+// Geometría centrada en origen, lista para posicionar a (0, -y_concave, 0).
+function buildHilumGeometry() {
+  const geo = new THREE.SphereGeometry(1, 16, 12);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
-    // Achatado en Y, alargado en X, curvado en el plano XZ
-    v.y *= 0.65;
-    v.x *= 1.5;
-    v.z += Math.sin(v.x * 4) * 0.012;
+    v.x *= 0.022;   // largo a lo largo de X (eje del frijol)
+    v.y *= 0.005;   // muy delgado en Y (pegado a la superficie)
+    v.z *= 0.009;   // angosto en Z
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
@@ -161,6 +243,7 @@ export default function BeanModel() {
   const leafGeo = useMemo(buildLeafGeometry, []);
   const stemGeo = useMemo(buildStemGeometry, []);
   const seedGeo = useMemo(buildBeanSeedGeometry, []);
+  const hilumGeo = useMemo(buildHilumGeometry, []);
 
   const podMap = useMemo(makePodColorTexture, []);
   const podNormal = useMemo(makePodNormalTexture, []);
@@ -168,16 +251,32 @@ export default function BeanModel() {
   const leafNormal = useMemo(makeLeafNormalTexture, []);
   const seedMap = useMemo(makeBeanSeedTexture, []);
 
-  // Posiciones de los frijoles dentro de la vaina abierta
-  const seedPositions = useMemo(() => {
+  // Posiciones + orientaciones de los frijoles dentro de la vaina abierta.
+  // El frijol está modelado con eje largo en X y panza en +Y. Como queremos
+  // que esté tendido en la vaina (que también tiene su eje largo en X), la
+  // rotación base es cercana a [0,0,0]. Se añade variación pequeña para que
+  // unos pocos muestren el hilum (rotándolos sobre su propio eje X).
+  const seedTransforms = useMemo(() => {
+    let s = 137;
+    const rand = () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
     const arr = [];
     for (let i = 0; i < SEED_COUNT; i++) {
       const t = (i + 0.5) / SEED_COUNT;
       const x = -POD_LENGTH / 2 + t * POD_LENGTH;
-      // Sigue la curva de la vaina (idéntica a la curve del pod)
+      // Sigue la curva del pod (idéntica fórmula que la curva del Tube)
       const y = 0.22 - Math.pow((t - 0.5) * 2, 2) * 0.28;
       const z = Math.sin((t - 0.5) * Math.PI) * 0.04;
-      arr.push([x, y - 0.06, z]);
+      // Tilt: rotación alrededor del eje largo (X) — algunos beans muestran hilum
+      const tilt = (rand() - 0.4) * 0.6;     // -0.24..+0.36 rad (≈±14°..+20°)
+      const yaw = (rand() - 0.5) * 0.15;     // pequeño pivote en plano XZ
+      const roll = (rand() - 0.5) * 0.08;    // muy pequeño tilt en YZ (rotación Z)
+      arr.push({
+        position: [x, y - 0.04, z],
+        rotation: [tilt, yaw, roll],
+      });
     }
     return arr;
   }, []);
@@ -226,27 +325,47 @@ export default function BeanModel() {
           {podMaterial}
         </mesh>
 
-        {/* Frijoles dentro de la vaina abierta */}
-        {seedPositions.map((p, i) => (
-          <mesh
-            key={i}
-            geometry={seedGeo}
-            position={[p[0], p[1] - 0.02, p[2]]}
-            rotation={[0, (i % 2) * 0.3, (i % 3) * 0.15]}
-            castShadow
-            receiveShadow
-          >
-            <meshPhysicalMaterial
-              map={seedMap}
-              roughness={0.32}
-              metalness={0.05}
-              clearcoat={0.85}
-              clearcoatRoughness={0.18}
-              sheen={0.2}
-              sheenColor="#fbbf24"
-              envMapIntensity={1.1}
-            />
-          </mesh>
+        {/* Membrana blanca interior de la vaina (placental tissue) */}
+        <mesh
+          geometry={openTopGeo}
+          rotation={[0.25, 0, 0]}
+          position={[0, 0.044, 0]}
+          scale={0.965}
+        >
+          <meshPhysicalMaterial
+            color="#f5f5f4"
+            roughness={0.7}
+            metalness={0}
+            clearcoat={0.15}
+            clearcoatRoughness={0.6}
+            sheen={0.4}
+            sheenColor="#fef3c7"
+            sheenRoughness={0.7}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+
+        {/* Frijoles dentro de la vaina abierta — el lado cóncavo lleva
+            el hilum (pequeña marca oscura). */}
+        {seedTransforms.map((tr, i) => (
+          <group key={i} position={tr.position} rotation={tr.rotation}>
+            <mesh geometry={seedGeo} castShadow receiveShadow>
+              <meshPhysicalMaterial
+                map={seedMap}
+                roughness={0.28}
+                metalness={0.05}
+                clearcoat={0.92}
+                clearcoatRoughness={0.14}
+                sheen={0.3}
+                sheenColor="#fbbf24"
+                envMapIntensity={1.2}
+              />
+            </mesh>
+            {/* Hilum: óvalo oscuro pegado al lado cóncavo (-Y local) en el centro */}
+            <mesh geometry={hilumGeo} position={[0, -0.044, 0]}>
+              <meshStandardMaterial color="#1a0500" roughness={0.55} metalness={0} />
+            </mesh>
+          </group>
         ))}
       </group>
 
