@@ -8,6 +8,7 @@ import {
   makeHuskColorTexture,
   makeHuskNormalTexture,
 } from '../textures';
+import PollenMotes from './PollenMotes';
 
 // =====================================================
 // Maíz: mazorca lathe + textura procedural detallada de
@@ -212,34 +213,50 @@ export default function CornModel() {
   const huskColor = useMemo(makeHuskColorTexture, []);
   const huskNormal = useMemo(makeHuskNormalTexture, []);
 
+  // Organic motion: two breathing frequencies + tiny rotational sway
+  // emulating a real plant settling in a soft breeze.
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
-    groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.6) * 0.02;
+    const t = clock.elapsedTime;
+    groupRef.current.position.y =
+      Math.sin(t * 0.6) * 0.018 + Math.sin(t * 1.7 + 1.2) * 0.006;
+    groupRef.current.rotation.z = Math.sin(t * 0.5) * 0.012;
+    groupRef.current.rotation.x = Math.cos(t * 0.38) * 0.008;
   });
 
   return (
     <group ref={groupRef} rotation={[0, 0.3, 0]}>
+      <PollenMotes
+        count={28}
+        radius={1.4}
+        height={2.4}
+        color="#fde68a"
+        size={0.018}
+        speed={0.35}
+      />
       {/* Mazorca */}
       <mesh geometry={cobGeometry} castShadow receiveShadow>
         <meshPhysicalMaterial
           map={cornColor}
           normalMap={cornNormal}
-          normalScale={[1.5, 1.5]}
+          normalScale={[1.65, 1.65]}
           roughnessMap={cornRoughness}
-          roughness={0.45}
-          metalness={0.02}
-          clearcoat={0.85}
-          clearcoatRoughness={0.18}
-          envMapIntensity={1.25}
-          sheen={0.25}
+          roughness={0.4}
+          metalness={0.03}
+          clearcoat={0.95}
+          clearcoatRoughness={0.14}
+          envMapIntensity={1.4}
+          sheen={0.35}
           sheenColor="#fef3c7"
-          sheenRoughness={0.55}
+          sheenRoughness={0.5}
           // SSS sutil — los granos lácteos dejan pasar algo de luz
-          transmission={0.05}
-          thickness={0.15}
+          transmission={0.08}
+          thickness={0.18}
           attenuationColor="#fbbf24"
           attenuationDistance={0.4}
           ior={1.42}
+          emissive="#3a2204"
+          emissiveIntensity={0.05}
         />
       </mesh>
 

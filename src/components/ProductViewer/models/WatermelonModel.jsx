@@ -10,6 +10,7 @@ import {
   makeWatermelonFleshRoughnessTexture,
   makeWatermelonNormalTexture,
 } from '../textures';
+import PollenMotes from './PollenMotes';
 
 // =====================================================
 // Sandía: pieza completa + rebanada lateral mostrando la
@@ -233,13 +234,32 @@ export default function WatermelonModel() {
   const leafMap = useMemo(makeLeafColorTexture, []);
   const leafNormal = useMemo(makeLeafNormalTexture, []);
 
+  // Heavier, juicier breathing pattern: lower frequency than corn/beans
+  // because watermelons are big and slow. Add a touch of roll that hints
+  // at the weight of the fruit settling.
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
-    groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.5) * 0.015;
+    const t = clock.elapsedTime;
+    groupRef.current.position.y =
+      Math.sin(t * 0.45) * 0.014 + Math.sin(t * 1.4 + 2.1) * 0.005;
+    groupRef.current.rotation.z = 0.04 + Math.sin(t * 0.35) * 0.01;
+    groupRef.current.rotation.x = 0.06 + Math.cos(t * 0.28) * 0.008;
   });
 
   return (
     <group ref={groupRef} rotation={[0.06, 0, 0.04]}>
+      {/* Juice sparkle motes around the slice — sells the "fresh" look */}
+      <group position={[1.1, -0.4, 0.4]}>
+        <PollenMotes
+          count={18}
+          radius={0.9}
+          height={0.7}
+          color="#fda4af"
+          size={0.012}
+          speed={0.5}
+          opacity={0.7}
+        />
+      </group>
       {/* === Sandía completa (a la izquierda) === */}
       <group position={[-0.55, 0, -0.1]}>
         <mesh geometry={rindGeo} castShadow receiveShadow>

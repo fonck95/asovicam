@@ -10,6 +10,7 @@ import {
   makePodInteriorTexture,
   makePodNormalTexture,
 } from '../textures';
+import PollenMotes from './PollenMotes';
 
 // =====================================================
 // Frijol: vaina cerrada (TubeGeometry curva con bultos)
@@ -206,9 +207,15 @@ export default function BeanModel() {
     return arr;
   }, []);
 
+  // Organic breathing: two-octave float + slow yaw drift simulating the
+  // pod resting on a surface with light wind. Different phase from corn
+  // so when both are on screen they don't move in lockstep.
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
-    groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.6) * 0.015;
+    const t = clock.elapsedTime;
+    groupRef.current.position.y =
+      Math.sin(t * 0.55 + 0.6) * 0.013 + Math.sin(t * 1.9) * 0.004;
+    groupRef.current.rotation.y = Math.sin(t * 0.32) * 0.04;
   });
 
   const podMaterial = (
@@ -250,6 +257,16 @@ export default function BeanModel() {
 
   return (
     <group ref={groupRef} rotation={[0.05, 0, -0.1]} position={[0.05, 0, 0]}>
+      <PollenMotes
+        count={22}
+        radius={1.6}
+        height={1.4}
+        color="#bef264"
+        size={0.014}
+        speed={0.28}
+        opacity={0.6}
+      />
+
       {/* Vaina cerrada (principal) */}
       <mesh geometry={closedPodGeo} castShadow receiveShadow position={[0, 0, 0.32]}>
         {podMaterial}

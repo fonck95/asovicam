@@ -84,7 +84,6 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
       style={{ ['--accent' as string]: activeCrop.accent }}
     >
       <div className={styles.gradient} aria-hidden="true" />
-      <div className={styles.grain} aria-hidden="true" />
 
       <div className={styles.stage}>
         <div className={styles.canvasHolder}>
@@ -95,18 +94,19 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
             gl={{
               antialias: true,
               toneMapping: THREE.ACESFilmicToneMapping,
-              toneMappingExposure: 1,
+              toneMappingExposure: 1.08,
               outputColorSpace: THREE.SRGBColorSpace,
+              alpha: true,
               powerPreference: 'high-performance',
             }}
           >
             <Suspense fallback={null}>
-              <ambientLight intensity={0.45} color="#ffffff" />
-              <hemisphereLight args={['#fff7d6', '#1f2937', 0.35]} />
+              <ambientLight intensity={0.55} color="#ffffff" />
+              <hemisphereLight args={['#fff7d6', '#243d20', 0.45]} />
 
               <directionalLight
                 position={[4, 5.5, 3]}
-                intensity={1.6}
+                intensity={1.75}
                 color="#fff5e0"
                 castShadow
                 shadow-mapSize={[2048, 2048]}
@@ -121,11 +121,11 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
 
               <directionalLight
                 position={[-4, 2, -2]}
-                intensity={0.35}
+                intensity={0.4}
                 color="#dbeafe"
               />
 
-              <Environment preset="apartment" environmentIntensity={0.55} />
+              <Environment preset="apartment" environmentIntensity={0.75} />
 
               <group key={active} position={[0, 0, 0]}>
                 <CropModel id={active} />
@@ -133,12 +133,12 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
 
               <ContactShadows
                 position={[0, -1.05, 0]}
-                opacity={0.5}
+                opacity={0.36}
                 scale={6}
-                blur={2.4}
+                blur={2.6}
                 far={2.2}
                 resolution={1024}
-                color="#1a1206"
+                color="#0c0a04"
               />
             </Suspense>
 
@@ -179,10 +179,6 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
           </button>
         ))}
       </div>
-
-      <span className={styles.credits}>
-        Modelos 3D procedurales — ASOVICAM
-      </span>
 
       <span className={styles.hint} aria-hidden="true">
         Arrastra para rotar · Scroll para acercar

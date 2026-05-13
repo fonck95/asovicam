@@ -26,14 +26,36 @@
   background: linear-gradient(180deg, transparent 70%, rgba(5, 46, 22, 0.45) 100%);
 }
 
-.heroContent {
+/* Two-column hero layout: text on the left, 3D ornament on the right.
+   On narrow viewports the visual stacks below the headline. */
+.heroLayout {
   position: relative;
   z-index: 1;
-  color: white;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: var(--spacing-2xl);
   padding-top: var(--spacing-3xl);
   padding-bottom: var(--spacing-3xl);
+}
+
+.heroContent {
+  color: white;
   animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  max-width: 760px;
+  max-width: 620px;
+}
+
+.heroVisual {
+  position: relative;
+  animation: fadeInUp 1s cubic-bezier(0.4, 0, 0.2, 1);
+  animation-delay: 120ms;
+  animation-fill-mode: both;
+}
+
+@media (max-width: 960px) {
+  .heroLayout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .heroBadge {
@@ -250,6 +272,22 @@
   gap: var(--spacing-xl);
 }
 
+/* 3D mini-icon slot inside each crop card.
+   The hover surface is the wrap so the spin acceleration matches the
+   card's hover, not the canvas's pointer (the canvas is alpha and
+   doesn't always intercept pointer events). */
+.cropMediaWrap {
+  display: inline-block;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-md);
+  cursor: pointer;
+}
+
+.cropMedia {
+  /* MiniCrop3D applies its own shimmer + frame */
+}
+
+/* Old emoji slot fallback — kept for parity if MiniCrop3D fails to mount. */
 .cropIcon {
   display: inline-flex;
   align-items: center;
@@ -300,22 +338,87 @@
   color: var(--color-primary-dark);
 }
 
-/* ============ 3D Diorama ============ */
-.diorama {
+/* ============ Story panel ============
+   3D models live BESIDE a narrative paragraph — they participate in
+   the storytelling instead of sitting in a "look at our viewer" box. */
+.story {
   position: relative;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(22, 101, 52, 0.08), transparent 55%),
-    var(--color-surface-warm);
   overflow: hidden;
+}
+
+.storyLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--spacing-3xl);
+  align-items: center;
+}
+
+.storyStage {
+  position: relative;
+}
+
+.storyText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  max-width: 460px;
+}
+
+.storyTitle {
+  font-family: var(--font-family-heading);
+  font-size: clamp(1.75rem, 2.4vw + 1rem, 2.5rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--color-gray-900);
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.storyParagraph {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--color-gray-600);
+}
+
+.storyLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: var(--spacing-sm);
+  padding: 0.625rem 1rem;
+  background: var(--color-primary);
+  color: white;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  font-size: 0.875rem;
+  align-self: flex-start;
+  transition: gap var(--transition-fast), background var(--transition-fast),
+    box-shadow var(--transition-fast);
+  box-shadow: 0 8px 20px -10px rgba(22, 101, 52, 0.45);
+}
+
+.storyLink:hover {
+  gap: 0.875rem;
+  background: var(--color-primary-dark);
+  box-shadow: 0 12px 26px -10px rgba(22, 101, 52, 0.55);
 }
 
 .dioramaFallback {
   width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: 620px;
+  max-height: 560px;
   border-radius: var(--radius-2xl);
   background: linear-gradient(160deg, #0b2818 0%, #0a1d12 55%, #1a0f06 100%);
   box-shadow: var(--shadow-xl);
+}
+
+@media (max-width: 960px) {
+  .storyLayout {
+    grid-template-columns: 1fr;
+  }
+  .storyText {
+    max-width: 640px;
+  }
 }
 
 @media (max-width: 720px) {

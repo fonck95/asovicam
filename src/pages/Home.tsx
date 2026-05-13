@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -18,6 +18,8 @@ import Product3DGallery, {
   type ProductSlide,
 } from '../components/ui/Product3DGallery';
 import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
+import HeroCrop3D from '../components/ui/HeroCrop3D';
+import MiniCrop3D from '../components/ui/MiniCrop3D';
 import SEO from '../components/SEO';
 
 const Crops3DScene = lazy(() => import('../components/ui/Crops3DScene'));
@@ -58,6 +60,34 @@ const programIcons: Record<string, React.ReactNode> = {
   tree: <TreePine size={24} />,
 };
 
+// Crop card with a hover-accelerated 3D icon. Lifted out of <Home> so it
+// can hold its own hover state without re-rendering siblings.
+function CropCard({ crop }: { crop: (typeof crops)[number] }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <Card accentColor={crop.color}>
+      <div
+        onPointerEnter={() => setHover(true)}
+        onPointerLeave={() => setHover(false)}
+        className={styles.cropMediaWrap}
+      >
+        <MiniCrop3D
+          id={crop.id as 'maiz' | 'frijol-caupi' | 'sandia'}
+          accelerate={hover}
+          size={120}
+          className={styles.cropMedia}
+        />
+      </div>
+      <h3 className={styles.cropName}>{crop.name}</h3>
+      <p className={styles.cropScientific}>{crop.scientificName}</p>
+      <p className={styles.cropDescription}>{crop.description}</p>
+      <Link to="/milpa" className={styles.cropLink}>
+        Saber más <ArrowRight size={14} />
+      </Link>
+    </Card>
+  );
+}
+
 export default function Home() {
   return (
     <>
@@ -70,46 +100,52 @@ export default function Home() {
       <section className={styles.hero}>
         <HeroGpuCanvas />
         <div className={styles.heroOverlay} />
-        <div className={`container ${styles.heroContent}`}>
-          <span className={styles.heroBadge}>
-            <span className={styles.heroBadgeDot}>
-              <Leaf size={12} strokeWidth={2.5} />
+        <div className={`container ${styles.heroLayout}`}>
+          <div className={styles.heroContent}>
+            <span className={styles.heroBadge}>
+              <span className={styles.heroBadgeDot}>
+                <Leaf size={12} strokeWidth={2.5} />
+              </span>
+              Ciénaga de Barbacoas, Yondó · Magdalena Medio
             </span>
-            Ciénaga de Barbacoas, Yondó · Magdalena Medio
-          </span>
-          <h1 className={styles.heroTitle}>
-            Cultivando tradición,
-            <br />
-            <span className={styles.heroHighlight}>sembrando futuro.</span>
-          </h1>
-          <p className={styles.heroText}>
-            Somos ASOVICAM, la Asociación Campesina Vida en el Campo.
-            Rescatamos el sistema ancestral de la milpa &mdash; maíz, frijol caupí
-            y sandía &mdash; con técnica de mulch para una agricultura sostenible en
-            el corazón del Magdalena Medio colombiano.
-          </p>
-          <div className={styles.heroCta}>
-            <Button to="/milpa" size="lg">
-              Conoce la Milpa <ArrowRight size={18} />
-            </Button>
-            <Button to="/nosotros" variant="outline" size="lg">
-              Sobre nosotros
-            </Button>
+            <h1 className={styles.heroTitle}>
+              Cultivando tradición,
+              <br />
+              <span className={styles.heroHighlight}>sembrando futuro.</span>
+            </h1>
+            <p className={styles.heroText}>
+              Somos ASOVICAM, la Asociación Campesina Vida en el Campo.
+              Rescatamos el sistema ancestral de la milpa &mdash; maíz, frijol caupí
+              y sandía &mdash; con técnica de mulch para una agricultura sostenible en
+              el corazón del Magdalena Medio colombiano.
+            </p>
+            <div className={styles.heroCta}>
+              <Button to="/milpa" size="lg">
+                Conoce la Milpa <ArrowRight size={18} />
+              </Button>
+              <Button to="/nosotros" variant="outline" size="lg">
+                Sobre nosotros
+              </Button>
+            </div>
+
+            <div className={styles.heroMeta}>
+              <div className={styles.heroMetaItem}>
+                <span className={styles.heroMetaValue}>50+</span>
+                <span className={styles.heroMetaLabel}>Familias</span>
+              </div>
+              <div className={styles.heroMetaItem}>
+                <span className={styles.heroMetaValue}>120 ha</span>
+                <span className={styles.heroMetaLabel}>Cultivadas</span>
+              </div>
+              <div className={styles.heroMetaItem}>
+                <span className={styles.heroMetaValue}>100%</span>
+                <span className={styles.heroMetaLabel}>Orgánico</span>
+              </div>
+            </div>
           </div>
 
-          <div className={styles.heroMeta}>
-            <div className={styles.heroMetaItem}>
-              <span className={styles.heroMetaValue}>50+</span>
-              <span className={styles.heroMetaLabel}>Familias</span>
-            </div>
-            <div className={styles.heroMetaItem}>
-              <span className={styles.heroMetaValue}>120 ha</span>
-              <span className={styles.heroMetaLabel}>Cultivadas</span>
-            </div>
-            <div className={styles.heroMetaItem}>
-              <span className={styles.heroMetaValue}>100%</span>
-              <span className={styles.heroMetaLabel}>Orgánico</span>
-            </div>
+          <div className={styles.heroVisual}>
+            <HeroCrop3D />
           </div>
         </div>
 
@@ -187,38 +223,47 @@ export default function Home() {
 
           <div className={styles.cropsGrid}>
             {crops.map((crop) => (
-              <Card key={crop.id} accentColor={crop.color}>
-                <span className={styles.cropIcon}>{crop.icon}</span>
-                <h3 className={styles.cropName}>{crop.name}</h3>
-                <p className={styles.cropScientific}>{crop.scientificName}</p>
-                <p className={styles.cropDescription}>{crop.description}</p>
-                <Link to="/milpa" className={styles.cropLink}>
-                  Saber más <ArrowRight size={14} />
-                </Link>
-              </Card>
+              <CropCard key={crop.id} crop={crop} />
             ))}
           </div>
         </div>
       </section>
 
-      {/* 3D Diorama — Real Three.js procedural models of the milpa */}
-      <section className={`section ${styles.diorama}`}>
+      {/* 3D woven into the page narrative — same models from the hero
+          continue here, but framed as part of a story panel instead of
+          a stand-alone "look at our 3D viewer" showcase. */}
+      <section className={`section section--alt ${styles.story}`}>
         <div className="container">
-          <div className={styles.sectionHeader}>
-            <span className={styles.eyebrow}>
-              <Sparkles size={12} /> Milpa interactiva
-            </span>
-            <h2 className="section__title">La milpa en 3D</h2>
-            <p className="section__subtitle">
-              Maíz, frijol caupí y sandía modelados en 3D. Selecciona un
-              cultivo, arrastra para rotarlo y haz scroll para acercarte —
-              los mismos modelos que viven en nuestro catálogo de productos.
-            </p>
-          </div>
+          <div className={styles.storyLayout}>
+            <Suspense fallback={<div className={styles.dioramaFallback} />}>
+              <div className={styles.storyStage}>
+                <Crops3DScene />
+              </div>
+            </Suspense>
 
-          <Suspense fallback={<div className={styles.dioramaFallback} />}>
-            <Crops3DScene />
-          </Suspense>
+            <div className={styles.storyText}>
+              <span className={styles.eyebrow}>
+                <Sparkles size={12} /> Milpa viva
+              </span>
+              <h2 className={styles.storyTitle}>
+                Toca, gira y descubre cada cultivo.
+              </h2>
+              <p className={styles.storyParagraph}>
+                Cada producto que cultivamos lo modelamos pieza por pieza:
+                la mazorca con sus granos lácteos, la vaina del frijol que
+                se abre revelando los frutos del trabajo y la sandía recién
+                rebanada, con su pulpa fresca al sol del Magdalena Medio.
+              </p>
+              <p className={styles.storyParagraph}>
+                No son fotografías ni clips: son los mismos modelos que
+                acompañan toda tu navegación. Pasea la milpa con el ratón
+                — es como visitarla.
+              </p>
+              <Link to="/productos" className={styles.storyLink}>
+                Ver catálogo interactivo <ArrowRight size={16} />
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
