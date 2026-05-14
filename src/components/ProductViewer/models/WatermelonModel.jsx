@@ -2,8 +2,6 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
-  makeLeafColorTexture,
-  makeLeafNormalTexture,
   makeWatermelonColorTexture,
   makeWatermelonFleshTexture,
   makeWatermelonFleshNormalTexture,
@@ -35,94 +33,31 @@ function buildRindGeometry() {
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const len = v.length();
-    const nx = v.x / len, ny = v.y / len, nz = v.z / len;
-    const azimuth = Math.atan2(nz, nx);            // alrededor del eje Y (vertical)
-    const polar = Math.acos(Math.max(-1, Math.min(1, ny))); // desde el polo norte
+    const ny = v.y / len;
+    const azimuth = Math.atan2(v.z / len, v.x / len);
+    const polar = Math.acos(Math.max(-1, Math.min(1, ny)));
 
-    // (1) Lóbulos longitudinales — las sandías reales muestran segmentos
-    // muy sutiles del polo del tallo al polo de la flor. 5 ondas anchas + 7
-    // ondas finas, con fade hacia los polos via sin(polar).
-    const lobes = (Math.cos(azimuth * 5 + 0.4) * 0.022 +
-                   Math.cos(azimuth * 7 - 1.2) * 0.009 +
-                   Math.cos(azimuth * 13 + 0.9) * 0.003) * Math.sin(polar);
+    // Lóbulos longitudinales muy sutiles — las sandías reales son lisas;
+    // los segmentos apenas se insinúan. Amplitudes reducidas ~4x respecto
+    // a la versión anterior para evitar el look "irregular exagerado".
+    const lobes = (Math.cos(azimuth * 5 + 0.4) * 0.005 +
+                   Math.cos(azimuth * 7 - 1.2) * 0.0015) * Math.sin(polar);
 
-    // (2) Asimetría tallo/flor: el extremo del tallo (top) se pellizca
-    // ligeramente, el extremo de la flor (bottom) queda más plano.
+    // Asimetría tallo/flor: leve pellizco en el polo superior, base
+    // ligeramente aplanada. Mantenido pero atenuado para no exagerar.
     const stemBlossom = ny > 0
-      ? -Math.pow(ny, 3.0) * 0.045
-      : -Math.pow(-ny, 1.7) * 0.022;
+      ? -Math.pow(ny, 3.0) * 0.020
+      : -Math.pow(-ny, 1.7) * 0.010;
 
-    // (3) Deformación orgánica de mayor frecuencia (bultos naturales)
-    const big = Math.sin(v.x * 2.4) * Math.cos(v.y * 2.1) * Math.sin(v.z * 1.8) * 0.022 +
-                Math.sin(v.x * 5.5 + 0.7) * Math.cos(v.y * 5.1) * Math.sin(v.z * 4.8) * 0.007 +
-                Math.sin(v.x * 11 + 1.4) * Math.cos(v.z * 9.3) * 0.0025;
-
-    v.setLength(len + big + lobes + stemBlossom);
+    v.setLength(len + lobes + stemBlossom);
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
-  // Forma claramente oblonga (no esfera): alargada en X (eje horizontal),
-  // ligeramente achatada vertical. Relación ~1.34:1 — proporciones de una
-  // sandía Charleston Gray / Allsweet, las más comunes en mercado.
+  // Forma oblonga típica de Charleston Gray: alargada en X, levemente
+  // achatada en Y. Relación ~1.32:1.
   geo.scale(1.32, 0.93, 0.97);
   geo.computeVertexNormals();
-  return geo;
-}
-
-function buildStemGeometry() {
-  const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, RADIUS * 0.88, 0),
-    new THREE.Vector3(0.05, RADIUS * 0.88 + 0.13, 0.04),
-    new THREE.Vector3(-0.02, RADIUS * 0.88 + 0.24, -0.05),
-    new THREE.Vector3(0.08, RADIUS * 0.88 + 0.36, 0.02),
-  ]);
-  return new THREE.TubeGeometry(curve, 32, 0.04, 18, false);
-}
-
-function buildLeafGeometry() {
-  const shape = new THREE.Shape();
-  const lobes = 5;
-  const N = 96;
-  shape.moveTo(0, 0);
-  for (let i = 1; i <= N; i++) {
-    const t = i / N;
-    const angle = Math.PI * (t - 0.5);
-    const lobe = 0.7 + 0.28 * Math.cos(angle * lobes);
-    const r = lobe * 0.95;
-    const x = Math.sin(angle) * r;
-    const y = (1 - Math.cos(angle)) * r * 0.95;
-    shape.lineTo(x, y);
-  }
-  shape.lineTo(0, 0);
-
-  const geo = new THREE.ShapeGeometry(shape, 28);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    pos.setZ(
-      i,
-      Math.sin(y * 2.2) * 0.07 +
-        Math.cos(x * 3.4) * 0.04 -
-        Math.pow(Math.abs(x), 1.4) * 0.1,
-    );
-  }
-  pos.needsUpdate = true;
-  geo.computeVertexNormals();
-
-  const uv = geo.attributes.uv;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i);
-    if (x < minX) minX = x; if (x > maxX) maxX = x;
-    if (y < minY) minY = y; if (y > maxY) maxY = y;
-  }
-  for (let i = 0; i < uv.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i);
-    uv.setXY(i, (x - minX) / (maxX - minX), (y - minY) / (maxY - minY));
-  }
-  uv.needsUpdate = true;
   return geo;
 }
 
@@ -289,8 +224,6 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
   const showCut = mode === 'cut' || mode === 'both';
 
   const rindGeo = useMemo(buildRindGeometry, []);
-  const stemGeo = useMemo(buildStemGeometry, []);
-  const leafGeo = useMemo(buildLeafGeometry, []);
   const sliceFleshGeo = useMemo(buildSliceFleshGeometry, []);
   const sliceRindGeo = useMemo(buildSliceRindGeometry, []);
   const mesocarpGeo = useMemo(buildMesocarpGeometry, []);
@@ -303,18 +236,17 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
   const fleshMap = useMemo(makeWatermelonFleshTexture, []);
   const fleshNormal = useMemo(makeWatermelonFleshNormalTexture, []);
   const fleshRoughness = useMemo(makeWatermelonFleshRoughnessTexture, []);
-  const leafMap = useMemo(makeLeafColorTexture, []);
-  const leafNormal = useMemo(makeLeafNormalTexture, []);
 
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
     groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.5) * 0.015;
   });
 
-  // En modo 'both' mantenemos el layout marketing (entera izda + corte
-  // derecha). En modos solo-entera o solo-corte, centramos el sujeto.
-  const wholePosition = showCut ? [-0.55, 0, -0.1] : [0, 0, 0];
-  const cutPosition = showWhole ? [1.1, -0.55, 0.4] : [0, -0.2, 0];
+  // En modo 'both' separamos la sandía entera (izda) y la rebanada (dcha)
+  // con espacio suficiente para que la rodaja no se superponga con el
+  // cuerpo. En modos solo-entera o solo-corte, centramos el sujeto.
+  const wholePosition = showCut ? [-0.95, 0, -0.15] : [0, 0, 0];
+  const cutPosition = showWhole ? [1.55, -0.40, 0.30] : [0, -0.2, 0];
   const cutRotation = showWhole
     ? [-Math.PI / 2.4, 0.05, -0.18]
     : [-Math.PI / 2.8, 0.08, -0.1];
@@ -344,68 +276,6 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
         <mesh position={[0, -RADIUS * 0.93, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.012, 0.04, 32]} />
           <meshStandardMaterial color="#3f6212" roughness={0.85} side={THREE.DoubleSide} />
-        </mesh>
-
-        {/* Tallo */}
-        <mesh geometry={stemGeo} castShadow receiveShadow>
-          <meshPhysicalMaterial
-            color="#4d7c0f"
-            roughness={0.78}
-            clearcoat={0.3}
-            clearcoatRoughness={0.5}
-          />
-        </mesh>
-
-        {/* Hojas decorativas */}
-        <mesh
-          geometry={leafGeo}
-          position={[0.18, RADIUS * 0.88 + 0.08, -0.1]}
-          rotation={[0.6, -0.3, 0.2]}
-          scale={0.42}
-          castShadow
-          receiveShadow
-        >
-          <meshPhysicalMaterial
-            map={leafMap}
-            normalMap={leafNormal}
-            normalScale={[0.85, 0.85]}
-            roughness={0.55}
-            metalness={0.02}
-            clearcoat={0.55}
-            clearcoatRoughness={0.4}
-            sheen={0.6}
-            sheenColor="#a3e635"
-            sheenRoughness={0.5}
-            transmission={0.18}
-            thickness={0.05}
-            ior={1.4}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-        <mesh
-          geometry={leafGeo}
-          position={[-0.14, RADIUS * 0.88 + 0.12, 0.12]}
-          rotation={[0.4, 0.5, -0.3]}
-          scale={0.36}
-          castShadow
-          receiveShadow
-        >
-          <meshPhysicalMaterial
-            map={leafMap}
-            normalMap={leafNormal}
-            normalScale={[0.85, 0.85]}
-            roughness={0.55}
-            metalness={0.02}
-            clearcoat={0.55}
-            clearcoatRoughness={0.4}
-            sheen={0.6}
-            sheenColor="#a3e635"
-            sheenRoughness={0.5}
-            transmission={0.18}
-            thickness={0.05}
-            ior={1.4}
-            side={THREE.DoubleSide}
-          />
         </mesh>
       </group>
       )}
