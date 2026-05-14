@@ -207,12 +207,20 @@ function buildKernelInstanceData() {
 
 function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
   // Hoja con curva. peel = 0..1 controla qué tanto se "abre" la hoja
-  // hacia afuera (0 = pegada, 1 = pulled-back).
+  // hacia afuera (0 = pegada, 1 = pulled-back). La hoja "pegada" se
+  // envuelve cilíndricamente alrededor de la mazorca (los bordes
+  // laterales se acercan al eje del olote); la hoja peelada se
+  // despliega plana hacia afuera.
   const lengthSegs = 28;
-  const widthSegs = 8;
+  const widthSegs = 10;
   const positions = [];
   const uvs = [];
   const indices = [];
+
+  // Radio aproximado del cuerpo que la hoja envuelve (granos + olote).
+  // Las hojas pegadas envuelven tangencialmente este cilindro.
+  const WRAP_RADIUS = 0.48;
+  const wrapStrength = 1 - peel;
 
   for (let i = 0; i <= lengthSegs; i++) {
     const t = i / lengthSegs;
@@ -222,19 +230,29 @@ function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
       0.15 -
       Math.max(0, (t - 0.92) * 4) ** 2 * 0.45;
 
-    // Curvatura: la base se mantiene cerca del eje, la punta se aleja
-    const peelCurve = peel * Math.pow(t, 1.4) * 0.55;
-    const curlZ = Math.sin(t * Math.PI * 0.85) * 0.18 + Math.pow(t, 2) * 0.18 + peelCurve;
+    // Despliegue hacia afuera de la hoja (curl forward): mínimo en
+    // hojas pegadas, dominante en hojas peeled-back.
+    const peelCurve = peel * Math.pow(t, 1.5) * 0.62;
+    const baseForward = (Math.sin(t * Math.PI * 0.7) * 0.04 + Math.pow(t, 2) * 0.05) * (0.3 + peel * 0.7);
+    const curlZ = baseForward + peelCurve;
 
     for (let j = 0; j <= widthSegs; j++) {
       const u = j / widthSegs;
       const xRaw = (u - 0.5) * 2;
       const w = width * Math.max(0.04, taper);
-      const x = xRaw * w;
-      const rib = (1 - Math.abs(xRaw)) * 0.05;
+      // Wrap cilíndrico: los bordes laterales (|xRaw|=1) se curvan hacia
+      // el eje del olote. La hoja peeled se mantiene casi plana.
+      const wrapAngle = xRaw * (w / WRAP_RADIUS) * wrapStrength;
+      const x = wrapStrength > 0.05
+        ? WRAP_RADIUS * Math.sin(wrapAngle) + xRaw * w * (1 - wrapStrength)
+        : xRaw * w;
+      const wrapZ = wrapStrength > 0.05
+        ? -WRAP_RADIUS * (1 - Math.cos(wrapAngle))
+        : 0;
+      const rib = (1 - Math.abs(xRaw)) * 0.04;
       // Pequeña ondulación lateral para no parecer plana
-      const lateralWave = Math.sin(t * 7 + xRaw * 2) * 0.012 * (1 - peel * 0.4);
-      positions.push(x, y, curlZ + rib + lateralWave);
+      const lateralWave = Math.sin(t * 6 + xRaw * 2) * 0.010 * (1 - peel * 0.4);
+      positions.push(x, y, curlZ + wrapZ + rib + lateralWave);
       uvs.push(u, t);
     }
   }
@@ -263,36 +281,42 @@ function buildSilkGeometry() {
   // Mecha de barbas (silk / pelos de elote). Cada hebra es un tubo con
   // 4 control points (start, neck, mid, tip) → curva orgánica con drop
   // natural. Radio decreciente (taper) y gradiente cobrizo→rubio claro.
+  // Las hebras emergen desde la punta del olote y forman un mechón
+  // cohesivo (no fuegos artificiales): la mayoría sube ligeramente
+  // hacia adelante y cae con gravedad natural.
   const strands = [];
   const colorBase = new THREE.Color('#d4a574');
   const colorTip = new THREE.Color('#f0d5a0');
-  const STRANDS = 140;
+  const STRANDS = 170;
   for (let i = 0; i < STRANDS; i++) {
-    const angle = (i / STRANDS) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
-    const droop = 0.30 + Math.random() * 0.65;
-    const sway = (Math.random() - 0.5) * 0.32;
-    const length = 0.45 + Math.random() * 0.55;
-    const emerge = 0.015 + Math.random() * 0.05;
+    const angle = (i / STRANDS) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+    const droop = 0.18 + Math.random() * 0.32;
+    const sway = (Math.random() - 0.5) * 0.18;
+    const length = 0.55 + Math.random() * 0.35;
+    // Emerge desde la zona del olote justo arriba del último anillo de
+    // granos — los pelos parecen brotar desde el cuerpo de la mazorca,
+    // no desde un punto invisible.
+    const emerge = 0.045 + Math.random() * 0.055;
 
     const start = new THREE.Vector3(
       Math.cos(angle) * emerge,
-      COB_HEIGHT / 2 - 0.025 + Math.random() * 0.02,
+      COB_HEIGHT / 2 - 0.06 + Math.random() * 0.04,
       Math.sin(angle) * emerge,
     );
     const neck = new THREE.Vector3(
-      Math.cos(angle) * (emerge + 0.04),
-      COB_HEIGHT / 2 + length * 0.18,
-      Math.sin(angle) * (emerge + 0.04),
+      Math.cos(angle) * (emerge + 0.02),
+      COB_HEIGHT / 2 + length * 0.22,
+      Math.sin(angle) * (emerge + 0.02),
     );
     const mid = new THREE.Vector3(
-      Math.cos(angle) * (0.06 + droop * 0.22) + sway * 0.6,
-      COB_HEIGHT / 2 + length * 0.55,
-      Math.sin(angle) * (0.06 + droop * 0.22) + sway * 0.6,
+      Math.cos(angle) * (0.05 + droop * 0.16) + sway * 0.4,
+      COB_HEIGHT / 2 + length * 0.62,
+      Math.sin(angle) * (0.05 + droop * 0.16) + sway * 0.4,
     );
     const tip = new THREE.Vector3(
-      Math.cos(angle) * (0.20 + droop * 0.6) + sway * 1.6,
-      COB_HEIGHT / 2 + length - droop * 0.22,
-      Math.sin(angle) * (0.20 + droop * 0.6) + sway * 1.6,
+      Math.cos(angle) * (0.10 + droop * 0.38) + sway * 0.9,
+      COB_HEIGHT / 2 + length - droop * 0.18,
+      Math.sin(angle) * (0.10 + droop * 0.38) + sway * 0.9,
     );
     const curve = new THREE.CatmullRomCurve3([start, neck, mid, tip]);
     const tubularSegments = 16;
@@ -409,15 +433,19 @@ export default function CornModel() {
   const kernelInstances = useMemo(buildKernelInstanceData, []);
   const silkGeometry = useMemo(buildSilkGeometry, []);
 
-  // 6 hojas: 4 pegadas + 2 pulled-back (revelan los granos)
+  // 8 hojas: 6 pegadas (wrap alrededor de la base/centro) + 2 peeled-back
+  // (revelan los granos). Más hojas = mejor cobertura tangencial sin
+  // huecos visibles entre ellas.
   const huskConfig = useMemo(
     () => [
-      { peel: 0.1, length: 1.55, width: 0.45 },
-      { peel: 0.15, length: 1.5, width: 0.42 },
-      { peel: 0.12, length: 1.55, width: 0.46 },
-      { peel: 0.18, length: 1.48, width: 0.44 },
-      { peel: 0.85, length: 1.4, width: 0.48 },
-      { peel: 0.7, length: 1.35, width: 0.42 },
+      { peel: 0.05, length: 1.55, width: 0.44 },
+      { peel: 0.08, length: 1.5, width: 0.42 },
+      { peel: 0.06, length: 1.55, width: 0.46 },
+      { peel: 0.10, length: 1.48, width: 0.44 },
+      { peel: 0.07, length: 1.52, width: 0.45 },
+      { peel: 0.09, length: 1.5, width: 0.43 },
+      { peel: 0.78, length: 1.42, width: 0.48 },
+      { peel: 0.65, length: 1.36, width: 0.42 },
     ],
     [],
   );
@@ -534,21 +562,29 @@ export default function CornModel() {
         />
       </mesh>
 
-      {/* Hojas (husks) en la base */}
+      {/* Hojas (husks) ancladas al ras de la base de la mazorca, justo
+          por fuera del envolvente de granos (KERNEL surface ≈ 0.44).
+          Las pegadas envuelven el cilindro de granos vía wrapZ en la
+          geometría; las peeled-back se inclinan hacia afuera con tilt
+          negativo y se separan del cuerpo. */}
       {huskConfig.map((cfg, i) => {
         const angle = (i / huskConfig.length) * Math.PI * 2 + 0.2;
-        const tilt = 0.18 + (i % 2) * 0.05;
-        const scale = 1 + (i % 2) * 0.08;
+        const peeled = cfg.peel > 0.4;
+        const huskRadius = peeled ? 0.46 : 0.50;
+        // Pegadas: leve tilt hacia el eje (negativo) para abrazar el
+        // contorno. Peeled: tilt positivo (se inclinan hacia afuera).
+        const tilt = peeled ? 0.35 + (i % 2) * 0.06 : -0.04 + (i % 2) * 0.02;
+        const scale = 1 + (i % 2) * 0.06;
         return (
           <mesh
             key={i}
             geometry={huskGeometries[i]}
             position={[
-              Math.cos(angle) * CORE_RADIUS * 0.9,
-              -COB_HEIGHT * 0.45,
-              Math.sin(angle) * CORE_RADIUS * 0.9,
+              Math.cos(angle) * huskRadius,
+              -COB_HEIGHT * 0.50,
+              Math.sin(angle) * huskRadius,
             ]}
-            rotation={[tilt, angle + Math.PI / 2, 0]}
+            rotation={[tilt, Math.PI / 2 - angle, 0]}
             scale={scale}
             castShadow
             receiveShadow
