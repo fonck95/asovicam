@@ -73,16 +73,16 @@ function buildSliceFleshGeometry() {
   shape.absarc(0, 0, r, Math.PI, 0, true);
   shape.lineTo(-r, 0);
 
-  // Bevel notablemente más grande y con muchos más segmentos → borde
-  // redondeado del corte en lugar de canto duro. Hace que la pulpa
-  // "se asome" suavemente al costado y permite que la cáscara verde se
-  // funda con el bevel sin línea visible de transición.
+  // Bevel mínimo: sólo suaviza el canto duro sin formar un "borde grueso"
+  // alrededor de la cara plana. Antes era 0.045×0.048 y dejaba un anillo
+  // rojo visible (material-1) tan ancho como el grosor del rind verde →
+  // se leía como una rebanada con marco rojo en lugar de pulpa+cáscara.
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: SLICE_DEPTH,
     bevelEnabled: true,
-    bevelThickness: 0.045,
-    bevelSize: 0.048,
-    bevelSegments: 12,
+    bevelThickness: 0.010,
+    bevelSize: 0.010,
+    bevelSegments: 4,
     curveSegments: 128,
   });
   geo.translate(0, 0, -SLICE_DEPTH / 2);
@@ -162,10 +162,10 @@ function buildSliceRindGeometry() {
 }
 
 // Posiciones realistas de semillas en una rebanada.
-// La Z se calcula respecto a la cara plana del slice (después del bevel),
-// con un offset pequeño para que las semillas queden semi-embebidas
-// en la pulpa en lugar de flotando claramente por encima.
-const SEED_FRONT_Z = SLICE_DEPTH / 2 - 0.045 + 0.020;  // ~0.145
+// La Z se calcula respecto a la cara plana del slice (después del bevel,
+// ahora reducido a 0.010), con un offset pequeño para que las semillas
+// queden semi-embebidas en la pulpa.
+const SEED_FRONT_Z = SLICE_DEPTH / 2 - 0.010 + 0.006;  // ~0.166
 const SEED_BACK_Z = -SEED_FRONT_Z;
 function generateSeedPositions() {
   const seeds = [];
@@ -330,20 +330,22 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
             emissiveIntensity={0.18}
             envMapIntensity={1.0}
           />
-          {/* Material lateral: representa la "rebanada vista de canto".
-              Antes era cream #fbf3e8 → cuando la cámara pillaba el lateral
-              del slice se veía un sandwich blanco. Ahora rojo profundo con
-              roughness alta (cut surface seca) para coherencia visual. */}
+          {/* Material lateral: cubre los lados extrudidos + el pequeño
+              bevel perimetral. Color rosa-coral que matchea la franja
+              exterior de la textura de pulpa (FLESH_STOPS @ r≈0.84-0.91)
+              para que el bevel mínimo se funda con la transición pulpa→
+              mesocarpio en lugar de leerse como un anillo rojo grueso.
+              Antes #a01a30 producía un "marco rojo" visible alrededor de
+              la cara plana — ahora el canto sólo lo marca la cáscara
+              verde (sliceRindGeometry). */}
           <meshPhysicalMaterial
             attach="material-1"
-            color="#a01a30"
-            roughness={0.78}
+            color="#e88896"
+            roughness={0.82}
             metalness={0}
-            sheen={0.30}
-            sheenColor="#c8404a"
-            sheenRoughness={0.55}
-            emissive="#2a0510"
-            emissiveIntensity={0.12}
+            sheen={0.20}
+            sheenColor="#f0b0b8"
+            sheenRoughness={0.6}
           />
         </mesh>
 
