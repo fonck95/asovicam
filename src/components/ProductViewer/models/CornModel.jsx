@@ -21,24 +21,43 @@ const COB_RADIUS = 0.46;
 
 function buildCobGeometry() {
   const points = [];
-  const segs = 64;
+  const segs = 96;
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
     const y = -COB_HEIGHT / 2 + t * COB_HEIGHT;
-    const taper =
-      Math.sin(Math.pow(t, 0.92) * Math.PI) * 0.96 +
-      0.04 -
-      Math.max(0, (t - 0.94) * 8) ** 2 * 0.4;
-    // Pequeña ondulación radial para no parecer un cilindro perfecto
-    const wob = Math.sin(t * 28) * 0.006;
-    points.push(new THREE.Vector2(COB_RADIUS * Math.max(0.04, taper) + wob, y));
+    // Perfil asimétrico (no un sin() perfecto): base con ramp-up corto,
+    // hombro definido al ~78%, después taper más pronunciado hasta una
+    // punta redondeada. Real corn cobs tienen un "shoulder" visible
+    // donde dejan de crecer los granos y empieza la cima.
+    let profile;
+    if (t < 0.10) {
+      // Base: rampa rápida desde el cabo donde se atorna al tallo
+      profile = 0.05 + Math.pow(t / 0.10, 0.65) * 0.89;
+    } else if (t < 0.78) {
+      // Sección media: casi diámetro completo, con una panza muy sutil
+      // hacia el centro y leves ondulaciones longitudinales (filas de granos)
+      const u = (t - 0.10) / 0.68;
+      profile = 0.94 + Math.sin(u * Math.PI) * 0.045 - Math.cos(u * 2.3 * Math.PI) * 0.010;
+    } else {
+      // Punta: taper más agresivo que la base + nubcita redondeada al final
+      const u = (t - 0.78) / 0.22;
+      profile = 0.95 * Math.pow(1 - u, 1.55) + 0.05 * (1 - u * u);
+    }
+    // Ondulación de filas de granos (muy sutil — el bulge real viene de
+    // los hex-tiles abajo en el bucle de vértices)
+    const ridges = Math.sin(t * 28 + 0.4) * 0.0035;
+    points.push(new THREE.Vector2(COB_RADIUS * Math.max(0.03, profile) + ridges, y));
   }
   // Más segmentos radiales = los granos se ven con relieve real
   const geo = new THREE.LatheGeometry(points, 192);
 
-  // Pequeño desplazamiento de vértices para "hinchar" los granos
-  // siguiendo el patrón de hex-tiles. Es muy sutil pero el ojo
-  // capta el alivio incluso antes del normal map.
+  // Desplazamiento de vértices con tres capas:
+  //   1) Lóbulos azimutales suaves — rompe la simetría rotacional perfecta
+  //      (una mazorca real nunca es exactamente circular en corte).
+  //   2) Hex-tiles de granos con variación per-grano de tamaño (algunos
+  //      más hinchados, algunos subdesarrollados — patrón "natural").
+  //   3) Bend longitudinal muy ligero (las mazorcas no son perfectamente
+  //      rectas; siempre hay una leve curvatura por el crecimiento).
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
@@ -47,16 +66,35 @@ function buildCobGeometry() {
     if (r < 1e-4) continue;
     const theta = Math.atan2(v.z, v.x);
     const yNorm = (v.y + COB_HEIGHT / 2) / COB_HEIGHT;
-    // Patrón hex de 22 columnas × 28 filas (alineado con la textura)
+
+    // (1) Lóbulos azimutales: 3 ondas anchas + 7 ondas finas
+    // — fade hacia los extremos (donde se cierra el cob)
+    const lobeFade = Math.sin(yNorm * Math.PI);
+    const azimuthal = (Math.cos(theta * 3 + 0.7) * 0.013 +
+                       Math.cos(theta * 7 - 0.3) * 0.005) * lobeFade;
+
+    // (2) Hex-tiles de granos con variación per-grano
     const COLS = 22, ROWS = 28;
     const col = (theta / (Math.PI * 2)) * COLS;
-    const stagger = (Math.floor(yNorm * ROWS) % 2) * 0.5;
-    const colMod = (col + stagger) - Math.floor(col + stagger) - 0.5;
-    const rowMod = (yNorm * ROWS) - Math.floor(yNorm * ROWS) - 0.5;
-    // Bumpear el grano hacia afuera con campana 2D
-    const bump = Math.exp(-(colMod * colMod + rowMod * rowMod) * 14) * 0.018;
-    const newR = r + bump;
-    v.x = Math.cos(theta) * newR;
+    const rowIdx = Math.floor(yNorm * ROWS);
+    const stagger = (rowIdx % 2) * 0.5;
+    const colIdx = Math.floor(col + stagger);
+    const colMod = (col + stagger) - colIdx - 0.5;
+    const rowMod = (yNorm * ROWS) - rowIdx - 0.5;
+    // Hash determinístico → tamaño per-grano (0.78–1.13×)
+    const h = Math.abs(Math.sin(rowIdx * 12.9898 + colIdx * 78.233) * 43758.5453);
+    const rand = h - Math.floor(h);
+    const kernelScale = 0.78 + rand * 0.35;
+    // ~4% de granos "subdesarrollados" (más chicos)
+    const underdev = rand < 0.04 ? 0.45 : 1.0;
+    const bump = Math.exp(-(colMod * colMod + rowMod * rowMod) * 14) * 0.020 * kernelScale * underdev;
+
+    const newR = r + bump + azimuthal;
+
+    // (3) Bend longitudinal muy leve (campana centrada en el medio)
+    const bend = (1 - Math.pow(Math.abs(yNorm * 2 - 1), 2)) * -0.018;
+
+    v.x = Math.cos(theta) * newR + bend;
     v.z = Math.sin(theta) * newR;
     pos.setXYZ(i, v.x, v.y, v.z);
   }

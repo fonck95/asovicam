@@ -28,17 +28,38 @@ function buildRindGeometry() {
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const len = v.length();
-    // Pequeña deformación orgánica para que no parezca una esfera perfecta
-    const big =
-      Math.sin(v.x * 2.6) * Math.cos(v.y * 2.4) * Math.sin(v.z * 2.0) * 0.014 +
-      Math.sin(v.x * 6.1) * Math.cos(v.y * 5.7) * 0.004;
-    v.setLength(len + big);
+    const nx = v.x / len, ny = v.y / len, nz = v.z / len;
+    const azimuth = Math.atan2(nz, nx);            // alrededor del eje Y (vertical)
+    const polar = Math.acos(Math.max(-1, Math.min(1, ny))); // desde el polo norte
+
+    // (1) Lóbulos longitudinales — las sandías reales muestran segmentos
+    // muy sutiles del polo del tallo al polo de la flor. 5 ondas anchas + 7
+    // ondas finas, con fade hacia los polos via sin(polar).
+    const lobes = (Math.cos(azimuth * 5 + 0.4) * 0.022 +
+                   Math.cos(azimuth * 7 - 1.2) * 0.009 +
+                   Math.cos(azimuth * 13 + 0.9) * 0.003) * Math.sin(polar);
+
+    // (2) Asimetría tallo/flor: el extremo del tallo (top) se pellizca
+    // ligeramente, el extremo de la flor (bottom) queda más plano.
+    const stemBlossom = ny > 0
+      ? -Math.pow(ny, 3.0) * 0.045
+      : -Math.pow(-ny, 1.7) * 0.022;
+
+    // (3) Deformación orgánica de mayor frecuencia (bultos naturales)
+    const big = Math.sin(v.x * 2.4) * Math.cos(v.y * 2.1) * Math.sin(v.z * 1.8) * 0.022 +
+                Math.sin(v.x * 5.5 + 0.7) * Math.cos(v.y * 5.1) * Math.sin(v.z * 4.8) * 0.007 +
+                Math.sin(v.x * 11 + 1.4) * Math.cos(v.z * 9.3) * 0.0025;
+
+    v.setLength(len + big + lobes + stemBlossom);
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
-  // Forma ovalada (sandía no es esfera perfecta)
-  geo.scale(1.02, 0.92, 1);
+  // Forma claramente oblonga (no esfera): alargada en X (eje horizontal),
+  // ligeramente achatada vertical. Relación ~1.34:1 — proporciones de una
+  // sandía Charleston Gray / Allsweet, las más comunes en mercado.
+  geo.scale(1.32, 0.93, 0.97);
+  geo.computeVertexNormals();
   return geo;
 }
 
@@ -258,8 +279,8 @@ export default function WatermelonModel() {
           />
         </mesh>
 
-        {/* Marca floral del extremo opuesto al tallo */}
-        <mesh position={[0, -RADIUS * 0.92, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        {/* Marca floral del extremo opuesto al tallo (Y-scale = 0.93) */}
+        <mesh position={[0, -RADIUS * 0.93, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.012, 0.04, 32]} />
           <meshStandardMaterial color="#3f6212" roughness={0.85} side={THREE.DoubleSide} />
         </mesh>
