@@ -25,39 +25,71 @@ function buildCobGeometry() {
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
     const y = -COB_HEIGHT / 2 + t * COB_HEIGHT;
-    const taper =
+    // Taper base — mismo perfil global anterior (hombros chunky, tip estrecho)
+    const baseTaper =
       Math.sin(Math.pow(t, 0.92) * Math.PI) * 0.96 +
       0.04 -
       Math.max(0, (t - 0.94) * 8) ** 2 * 0.4;
-    // Pequeña ondulación radial para no parecer un cilindro perfecto
-    const wob = Math.sin(t * 28) * 0.006;
-    points.push(new THREE.Vector2(COB_RADIUS * Math.max(0.04, taper) + wob, y));
+    // Variación irregular en el contorno: frecuencias no-armónicas para
+    // evitar la simetría matemática de un cilindro perfecto.
+    const profileWob =
+      Math.sin(t * 4.7 + 0.6) * 0.028 +
+      Math.sin(t * 8.3 + 1.4) * 0.014;
+    const microWob = Math.sin(t * 28) * 0.006;
+    const taper = baseTaper + profileWob;
+    points.push(new THREE.Vector2(COB_RADIUS * Math.max(0.04, taper) + microWob, y));
   }
   // Más segmentos radiales = los granos se ven con relieve real
   const geo = new THREE.LatheGeometry(points, 192);
 
-  // Pequeño desplazamiento de vértices para "hinchar" los granos
-  // siguiendo el patrón de hex-tiles. Es muy sutil pero el ojo
-  // capta el alivio incluso antes del normal map.
+  // Bumps de grano con variación por celda: hash determinista por
+  // (col, row) → cada grano tiene su propio tamaño. Los granos del tip
+  // son más pequeños (convergencia natural hacia la punta).
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
+  const COLS = 22, ROWS = 28;
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const r = Math.sqrt(v.x * v.x + v.z * v.z);
     if (r < 1e-4) continue;
     const theta = Math.atan2(v.z, v.x);
     const yNorm = (v.y + COB_HEIGHT / 2) / COB_HEIGHT;
-    // Patrón hex de 22 columnas × 28 filas (alineado con la textura)
-    const COLS = 22, ROWS = 28;
     const col = (theta / (Math.PI * 2)) * COLS;
     const stagger = (Math.floor(yNorm * ROWS) % 2) * 0.5;
     const colMod = (col + stagger) - Math.floor(col + stagger) - 0.5;
     const rowMod = (yNorm * ROWS) - Math.floor(yNorm * ROWS) - 0.5;
+
+    // Hash por celda (col, row) → variación estable de tamaño por grano
+    const colIdx = ((Math.floor(col + stagger) % COLS) + COLS) % COLS;
+    const rowIdx = Math.floor(yNorm * ROWS);
+    let h = (colIdx * 73856093) ^ (rowIdx * 19349663);
+    h = (h ^ (h >>> 13)) >>> 0;
+    const kernelRand = (h & 0xffff) / 0xffff;            // 0..1
+    const kernelScale = 0.55 + kernelRand * 0.75;        // 0.55..1.30 (algunos
+    // notoriamente más hinchados, otros más planos)
+    // Los granos del tip se hacen más pequeños (la punta de la mazorca real
+    // tiene granos enanos o subdesarrollados que se aplanan).
+    const tipFade = 1 - Math.pow(Math.max(0, yNorm - 0.72) / 0.28, 1.6) * 0.65;
     // Bumpear el grano hacia afuera con campana 2D
-    const bump = Math.exp(-(colMod * colMod + rowMod * rowMod) * 14) * 0.018;
+    const bump =
+      Math.exp(-(colMod * colMod + rowMod * rowMod) * 14) *
+      0.020 *
+      kernelScale *
+      Math.max(0.18, tipFade);
     const newR = r + bump;
     v.x = Math.cos(theta) * newR;
     v.z = Math.sin(theta) * newR;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+
+  // Curvatura sutil tipo "banana": rompe la perfecta simetría de revolución
+  // del Lathe. Amplitud pequeña (~3 mm sobre cob de 1.7 m) — apenas
+  // perceptible pero suficiente para que el ojo deje de leerlo como cilindro.
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const yNorm = (v.y + COB_HEIGHT / 2) / COB_HEIGHT;
+    v.x += Math.sin(yNorm * Math.PI) * 0.032;
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;

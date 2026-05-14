@@ -21,6 +21,18 @@ import {
 
 const RADIUS = 1.0;
 
+// Pseudo-ruido organico: suma de senoidales con frecuencias no harmónicas.
+// Evita los patrones regulares de sin*cos*sin (que dan una "rejilla" visible
+// en la superficie) y produce una deformación más parecida a una fruta real.
+function pseudoNoise(x, y, z) {
+  return (
+    Math.sin(x * 1.7 + y * 2.3 + z * 0.8) * 0.5 +
+    Math.sin(x * 0.6 + y * 1.3 + z * 2.1) * 0.4 +
+    Math.sin(x * 2.4 + y * 0.5 + z * 1.7) * 0.35 +
+    Math.cos(x * 3.1 + y * 1.9 + z * 2.6) * 0.25
+  ) / 1.5;
+}
+
 function buildRindGeometry() {
   const geo = new THREE.SphereGeometry(RADIUS, 192, 128);
   const pos = geo.attributes.position;
@@ -28,17 +40,34 @@ function buildRindGeometry() {
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const len = v.length();
-    // Pequeña deformación orgánica para que no parezca una esfera perfecta
-    const big =
-      Math.sin(v.x * 2.6) * Math.cos(v.y * 2.4) * Math.sin(v.z * 2.0) * 0.014 +
-      Math.sin(v.x * 6.1) * Math.cos(v.y * 5.7) * 0.004;
-    v.setLength(len + big);
+    const yNorm = v.y / len; // -1 polo sur, +1 polo norte
+
+    // Lobulos grandes (variación general del contorno) + detalle fino
+    const big = pseudoNoise(v.x * 1.25, v.y * 1.25, v.z * 1.25) * 0.045;
+    const fine = pseudoNoise(v.x * 4.6, v.y * 4.6, v.z * 4.6) * 0.012;
+
+    // Asimetría azimutal: un costado ligeramente más voluminoso que el otro.
+    // Fade en los polos para no deformar los extremos.
+    const azimuth = Math.atan2(v.z, v.x);
+    const sideBulge =
+      (Math.cos(azimuth + 0.3) * 0.55 + Math.sin(azimuth * 2 + 1.2) * 0.30) *
+      0.025 *
+      (1 - yNorm * yNorm);
+
+    // Hundimientos en los polos: stem-end (tallo) y blossom-end (flor).
+    // Power > 1 hace que sólo se note muy cerca del polo (transición suave).
+    const stemDip = Math.pow(Math.max(0, yNorm - 0.86), 1.4) * -0.55;
+    const blossomDip = Math.pow(Math.max(0, -yNorm - 0.90), 1.5) * -0.35;
+
+    v.setLength(len + big + fine + sideBulge + stemDip + blossomDip);
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
-  // Forma ovalada (sandía no es esfera perfecta)
-  geo.scale(1.02, 0.92, 1);
+  // Más oblonga (eje X) + sección transversal ovalada (X ≠ Z): vista desde
+  // arriba ya no es un círculo perfecto, sino una oval suave — coherente
+  // con las variedades alargadas reales de Citrullus lanatus.
+  geo.scale(1.10, 0.94, 0.96);
   return geo;
 }
 
