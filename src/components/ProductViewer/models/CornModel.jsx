@@ -19,33 +19,54 @@ import {
 // (algunas pulled-back) y barbas (silk) por la punta.
 // =====================================================
 
-const COB_HEIGHT = 1.7;
+// Proporciones más realistas: mazorca esbelta (ratio length:diameter ≈ 3:1).
+// Antes 1.7×0.96 (ratio 1.77:1) — demasiado ancha; ahora la diámetro real
+// final con granos protruidos es ~0.62, dando un ratio visual ~2.8:1, en
+// línea con el maíz fotográfico.
+const COB_HEIGHT = 1.75;
 // CORE_RADIUS = radio del olote (cob axis) donde se montan los granos.
 // Es menor que el radio visible final porque cada grano protruye desde
 // la superficie del core.
-const CORE_RADIUS = 0.38;
+const CORE_RADIUS = 0.26;
 // Densidad de granos: filas longitudinales × filas circunferenciales.
-// Real corn tiene 14-22 longitudinal rows; usamos 22 para densidad
-// visual estética. 28 ranks verticales para una mazorca alargada.
-const KERNEL_ROWS = 28;
-const KERNEL_COLS = 22;
-// Tamaño base del grano (radio de la esfera fuente antes de deformar)
-const KERNEL_R = 0.058;
+// 34 filas verticales (Fibonacci) × 18 columnas (par, encaja en el
+// nuevo perímetro). El maíz real tiene siempre filas en cantidad par
+// entre 12 y 22; 18 es típico para dent corn.
+const KERNEL_ROWS = 34;
+const KERNEL_COLS = 18;
+// Tamaño base del grano (radio de la esfera fuente antes de deformar).
+// Escalado proporcionalmente al CORE_RADIUS reducido para preservar
+// la relación grano/olote.
+const KERNEL_R = 0.044;
 
 function cobProfileAt(t) {
   // Perfil de la mazorca como función de la altura normalizada t∈[0,1].
   // Base con ramp-up corto (donde se atornilla al tallo), sección media
-  // casi cilíndrica con leve panza, hombro al ~78%, después taper hasta
-  // una punta redondeada. La MISMA función la usan el cob core (lathe)
-  // y el placement de granos para que ambos coincidan en superficie.
+  // casi cilíndrica con leve panza, hombro al ~82%, y después un DOMO
+  // redondeado (cuarto de elipse) que termina la mazorca en una punta
+  // suave — no en un cono ni en un disco plano. Es desde este domo,
+  // como prolongación natural del propio olote, que emergen las barbas.
+  // Antes el cob terminaba en un pico casi-cero y un casquete separado
+  // se colocaba encima — el resultado era un efecto "hongo" del que
+  // los silks parecían colgar. Ahora el domo ES la parte superior.
+  // La MISMA función la usan el cob core (lathe) y el placement de
+  // granos para que ambos coincidan en superficie.
   if (t < 0.10) {
     return 0.05 + Math.pow(t / 0.10, 0.65) * 0.89;
-  } else if (t < 0.78) {
-    const u = (t - 0.10) / 0.68;
+  } else if (t < 0.82) {
+    const u = (t - 0.10) / 0.72;
     return 0.94 + Math.sin(u * Math.PI) * 0.045 - Math.cos(u * 2.3 * Math.PI) * 0.010;
+  } else if (t < 0.94) {
+    // Hombro: taper gradual desde el cuerpo hasta el comienzo del domo
+    const u = (t - 0.82) / 0.12;
+    return 0.95 - u * 0.40 + Math.sin(u * Math.PI) * 0.02;
   } else {
-    const u = (t - 0.78) / 0.22;
-    return 0.95 * Math.pow(1 - u, 1.55) + 0.05 * (1 - u * u);
+    // Domo apical: cuarto de elipse convexo. Pendiente horizontal al
+    // empezar (hombro suave) y vertical al llegar al ápice (punta
+    // redondeada). De aquí emergen los silks como continuación del
+    // tejido del olote, no de un casquete pegado encima.
+    const u = (t - 0.94) / 0.06;
+    return 0.55 * Math.sqrt(Math.max(0, 1 - u * u));
   }
 }
 
@@ -134,14 +155,20 @@ function buildKernelInstanceData() {
   const paleColor = new THREE.Color('#fff5d6');
   const amberColor = new THREE.Color('#c98a35');
 
+  // Twist helicoidal sutil sobre las filas: ~7° de rotación total a lo
+  // largo de la mazorca. El maíz real tiene un leve giro filotáctico
+  // en sus filas; añade variación orgánica sin convertir las hileras
+  // rectas en espirales.
+  const HELIX_TWIST_TOTAL = 0.12;
+
   for (let row = 0; row < KERNEL_ROWS; row++) {
     const t = (row + 0.5) / KERNEL_ROWS;
-    // Bordes: dejamos un pequeño margen en base y punta donde el cob
-    // se cierra (allí no caben granos)
-    if (t < 0.05 || t > 0.95) continue;
+    // Bordes: dejamos un pequeño margen en la base, y en la punta los
+    // granos terminan ANTES de entrar al domo apical (zona de pelos).
+    if (t < 0.05 || t > 0.93) continue;
     const profile = cobProfileAt(t);
     const radius = CORE_RADIUS * Math.max(0.04, profile);
-    if (radius < CORE_RADIUS * 0.30) continue;
+    if (radius < CORE_RADIUS * 0.32) continue;
     const y = -COB_HEIGHT / 2 + t * COB_HEIGHT;
     // Inclinación tangente al perfil del cob — los granos en la base/punta
     // se "acuestan" sobre la curva del olote en lugar de salir horizontales
@@ -149,9 +176,10 @@ function buildKernelInstanceData() {
     const tiltAngle = Math.atan2(-slope, COB_HEIGHT);
 
     const stagger = (row % 2) * 0.5;
+    const helixOffset = t * HELIX_TWIST_TOTAL;
 
     for (let col = 0; col < KERNEL_COLS; col++) {
-      const angle = ((col + stagger) / KERNEL_COLS) * Math.PI * 2;
+      const angle = ((col + stagger) / KERNEL_COLS) * Math.PI * 2 + helixOffset;
 
       // Hash determinístico per-grano para tamaño, color y subdesarrollo
       const h1raw = Math.abs(Math.sin(row * 12.9898 + col * 78.233) * 43758.5453);
@@ -162,9 +190,9 @@ function buildKernelInstanceData() {
       const h3 = h3raw - Math.floor(h3raw);
 
       // Hacia la punta perdemos granos (la mazorca real no llena la corona)
-      if (t > 0.82) {
-        const tipChance = (t - 0.82) / 0.13;
-        if (h3 < tipChance * 0.70) continue;
+      if (t > 0.85) {
+        const tipChance = (t - 0.85) / 0.08;
+        if (h3 < tipChance * 0.75) continue;
       }
       // ~3% subdesarrollados (más pequeños, hundidos)
       const underdev = h1 < 0.03;
@@ -206,10 +234,10 @@ function buildKernelInstanceData() {
 }
 
 // Radio del cilindro virtual sobre el que se enrollan las hojas.
-// Apenas mayor que el envolvente de los granos (KERNEL surface ≈ 0.44).
-// Las hojas pegadas viven justo encima de este cilindro y se traslapan
-// unas con otras alrededor del eje del olote.
-const HUSK_WRAP_RADIUS = 0.49;
+// Apenas mayor que el envolvente de los granos (CORE_RADIUS + protrusión
+// del grano ≈ 0.31). Las hojas pegadas viven justo encima de este cilindro
+// y se traslapan unas con otras alrededor del eje del olote.
+const HUSK_WRAP_RADIUS = 0.34;
 
 function buildHuskGeometry({
   length = 1.55,
@@ -309,8 +337,8 @@ function buildHuskCollarGeometry() {
   // continuidad de tejido que conecta las brácteas con el pedúnculo.
   const segs = 96;
   const tubeSegs = 14;
-  const ringR = HUSK_WRAP_RADIUS + 0.005;
-  const tubeR = 0.085;
+  const ringR = HUSK_WRAP_RADIUS + 0.004;
+  const tubeR = 0.060;
   const positions = [];
   const uvs = [];
   const indices = [];
@@ -345,73 +373,61 @@ function buildHuskCollarGeometry() {
   return geo;
 }
 
-function buildSilkBaseGeometry() {
-  // Casquete carnoso en la punta del olote desde donde "brotan" los pelos.
-  // Sin este casquete las hebras aparecían colgando del aire. Lo
-  // construimos como semiesfera achatada justo encima del último anillo
-  // de granos, con un color cremoso-tostado que se mezcla entre el cob
-  // core y la base dorada de las barbas. Radio 0.22 para que cubra
-  // CON HOLGURA la zona de emergencia de las hebras (MAX_EMERGENCE_R
-  // = 0.13 en buildSilkGeometry) y la unión hair→cob se vea sólida.
-  const geo = new THREE.SphereGeometry(0.22, 32, 20, 0, Math.PI * 2, 0, Math.PI / 2);
-  const pos = geo.attributes.position;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i);
-    // Achatar verticalmente — casquete plano, no cúpula
-    v.y *= 0.46;
-    // Pequeña irregularidad: el casquete no es perfecto, tiene
-    // ondulaciones bajas-frecuencia que imitan los huecos entre granos.
-    const noise =
-      Math.sin(v.x * 14 + v.z * 11) * 0.006 +
-      Math.cos(v.x * 9 + v.z * 17) * 0.005;
-    v.y += noise;
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
-  pos.needsUpdate = true;
-  geo.computeVertexNormals();
-  return geo;
-}
-
 function buildSilkGeometry() {
-  // Mecha de barbas (silk / pelos de elote). Rediseñado para que el
-  // tuft se lea como un MANOJO COHESIVO emergiendo DESDE DENTRO del
-  // olote, no como hebras dispersas flotando alrededor:
-  // 1) TODAS las hebras emergen dentro del radio del casquete
-  //    (silkBaseGeometry, radio 0.22) — antes 35% salían de radio
-  //    0.18-0.30 quedando "fuera" del casquete visible.
-  // 2) Punto de emergencia hundido bajo la superficie del casquete:
-  //    la raíz queda OCULTA dentro del tejido cremoso y la hebra se
-  //    asoma como si brotara desde adentro.
-  // 3) Hebras agrupadas en clusters con dispersión angular pequeña
-  //    (~3°) para que dentro de cada grupo las hebras viajen casi
-  //    paralelas — patrón real de los estigmas.
-  // 4) Trayectoria dominada por cascada vertical (droop) con
-  //    apertura radial moderada: el tuft cae como una cabellera en
-  //    vez de explotar en abanico.
-  // 5) Color base verdoso (fresco) → cobre → rubio claro al extremo.
+  // Mecha de barbas (silk / pelos de elote). Rediseñada para que el
+  // tuft sea CONTINUACIÓN del propio olote, no un objeto pegado encima:
+  // 1) Las raíces de las hebras se entierran dentro del DOMO apical
+  //    del cob (cobProfileAt para t > 0.94). El material opaco del
+  //    olote oculta la raíz y la hebra emerge atravesando la superficie
+  //    del domo. Antes había un casquete (silkBaseGeometry) plantado
+  //    sobre la mazorca como si fuera un hongo — eliminado.
+  // 2) Los clusters se distribuyen en ESPIRAL DE FERMAT con incrementos
+  //    de ángulo áureo (~137.5°). Ésta es la filotaxis natural de los
+  //    estigmas reales: en el ápice de la inflorescencia los puntos de
+  //    inserción siguen el mismo patrón que los semillas de girasol.
+  //    r = √(c/C_max) × R_max distribuye los puntos uniformemente sin
+  //    los anillos concéntricos artificiales del muestreo polar normal.
+  // 3) Hebras agrupadas dentro de cada cluster con dispersión angular
+  //    pequeña (~3°) para que dentro de cada grupo viajen casi paralelas
+  //    — patrón real de los estigmas que comparten un mismo carpelo.
+  // 4) Trayectoria dominada por cascada vertical (droop) con apertura
+  //    radial moderada: el tuft cae como una cabellera, no explota
+  //    en abanico.
+  // 5) Color base verdoso → cobre → rubio claro al extremo.
   const strands = [];
   const colorRoot = new THREE.Color('#bfa874');  // base verdoso-tostada
   const colorMid = new THREE.Color('#d6b27a');   // cobre cálido
   const colorTip = new THREE.Color('#f3dba0');   // rubio claro
-  const CLUSTERS = 22;
-  const STRANDS_PER_CLUSTER = 11;
-  // Radio máximo del PUNTO DE EMERGENCIA: queda dentro del casquete
-  // (silkBase scaled radius ≈ 0.22) para que ninguna hebra parezca
-  // brotar del aire fuera del olote.
-  const MAX_EMERGENCE_R = 0.13;
-  // Y de emergencia: ligeramente por ENCIMA de la base del casquete
-  // (silkBase parte a y = COB_HEIGHT/2 - 0.04). Así la raíz queda
-  // OCULTA dentro de la cáscara opaca del casquete y la hebra se
-  // asoma desde el tejido — antes la raíz salía al aire por debajo.
-  const TOP_Y = COB_HEIGHT / 2 - 0.015;
+
+  // 21 clusters y 8 hebras/cluster — ambos números de Fibonacci.
+  // Total = 168 hebras: suficiente densidad para un manojo cohesivo
+  // sin saturar el ápice.
+  const CLUSTERS = 21;
+  const STRANDS_PER_CLUSTER = 8;
+  // Ángulo dorado en radianes (≈ 137.5°). Patrón filotáctico del
+  // ápice de la inflorescencia del maíz.
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+  // Radio máximo del PUNTO DE ANCLAJE de un cluster. El domo a la
+  // altura del anclaje tiene radio (CORE_RADIUS × profile) ≈ 0.13,
+  // así que con MAX_ANCHOR_R = 0.075 las raíces quedan ESTRICTAMENTE
+  // dentro del volumen opaco del olote.
+  const MAX_ANCHOR_R = 0.075;
+  // Altura del anclaje: dentro del domo apical, ligeramente bajo la
+  // superficie. La raíz queda oculta y la hebra sale por la
+  // intersección con la malla del olote.
+  const APEX_Y = COB_HEIGHT / 2 - 0.06;
+
   let strandIdx = 0;
   for (let c = 0; c < CLUSTERS; c++) {
-    const baseAngle = (c / CLUSTERS) * Math.PI * 2 + (Math.random() - 0.5) * 0.10;
-    // Cluster anclado en un único punto cercano al eje. Variación de
-    // radio modesta entre clusters; ningún cluster sale del casquete.
-    const baseR = 0.02 + Math.random() * MAX_EMERGENCE_R;
-    const baseY = TOP_Y + (Math.random() - 0.5) * 0.025;
+    // Espiral de Fermat: ángulo áureo por cluster, radio ∝ √c.
+    // Esto da una distribución uniforme y orgánica sin anillos.
+    const radialNorm = Math.sqrt(c / Math.max(1, CLUSTERS - 1));
+    const baseAngle = c * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.04;
+    const baseR = radialNorm * MAX_ANCHOR_R;
+    // El anclaje desciende ligeramente con el radio: el domo se
+    // curva hacia abajo, y enterramos los anclajes externos un
+    // poco más para que sigan la curvatura del tejido.
+    const baseY = APEX_Y - radialNorm * 0.030 + (Math.random() - 0.5) * 0.012;
 
     for (let s = 0; s < STRANDS_PER_CLUSTER; s++) {
       strandIdx++;
@@ -586,54 +602,60 @@ export default function CornModel() {
   const kernelGeometry = useMemo(buildKernelGeometry, []);
   const kernelInstances = useMemo(buildKernelInstanceData, []);
   const silkGeometry = useMemo(buildSilkGeometry, []);
-  const silkBaseGeometry = useMemo(buildSilkBaseGeometry, []);
 
-  // 12 hojas envolventes + 3 peeled-back. Las envolventes están
-  // espaciadas en pares de capas a radios ligeramente distintos para
-  // que se traslapen tangencialmente sin huecos (real corn husk overlap).
-  // Cada hoja cubre un sector angular ~110° y al haber muchas con
-  // rotaciones distribuidas, no hay punto del cob sin cobertura.
+  // Distribución filotáctica de las brácteas (hojas envolventes).
+  // En lugar de espaciarlas en ángulos uniformes (i / N · 2π) — que
+  // producían un patrón geométrico irreal con planos paralelos visibles —
+  // ahora cada hoja sucesiva se inserta con un offset de ÁNGULO ÁUREO
+  // (~137.5°) respecto a la anterior. Es la misma filotaxis que rige
+  // las hojas de las gramíneas en la naturaleza: ratios 8/13 ó 13/21.
+  // Los conteos (13 envolventes + 3 desplegadas) son números de Fibonacci.
+  // La VARIACIÓN de longitud, arco y baseY entre hojas no se sortea
+  // al azar: se deriva de la fase i/φ (mod 1), reusando la misma
+  // proporción áurea para que la irregularidad sea matemáticamente
+  // coherente con la distribución angular.
   const huskConfig = useMemo(
     () => {
+      const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+      const PHI = (1 + Math.sqrt(5)) / 2;
       const wrapping = [];
-      // Capa exterior: 7 hojas largas
-      const OUTER = 7;
-      for (let i = 0; i < OUTER; i++) {
+
+      const WRAP_COUNT = 13;
+      for (let i = 0; i < WRAP_COUNT; i++) {
+        // fase ∈ [0,1): fracción de i/φ — se distribuye uniformemente
+        // pero sin coincidir con periodos enteros, dando variación
+        // libre de patrones repetitivos visibles.
+        const phase = (i / PHI) - Math.floor(i / PHI);
+        // Capas alternadas en patrón de Fibonacci 1-1-2: dos exteriores
+        // seguidas por una interior recesada. La hoja interior rellena
+        // el hueco angular entre dos exteriores adyacentes.
+        const layer = i % 3 === 2 ? 1 : 0;
         wrapping.push({
-          peel: 0.03 + (i % 2) * 0.025,
-          length: 1.54 + (i % 3) * 0.04,
-          arcExtent: 0.95 + (i % 2) * 0.05,
-          angleOffset: (i / OUTER) * Math.PI * 2,
-          layer: 0,
-          baseY: -0.92 - (i % 3) * 0.01,
+          peel: 0.025 + (i % 2) * 0.022,
+          length: 1.40 + phase * 0.22,
+          arcExtent: 0.82 + (1 - phase) * 0.16,
+          angleOffset: i * GOLDEN_ANGLE,
+          layer,
+          baseY: -0.94 + phase * 0.06,
           baseTipFlare: 0,
         });
       }
-      // Capa intermedia: 5 hojas más cortas para rellenar gaps
-      const INNER = 5;
-      for (let i = 0; i < INNER; i++) {
+
+      // 3 hojas desplegadas (peeled-back) que abren para revelar granos.
+      // Distribuidas también por ángulo áureo desde una fase base
+      // descorrelacionada del wrapping (evita superposición exacta).
+      const PEEL_BASE = 0.7;
+      const peelSpecs = [
+        { peel: 0.78, length: 1.30, arcExtent: 0.85, baseY: -0.55, baseTipFlare: 0.25 },
+        { peel: 0.72, length: 1.22, arcExtent: 0.78, baseY: -0.52, baseTipFlare: 0.22 },
+        { peel: 0.82, length: 1.34, arcExtent: 0.82, baseY: -0.58, baseTipFlare: 0.28 },
+      ];
+      peelSpecs.forEach((spec, i) => {
         wrapping.push({
-          peel: 0.04 + (i % 2) * 0.02,
-          length: 1.40 + (i % 2) * 0.06,
-          arcExtent: 0.78 + (i % 2) * 0.06,
-          angleOffset: ((i + 0.5) / INNER) * Math.PI * 2,
-          layer: 1,
-          baseY: -0.88 - (i % 2) * 0.02,
-          baseTipFlare: 0,
+          ...spec,
+          angleOffset: PEEL_BASE + i * GOLDEN_ANGLE,
+          layer: 2,
         });
-      }
-      // Peeled-back: 3 hojas anchas que abren y revelan granos
-      wrapping.push({
-        peel: 0.78, length: 1.30, arcExtent: 0.85,
-        angleOffset: 0.5, layer: 2, baseY: -0.55, baseTipFlare: 0.25,
-      });
-      wrapping.push({
-        peel: 0.72, length: 1.22, arcExtent: 0.78,
-        angleOffset: 2.5, layer: 2, baseY: -0.50, baseTipFlare: 0.22,
-      });
-      wrapping.push({
-        peel: 0.82, length: 1.34, arcExtent: 0.82,
-        angleOffset: 4.6, layer: 2, baseY: -0.58, baseTipFlare: 0.28,
       });
       return wrapping;
     },
@@ -737,29 +759,13 @@ export default function CornModel() {
         />
       </instancedMesh>
 
-      {/* Casquete carnoso en la punta del olote — el "tejido" desde donde
-          brotan los pelos. Sin él los silks se veían suspendidos del aire.
-          Color cremoso-tostado que se mezcla con la base de las hebras. */}
-      <mesh
-        geometry={silkBaseGeometry}
-        position={[0, COB_HEIGHT / 2 - 0.04, 0]}
-        castShadow
-        receiveShadow
-      >
-        <meshPhysicalMaterial
-          color="#e8d39a"
-          roughness={0.65}
-          metalness={0}
-          sheen={0.6}
-          sheenColor="#f0d8a8"
-          sheenRoughness={0.45}
-          clearcoat={0.25}
-          clearcoatRoughness={0.5}
-          envMapIntensity={1.1}
-        />
-      </mesh>
-
-      {/* Barbas (silk) en la punta */}
+      {/* Barbas (silk) en la punta — emergen DESDE DENTRO del domo
+          apical del propio olote (cobProfileAt en t > 0.94). El
+          tejido opaco del cob oculta las raíces y las hebras se
+          asoman atravesando la superficie del domo como prolongación
+          natural del olote — NO desde un casquete separado encima.
+          Esto elimina el efecto "hongo" donde los silks parecían
+          colgar de una plataforma. */}
       <mesh geometry={silkGeometry} castShadow={false}>
         <meshPhysicalMaterial
           color="#ffffff"
