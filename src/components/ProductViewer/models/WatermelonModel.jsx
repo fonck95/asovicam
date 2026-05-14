@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
+  generateWatermelonSeedLayout,
   makeWatermelonColorTexture,
   makeWatermelonFleshTexture,
   makeWatermelonFleshNormalTexture,
@@ -164,31 +165,23 @@ function buildSliceRindGeometry() {
 // Posiciones realistas de semillas en una rebanada.
 // La Z se calcula respecto a la cara plana del slice (después del bevel,
 // ahora reducido a 0.010), con un offset pequeño para que las semillas
-// queden semi-embebidas en la pulpa.
+// queden semi-embebidas en la pulpa. Cada semilla recibe además un
+// micro-offset de profundidad determinístico (s.depthOffset) para que
+// no todas estén a la misma altura — algunas más expuestas que otras.
 const SEED_FRONT_Z = SLICE_DEPTH / 2 - 0.010 + 0.006;  // ~0.166
 const SEED_BACK_Z = -SEED_FRONT_Z;
 function generateSeedPositions() {
-  const seeds = [];
-  const rings = [
-    { r: SLICE_RADIUS * 0.42, count: 7 },
-    { r: SLICE_RADIUS * 0.58, count: 9 },
-    { r: SLICE_RADIUS * 0.74, count: 11 },
-  ];
-  for (const ring of rings) {
-    for (let i = 0; i < ring.count; i++) {
-      const t = (i + 0.5) / ring.count;
-      const a = Math.PI - t * Math.PI;
-      const jitter = (Math.random() - 0.5) * 0.04;
-      const x = Math.cos(a) * (ring.r + jitter);
-      const y = Math.sin(a) * (ring.r + jitter);
-      seeds.push({
-        position: [x, y, SEED_FRONT_Z],
-        rotation: [0, 0, a + Math.PI / 2 + (Math.random() - 0.5) * 0.4],
-        scale: 0.85 + Math.random() * 0.3,
-      });
-    }
-  }
-  return seeds;
+  // Layout placental compartido con la textura (asegura alineación
+  // exacta entre cada semilla 3D y la cavidad oscura pintada bajo ella).
+  return generateWatermelonSeedLayout().map((s) => ({
+    position: [
+      s.nx * SLICE_RADIUS,
+      s.ny * SLICE_RADIUS,
+      SEED_FRONT_Z + s.depthOffset,
+    ],
+    rotation: [0, 0, s.rotZ],
+    scale: s.scale,
+  }));
 }
 
 function buildSeedGeometry() {
