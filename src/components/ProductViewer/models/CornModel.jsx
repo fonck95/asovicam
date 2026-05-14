@@ -1,134 +1,208 @@
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
-  makeCornColorTexture,
-  makeCornNormalTexture,
-  makeCornRoughnessTexture,
   makeHuskAlphaTexture,
   makeHuskColorTexture,
   makeHuskNormalTexture,
 } from '../textures';
 
 // =====================================================
-// Maíz: mazorca lathe + textura procedural detallada de
-// granos (color + normal + roughness). Hojas (husks)
-// envolventes en la base — algunas pulled-back para
-// revelar los granos. Barbas (silk) saliendo por la punta.
+// Maíz: mazorca con geometría 3D real para CADA grano.
+// Antes los granos eran una textura 2D pintada sobre un
+// LatheGeometry casi-liso (cilindro). Ahora cada grano
+// es una malla 3D individual instanciada (InstancedMesh)
+// montada sobre un cob core cremoso. El resultado tiene
+// relieve volumétrico real — los granos proyectan sombra
+// unos sobre otros, reaccionan al ángulo de cámara y dejan
+// ver el olote entre filas. Hojas (husks) en la base
+// (algunas pulled-back) y barbas (silk) por la punta.
 // =====================================================
 
 const COB_HEIGHT = 1.7;
-const COB_RADIUS = 0.46;
+// CORE_RADIUS = radio del olote (cob axis) donde se montan los granos.
+// Es menor que el radio visible final porque cada grano protruye desde
+// la superficie del core.
+const CORE_RADIUS = 0.38;
+// Densidad de granos: filas longitudinales × filas circunferenciales.
+// Real corn tiene 14-22 longitudinal rows; usamos 22 para densidad
+// visual estética. 28 ranks verticales para una mazorca alargada.
+const KERNEL_ROWS = 28;
+const KERNEL_COLS = 22;
+// Tamaño base del grano (radio de la esfera fuente antes de deformar)
+const KERNEL_R = 0.058;
 
-function buildCobGeometry() {
+function cobProfileAt(t) {
+  // Perfil de la mazorca como función de la altura normalizada t∈[0,1].
+  // Base con ramp-up corto (donde se atornilla al tallo), sección media
+  // casi cilíndrica con leve panza, hombro al ~78%, después taper hasta
+  // una punta redondeada. La MISMA función la usan el cob core (lathe)
+  // y el placement de granos para que ambos coincidan en superficie.
+  if (t < 0.10) {
+    return 0.05 + Math.pow(t / 0.10, 0.65) * 0.89;
+  } else if (t < 0.78) {
+    const u = (t - 0.10) / 0.68;
+    return 0.94 + Math.sin(u * Math.PI) * 0.045 - Math.cos(u * 2.3 * Math.PI) * 0.010;
+  } else {
+    const u = (t - 0.78) / 0.22;
+    return 0.95 * Math.pow(1 - u, 1.55) + 0.05 * (1 - u * u);
+  }
+}
+
+function profileSlopeAt(t) {
+  // Derivada numérica del perfil — la usamos para inclinar los granos
+  // de modo que descansen tangentes al cob core (no perpendiculares al
+  // eje Y cuando la mazorca se afina).
+  const h = 0.005;
+  return (cobProfileAt(Math.min(1, t + h)) - cobProfileAt(Math.max(0, t - h))) / (2 * h);
+}
+
+function buildCobCoreGeometry() {
+  // Núcleo blanco/cremoso del olote. Sobre éste se montan los granos
+  // como mallas 3D individuales. Como el core queda mayormente cubierto,
+  // basta un lathe simple — sólo se verá entre los huecos de granos.
   const points = [];
-  const segs = 96;
+  const segs = 64;
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
     const y = -COB_HEIGHT / 2 + t * COB_HEIGHT;
-    // Perfil asimétrico (no un sin() perfecto): base con ramp-up corto,
-    // hombro definido al ~78%, después taper más pronunciado hasta una
-    // punta redondeada. Real corn cobs tienen un "shoulder" visible
-    // donde dejan de crecer los granos y empieza la cima.
-    let profile;
-    if (t < 0.10) {
-      // Base: rampa rápida desde el cabo donde se atorna al tallo
-      profile = 0.05 + Math.pow(t / 0.10, 0.65) * 0.89;
-    } else if (t < 0.78) {
-      // Sección media: casi diámetro completo, con una panza muy sutil
-      // hacia el centro y leves ondulaciones longitudinales (filas de granos)
-      const u = (t - 0.10) / 0.68;
-      profile = 0.94 + Math.sin(u * Math.PI) * 0.045 - Math.cos(u * 2.3 * Math.PI) * 0.010;
-    } else {
-      // Punta: taper más agresivo que la base + nubcita redondeada al final
-      const u = (t - 0.78) / 0.22;
-      profile = 0.95 * Math.pow(1 - u, 1.55) + 0.05 * (1 - u * u);
-    }
-    // Ondulación de filas de granos (muy sutil — el bulge real viene de
-    // los hex-tiles abajo en el bucle de vértices)
-    const ridges = Math.sin(t * 28 + 0.4) * 0.0035;
-    points.push(new THREE.Vector2(COB_RADIUS * Math.max(0.03, profile) + ridges, y));
+    const profile = cobProfileAt(t);
+    points.push(new THREE.Vector2(CORE_RADIUS * Math.max(0.03, profile), y));
   }
-  // Más segmentos radiales = los granos se ven con relieve real
-  const geo = new THREE.LatheGeometry(points, 192);
-
-  // Desplazamiento de vértices con tres capas:
-  //   1) Lóbulos azimutales suaves — rompe la simetría rotacional perfecta
-  //      (una mazorca real nunca es exactamente circular en corte).
-  //   2) Hex-tiles de granos con variación per-grano de tamaño (algunos
-  //      más hinchados, algunos subdesarrollados — patrón "natural").
-  //   3) Bend longitudinal muy ligero (las mazorcas no son perfectamente
-  //      rectas; siempre hay una leve curvatura por el crecimiento).
-  // POLISH (Prompt 1): además, asignamos color per-vertex para que ~10%
-  // de los granos se sesguen hacia ámbar maduro (#d4a843) y otro pequeño
-  // % hacia crema pálida (#fef3c7) — la textura procedural pinta el
-  // grano base, y `vertexColors:true` lo multiplica para darle el matiz
-  // de madurez sin necesitar instances ni segundo material.
-  const pos = geo.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
-  // Inicializamos blanco (multiplicador neutro) — la textura manda
-  for (let i = 0; i < colors.length; i++) colors[i] = 1.0;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i);
-    const r = Math.sqrt(v.x * v.x + v.z * v.z);
-    if (r < 1e-4) continue;
-    const theta = Math.atan2(v.z, v.x);
-    const yNorm = (v.y + COB_HEIGHT / 2) / COB_HEIGHT;
-
-    // (1) Lóbulos azimutales: 3 ondas anchas + 7 ondas finas
-    // — fade hacia los extremos (donde se cierra el cob)
-    const lobeFade = Math.sin(yNorm * Math.PI);
-    const azimuthal = (Math.cos(theta * 3 + 0.7) * 0.013 +
-                       Math.cos(theta * 7 - 0.3) * 0.005) * lobeFade;
-
-    // (2) Hex-tiles de granos con variación per-grano
-    const COLS = 22, ROWS = 28;
-    const col = (theta / (Math.PI * 2)) * COLS;
-    const rowIdx = Math.floor(yNorm * ROWS);
-    const stagger = (rowIdx % 2) * 0.5;
-    const colIdx = Math.floor(col + stagger);
-    const colMod = (col + stagger) - colIdx - 0.5;
-    const rowMod = (yNorm * ROWS) - rowIdx - 0.5;
-    // Hash determinístico → tamaño per-grano (0.78–1.13×)
-    const h = Math.abs(Math.sin(rowIdx * 12.9898 + colIdx * 78.233) * 43758.5453);
-    const rand = h - Math.floor(h);
-    const kernelScale = 0.78 + rand * 0.35;
-    // ~4% de granos "subdesarrollados" (más chicos)
-    const underdev = rand < 0.04 ? 0.45 : 1.0;
-    const bump = Math.exp(-(colMod * colMod + rowMod * rowMod) * 14) * 0.020 * kernelScale * underdev;
-
-    const newR = r + bump + azimuthal;
-
-    // (3) Bend longitudinal muy leve (campana centrada en el medio)
-    const bend = (1 - Math.pow(Math.abs(yNorm * 2 - 1), 2)) * -0.018;
-
-    v.x = Math.cos(theta) * newR + bend;
-    v.z = Math.sin(theta) * newR;
-    pos.setXYZ(i, v.x, v.y, v.z);
-
-    // Color de madurez per-grano. Otro hash independiente para no
-    // correlacionar madurez con tamaño (en la mazorca real son
-    // procesos distintos: tamaño = espacio disponible, madurez =
-    // tiempo de exposición a azúcares).
-    const matH = Math.abs(Math.sin(rowIdx * 7.31 + colIdx * 41.17) * 24631.7);
-    const matR = matH - Math.floor(matH);
-    let cr = 1.0, cg = 1.0, cb = 1.0;
-    if (matR < 0.10) {
-      // 10% maduro → ámbar (#d4a843 ÷ #f5d76e ≈ 0.86,0.79,0.62)
-      cr = 0.86; cg = 0.79; cb = 0.62;
-    } else if (matR < 0.16) {
-      // 6% lechoso joven → ligeramente más pálido
-      cr = 1.04; cg = 1.03; cb = 1.0;
-    }
-    colors[i * 3 + 0] = cr;
-    colors[i * 3 + 1] = cg;
-    colors[i * 3 + 2] = cb;
-  }
-  pos.needsUpdate = true;
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const geo = new THREE.LatheGeometry(points, 80);
   geo.computeVertexNormals();
   return geo;
+}
+
+function buildKernelGeometry() {
+  // Geometría base de UN grano de maíz. Forma de gota: espalda aplanada
+  // (toca el cob), corona redondeada bulging hacia afuera, base más
+  // estrecha (germen). Coordenadas locales:
+  //   +X = afuera (radial), -X = pegado al cob
+  //   +Y = arriba (corona), -Y = abajo (germen)
+  //   ±Z = lateral (filas adyacentes)
+  // Después del build, trasladamos para que la cara posterior quede
+  // anclada en X=0 — así al posicionar el grano en (r·cosθ, y, r·sinθ)
+  // la espalda toca exactamente la superficie del core de radio r.
+  const geo = new THREE.SphereGeometry(KERNEL_R, 14, 10);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  const backScale = 0.30;   // factor de aplastado de la espalda
+  const frontScale = 1.08;  // factor de protrusión de la corona
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const yNorm = v.y / KERNEL_R; // -1..1
+    if (v.x < 0) {
+      v.x *= backScale;
+    } else {
+      v.x *= frontScale;
+    }
+    // Estirar verticalmente — el grano es más alto que ancho
+    v.y *= 1.32;
+    // Taper hacia el germen
+    const taper = yNorm < 0 ? 0.55 + (1 + yNorm) * 0.45 : 1.0;
+    v.z *= taper;
+    if (v.x > 0) v.x *= taper;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  // Anclar la espalda en X=0
+  const backOffset = KERNEL_R * backScale;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setX(i, pos.getX(i) + backOffset);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function buildKernelInstanceData() {
+  // Lista de transformaciones por grano. Para cada celda de la grilla
+  // staggered (filas alternadas con offset 0.5 — patrón hexagonal real)
+  // calculamos posición sobre la superficie del cob core, orientación
+  // tangente al perfil del cob y color con variación de madurez.
+  const items = [];
+  const palette = [
+    new THREE.Color('#fcd34d'),
+    new THREE.Color('#fbbf24'),
+    new THREE.Color('#f59e0b'),
+    new THREE.Color('#fde68a'),
+    new THREE.Color('#fef3c7'),
+    new THREE.Color('#facc15'),
+    new THREE.Color('#eab308'),
+    new THREE.Color('#d4a843'),
+  ];
+  const paleColor = new THREE.Color('#fff5d6');
+  const amberColor = new THREE.Color('#c98a35');
+
+  for (let row = 0; row < KERNEL_ROWS; row++) {
+    const t = (row + 0.5) / KERNEL_ROWS;
+    // Bordes: dejamos un pequeño margen en base y punta donde el cob
+    // se cierra (allí no caben granos)
+    if (t < 0.05 || t > 0.95) continue;
+    const profile = cobProfileAt(t);
+    const radius = CORE_RADIUS * Math.max(0.04, profile);
+    if (radius < CORE_RADIUS * 0.30) continue;
+    const y = -COB_HEIGHT / 2 + t * COB_HEIGHT;
+    // Inclinación tangente al perfil del cob — los granos en la base/punta
+    // se "acuestan" sobre la curva del olote en lugar de salir horizontales
+    const slope = profileSlopeAt(t) * CORE_RADIUS;
+    const tiltAngle = Math.atan2(-slope, COB_HEIGHT);
+
+    const stagger = (row % 2) * 0.5;
+
+    for (let col = 0; col < KERNEL_COLS; col++) {
+      const angle = ((col + stagger) / KERNEL_COLS) * Math.PI * 2;
+
+      // Hash determinístico per-grano para tamaño, color y subdesarrollo
+      const h1raw = Math.abs(Math.sin(row * 12.9898 + col * 78.233) * 43758.5453);
+      const h1 = h1raw - Math.floor(h1raw);
+      const h2raw = Math.abs(Math.sin(row * 41.17 + col * 7.31) * 24631.7);
+      const h2 = h2raw - Math.floor(h2raw);
+      const h3raw = Math.abs(Math.sin(row * 5.37 + col * 19.4) * 17311.3);
+      const h3 = h3raw - Math.floor(h3raw);
+
+      // Hacia la punta perdemos granos (la mazorca real no llena la corona)
+      if (t > 0.82) {
+        const tipChance = (t - 0.82) / 0.13;
+        if (h3 < tipChance * 0.70) continue;
+      }
+      // ~3% subdesarrollados (más pequeños, hundidos)
+      const underdev = h1 < 0.03;
+
+      // Tamaños: escala radial (profundidad), vertical, y arc-tangencial.
+      // arcWidth = espaciado real entre granos adyacentes en la fila;
+      // dividir entre KERNEL_R*1.9 deja un pequeño solape tangencial
+      // — los granos en mazorca real se aprietan unos contra otros.
+      const arcWidth = (2 * Math.PI * radius) / KERNEL_COLS;
+      const scaleX = (0.88 + h1 * 0.22) * (underdev ? 0.50 : 1);
+      const scaleY = (0.92 + h2 * 0.20) * (underdev ? 0.55 : 1);
+      const scaleZ = (arcWidth / (KERNEL_R * 1.85)) * (0.94 + h2 * 0.12) * (underdev ? 0.55 : 1);
+
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+
+      // Color: paleta amarilla/dorada + variación de madurez
+      let baseColor = palette[Math.floor(h2 * palette.length)].clone();
+      // ~8% ámbar maduro
+      if (h1 > 0.92) baseColor = baseColor.clone().lerp(amberColor, 0.6);
+      // Granos cerca de los extremos un poco más pálidos (lechosos)
+      const edgeFade = Math.abs(t - 0.5) * 2;
+      if (edgeFade > 0.55) {
+        baseColor.lerp(paleColor, (edgeFade - 0.55) * 0.45);
+      }
+
+      items.push({
+        x, y, z,
+        angle,
+        tiltAngle,
+        scaleX,
+        scaleY,
+        scaleZ,
+        color: baseColor,
+      });
+    }
+  }
+  return items;
 }
 
 function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
@@ -186,29 +260,18 @@ function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
 }
 
 function buildSilkGeometry() {
-  // Mecha de barbas (silk / pelos de elote). POLISH (Prompt 1):
-  //   - densidad subida a ~140 hebras: una mazorca tiene cientos, pero
-  //     >150 satura el draw y los pelos quedan apelmazados.
-  //   - cada hebra tiene 4 control points (start, neck, mid, tip) en
-  //     lugar de 3 → la curva cae con un "drop" más suave y orgánico
-  //     (no parecen alambres rectos).
-  //   - tubeRadius decrece desde la base hasta la punta (taper) — los
-  //     estigmas reales son más gruesos donde emergen del cob.
-  //   - color per-vertex con gradiente #d4a574 (base, cobrizo) →
-  //     #f0d5a0 (punta, rubio claro). El material consume esto vía
-  //     vertexColors:true para evitar uniformidad plástica.
+  // Mecha de barbas (silk / pelos de elote). Cada hebra es un tubo con
+  // 4 control points (start, neck, mid, tip) → curva orgánica con drop
+  // natural. Radio decreciente (taper) y gradiente cobrizo→rubio claro.
   const strands = [];
   const colorBase = new THREE.Color('#d4a574');
   const colorTip = new THREE.Color('#f0d5a0');
   const STRANDS = 140;
   for (let i = 0; i < STRANDS; i++) {
-    // Ángulo con jitter — anchos contra el ápice del cob, no en círculo perfecto
     const angle = (i / STRANDS) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
     const droop = 0.30 + Math.random() * 0.65;
     const sway = (Math.random() - 0.5) * 0.32;
     const length = 0.45 + Math.random() * 0.55;
-    // El radio de emergencia varía: algunos pelos brotan más adentro,
-    // otros del borde, para evitar que todos salgan del mismo aro
     const emerge = 0.015 + Math.random() * 0.05;
 
     const start = new THREE.Vector3(
@@ -233,7 +296,7 @@ function buildSilkGeometry() {
     );
     const curve = new THREE.CatmullRomCurve3([start, neck, mid, tip]);
     const tubularSegments = 16;
-    const radialSegments = 4; // muy delgado — radial 4 es suficiente
+    const radialSegments = 4;
     const tube = new THREE.TubeGeometry(
       curve,
       tubularSegments,
@@ -242,17 +305,14 @@ function buildSilkGeometry() {
       false,
     );
 
-    // El TubeGeometry no soporta radio variable; aplicamos taper a mano:
-    // escalamos cada vértice perpendicular al eje proporcional a (1 - t)^0.6
-    // donde t es la posición a lo largo de la tube (0 base → 1 punta).
+    // Taper a mano sobre los anillos del tubo
     const tp = tube.attributes.position;
     const verts = tp.count;
     const ringsCount = tubularSegments + 1;
-    const ringSize = verts / ringsCount; // radial + cap verts
+    const ringSize = verts / ringsCount;
     for (let r = 0; r <= tubularSegments; r++) {
       const t = r / tubularSegments;
       const taper = Math.max(0.35, Math.pow(1 - t, 0.55));
-      // Punto sobre la curva (el "centro" del anillo)
       const center = curve.getPoint(t);
       const ringStart = Math.floor(r * ringSize);
       const ringEnd = Math.floor((r + 1) * ringSize);
@@ -274,7 +334,6 @@ function buildSilkGeometry() {
     tp.needsUpdate = true;
     tube.computeVertexNormals();
 
-    // Vertex color per-strand: base oscura → punta clara
     const tubeColors = new Float32Array(verts * 3);
     const tmp = new THREE.Color();
     for (let r = 0; r <= tubularSegments; r++) {
@@ -320,7 +379,6 @@ function mergeBufferGeometries(geos) {
       if (g.attributes.color) {
         colors.set(g.attributes.color.array, cOff);
       } else {
-        // Fill blanco para geometrías sin color
         colors.fill(1, cOff, cOff + p.length);
       }
       cOff += p.length;
@@ -344,8 +402,11 @@ function mergeBufferGeometries(geos) {
 
 export default function CornModel() {
   const groupRef = useRef(null);
+  const kernelMeshRef = useRef(null);
 
-  const cobGeometry = useMemo(buildCobGeometry, []);
+  const cobCoreGeometry = useMemo(buildCobCoreGeometry, []);
+  const kernelGeometry = useMemo(buildKernelGeometry, []);
+  const kernelInstances = useMemo(buildKernelInstanceData, []);
   const silkGeometry = useMemo(buildSilkGeometry, []);
 
   // 6 hojas: 4 pegadas + 2 pulled-back (revelan los granos)
@@ -355,8 +416,8 @@ export default function CornModel() {
       { peel: 0.15, length: 1.5, width: 0.42 },
       { peel: 0.12, length: 1.55, width: 0.46 },
       { peel: 0.18, length: 1.48, width: 0.44 },
-      { peel: 0.85, length: 1.4, width: 0.48 }, // pulled-back
-      { peel: 0.7, length: 1.35, width: 0.42 },  // pulled-back
+      { peel: 0.85, length: 1.4, width: 0.48 },
+      { peel: 0.7, length: 1.35, width: 0.42 },
     ],
     [],
   );
@@ -365,12 +426,44 @@ export default function CornModel() {
     [huskConfig],
   );
 
-  const cornColor = useMemo(makeCornColorTexture, []);
-  const cornNormal = useMemo(makeCornNormalTexture, []);
-  const cornRoughness = useMemo(makeCornRoughnessTexture, []);
   const huskColor = useMemo(makeHuskColorTexture, []);
   const huskNormal = useMemo(makeHuskNormalTexture, []);
   const huskAlpha = useMemo(makeHuskAlphaTexture, []);
+
+  // Aplicamos las matrices y colores de cada instancia tras montar el
+  // InstancedMesh. Cada grano se compone como: trasladar a la posición
+  // sobre el cob → girar en Y para que +X mire radialmente afuera → tilt
+  // alrededor de la tangente para acostarse en el perfil curvado → escalar.
+  useLayoutEffect(() => {
+    const mesh = kernelMeshRef.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    const tBase = new THREE.Matrix4();
+    const rY = new THREE.Matrix4();
+    const rTilt = new THREE.Matrix4();
+    const sM = new THREE.Matrix4();
+    for (let i = 0; i < kernelInstances.length; i++) {
+      const item = kernelInstances[i];
+      // 1) Escala local en el grano (depth, height, tangential width)
+      sM.makeScale(item.scaleX, item.scaleY, item.scaleZ);
+      // 2) Tilt sobre el eje Z local (gira en plano X-Y) — acuesta el
+      //    grano para que su +X se incline con el perfil del cob
+      rTilt.makeRotationZ(item.tiltAngle);
+      // 3) Yaw en Y para apuntar el +X radialmente afuera en el ángulo θ
+      rY.makeRotationY(-item.angle);
+      // 4) Trasladar al punto de la superficie del cob core
+      tBase.makeTranslation(item.x, item.y, item.z);
+      // Compose: T · Ry · Rt · S
+      m.multiplyMatrices(tBase, rY);
+      m.multiply(rTilt);
+      m.multiply(sM);
+      mesh.setMatrixAt(i, m);
+      mesh.setColorAt(i, item.color);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [kernelInstances]);
 
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
@@ -379,36 +472,47 @@ export default function CornModel() {
 
   return (
     <group ref={groupRef} rotation={[0, 0.3, 0]}>
-      {/* Mazorca. POLISH: vertexColors:true para que el atributo `color`
-          (madurez 10% ámbar / lechoso) module el albedo de la textura. */}
-      <mesh geometry={cobGeometry} castShadow receiveShadow>
+      {/* Cob core (olote) — eje cremoso visible entre las filas de granos */}
+      <mesh geometry={cobCoreGeometry} castShadow receiveShadow>
         <meshPhysicalMaterial
-          map={cornColor}
-          normalMap={cornNormal}
-          normalScale={[1.5, 1.5]}
-          roughnessMap={cornRoughness}
-          roughness={0.45}
+          color="#efe0b4"
+          roughness={0.78}
+          metalness={0}
+          sheen={0.18}
+          sheenColor="#fff5dc"
+          sheenRoughness={0.6}
+          clearcoat={0.15}
+          clearcoatRoughness={0.55}
+        />
+      </mesh>
+
+      {/* Granos: cada uno es una malla 3D real (no textura) instanciada.
+          El color base lo aporta cada instancia vía setColorAt. */}
+      <instancedMesh
+        ref={kernelMeshRef}
+        args={[kernelGeometry, undefined, kernelInstances.length]}
+        castShadow
+        receiveShadow
+      >
+        <meshPhysicalMaterial
+          color="#ffffff"
+          roughness={0.40}
           metalness={0.02}
           clearcoat={0.85}
           clearcoatRoughness={0.18}
           envMapIntensity={1.25}
-          sheen={0.25}
+          sheen={0.30}
           sheenColor="#fef3c7"
           sheenRoughness={0.55}
-          // SSS sutil — los granos lácteos dejan pasar algo de luz
-          transmission={0.05}
-          thickness={0.15}
+          transmission={0.06}
+          thickness={0.12}
           attenuationColor="#fbbf24"
           attenuationDistance={0.4}
           ior={1.42}
-          vertexColors
         />
-      </mesh>
+      </instancedMesh>
 
-      {/* Barbas (silk). POLISH: vertexColors para el gradiente base→tip
-          (#d4a574 → #f0d5a0). transmission alta + thickness bajo para la
-          translucidez capilar característica del estigma de maíz.
-          sheen alto con sheenColor cálido refuerza el "brillo seda". */}
+      {/* Barbas (silk) en la punta */}
       <mesh geometry={silkGeometry} castShadow={false}>
         <meshPhysicalMaterial
           color="#ffffff"
@@ -440,9 +544,9 @@ export default function CornModel() {
             key={i}
             geometry={huskGeometries[i]}
             position={[
-              Math.cos(angle) * COB_RADIUS * 0.7,
+              Math.cos(angle) * CORE_RADIUS * 0.9,
               -COB_HEIGHT * 0.45,
-              Math.sin(angle) * COB_RADIUS * 0.7,
+              Math.sin(angle) * CORE_RADIUS * 0.9,
             ]}
             rotation={[tilt, angle + Math.PI / 2, 0]}
             scale={scale}
