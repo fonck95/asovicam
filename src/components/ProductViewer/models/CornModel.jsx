@@ -346,19 +346,20 @@ function buildHuskCollarGeometry() {
 }
 
 function buildSilkBaseGeometry() {
-  // Casquete suave en la punta del olote desde donde "brotan" los pelos.
+  // Casquete carnoso en la punta del olote desde donde "brotan" los pelos.
   // Sin este casquete las hebras aparecían colgando del aire. Lo
   // construimos como semiesfera achatada justo encima del último anillo
   // de granos, con un color cremoso-tostado que se mezcla entre el cob
-  // core y la base dorada de las barbas. Aporta la cohesión visual
-  // hair-to-body que faltaba.
-  const geo = new THREE.SphereGeometry(0.20, 28, 18, 0, Math.PI * 2, 0, Math.PI / 2);
+  // core y la base dorada de las barbas. Radio 0.22 para que cubra
+  // CON HOLGURA la zona de emergencia de las hebras (MAX_EMERGENCE_R
+  // = 0.13 en buildSilkGeometry) y la unión hair→cob se vea sólida.
+  const geo = new THREE.SphereGeometry(0.22, 32, 20, 0, Math.PI * 2, 0, Math.PI / 2);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     // Achatar verticalmente — casquete plano, no cúpula
-    v.y *= 0.42;
+    v.y *= 0.46;
     // Pequeña irregularidad: el casquete no es perfecto, tiene
     // ondulaciones bajas-frecuencia que imitan los huecos entre granos.
     const noise =
@@ -373,75 +374,86 @@ function buildSilkBaseGeometry() {
 }
 
 function buildSilkGeometry() {
-  // Mecha de barbas (silk / pelos de elote). Mejorado para realismo:
-  // 1) Las hebras emergen desde un ÁREA distribuida en la punta del
-  //    olote (no de un solo punto-axial) — algunas de cerca del axis,
-  //    otras desde las "grietas" entre los granos del último anillo,
-  //    cubriendo radios hasta 0.30.
-  // 2) Hay 3 longitudes coexistentes: stubby (cortas, recién emergidas),
-  //    medianas y largas (maduras y caídas) — el efecto es de tuft
-  //    capilar tridimensional, no plumero plano.
-  // 3) Las hebras se agrupan en clusters: bunches angulares con
-  //    pequeña dispersión interna; refleja como crecen los estigmas
-  //    realmente (hilo por kernel, agrupados por filas).
-  // 4) Color base ligeramente verdoso cerca del olote (fresco) →
-  //    cobrizo en medio → rubio claro al extremo (gradiente fotográfico).
+  // Mecha de barbas (silk / pelos de elote). Rediseñado para que el
+  // tuft se lea como un MANOJO COHESIVO emergiendo DESDE DENTRO del
+  // olote, no como hebras dispersas flotando alrededor:
+  // 1) TODAS las hebras emergen dentro del radio del casquete
+  //    (silkBaseGeometry, radio 0.22) — antes 35% salían de radio
+  //    0.18-0.30 quedando "fuera" del casquete visible.
+  // 2) Punto de emergencia hundido bajo la superficie del casquete:
+  //    la raíz queda OCULTA dentro del tejido cremoso y la hebra se
+  //    asoma como si brotara desde adentro.
+  // 3) Hebras agrupadas en clusters con dispersión angular pequeña
+  //    (~3°) para que dentro de cada grupo las hebras viajen casi
+  //    paralelas — patrón real de los estigmas.
+  // 4) Trayectoria dominada por cascada vertical (droop) con
+  //    apertura radial moderada: el tuft cae como una cabellera en
+  //    vez de explotar en abanico.
+  // 5) Color base verdoso (fresco) → cobre → rubio claro al extremo.
   const strands = [];
   const colorRoot = new THREE.Color('#bfa874');  // base verdoso-tostada
   const colorMid = new THREE.Color('#d6b27a');   // cobre cálido
   const colorTip = new THREE.Color('#f3dba0');   // rubio claro
-  const CLUSTERS = 26;
-  const STRANDS_PER_CLUSTER = 9;
+  const CLUSTERS = 22;
+  const STRANDS_PER_CLUSTER = 11;
+  // Radio máximo del PUNTO DE EMERGENCIA: queda dentro del casquete
+  // (silkBase scaled radius ≈ 0.22) para que ninguna hebra parezca
+  // brotar del aire fuera del olote.
+  const MAX_EMERGENCE_R = 0.13;
+  // Y de emergencia: ligeramente por ENCIMA de la base del casquete
+  // (silkBase parte a y = COB_HEIGHT/2 - 0.04). Así la raíz queda
+  // OCULTA dentro de la cáscara opaca del casquete y la hebra se
+  // asoma desde el tejido — antes la raíz salía al aire por debajo.
+  const TOP_Y = COB_HEIGHT / 2 - 0.015;
   let strandIdx = 0;
   for (let c = 0; c < CLUSTERS; c++) {
-    const baseAngle = (c / CLUSTERS) * Math.PI * 2 + (Math.random() - 0.5) * 0.16;
-    // El cluster nace desde una posición en la zona superior del olote.
-    // El radio del PUNTO DE EMERGENCIA varía: la mayoría sale de cerca
-    // del axis (donde el olote ya no tiene granos), pero un tercio sale
-    // de la "corona" — entre los kernels del último anillo.
-    const fromCorona = Math.random() < 0.35;
-    const baseR = fromCorona
-      ? 0.18 + Math.random() * 0.12   // entre kernels
-      : 0.03 + Math.random() * 0.10;  // de la zona axial
-    const baseY = fromCorona
-      ? COB_HEIGHT / 2 - 0.04 - Math.random() * 0.05
-      : COB_HEIGHT / 2 - 0.02 + Math.random() * 0.04;
+    const baseAngle = (c / CLUSTERS) * Math.PI * 2 + (Math.random() - 0.5) * 0.10;
+    // Cluster anclado en un único punto cercano al eje. Variación de
+    // radio modesta entre clusters; ningún cluster sale del casquete.
+    const baseR = 0.02 + Math.random() * MAX_EMERGENCE_R;
+    const baseY = TOP_Y + (Math.random() - 0.5) * 0.025;
 
     for (let s = 0; s < STRANDS_PER_CLUSTER; s++) {
       strandIdx++;
-      const localScatter = (Math.random() - 0.5) * 0.18;
+      // Dispersión angular interna ~±3° — el cluster luce como una
+      // pequeña mecha cohesiva, no como rayos divergentes.
+      const localScatter = (Math.random() - 0.5) * 0.06;
       const angle = baseAngle + localScatter;
-      // Longitudes mezcladas en cada cluster: 25% stubby, 55% mid, 20% larga
+      // Longitudes con menos variación que antes (sin stubby muy cortas
+      // que rompían la unidad del tuft). La mayoría medianas-largas.
       let length;
       const lengthRand = Math.random();
-      if (lengthRand < 0.25) length = 0.10 + Math.random() * 0.18;      // stubby
-      else if (lengthRand < 0.80) length = 0.45 + Math.random() * 0.32;  // mid
-      else length = 0.80 + Math.random() * 0.40;                          // larga
+      if (lengthRand < 0.18) length = 0.32 + Math.random() * 0.16;       // semi-corta
+      else if (lengthRand < 0.78) length = 0.55 + Math.random() * 0.28;  // mid
+      else length = 0.85 + Math.random() * 0.30;                          // larga
 
-      const droop = 0.20 + Math.random() * 0.40;
-      const sway = (Math.random() - 0.5) * 0.20;
-      const radialJit = (Math.random() - 0.5) * 0.025;
+      const droop = 0.45 + Math.random() * 0.35;
+      const sway = (Math.random() - 0.5) * 0.10;
+      const radialJit = (Math.random() - 0.5) * 0.012;
       const startR = baseR + radialJit;
 
+      // Apertura radial reducida: el tuft cae más que abre.
+      // Antes: tip radial = startR + 0.18 + droop·0.42 (≈ startR+0.35)
+      // Ahora: tip radial = startR + 0.07 + droop·0.20 (≈ startR+0.16)
       const start = new THREE.Vector3(
         Math.cos(angle) * startR,
         baseY,
         Math.sin(angle) * startR,
       );
       const neck = new THREE.Vector3(
-        Math.cos(angle) * (startR + 0.015 + length * 0.06),
-        baseY + length * 0.22,
-        Math.sin(angle) * (startR + 0.015 + length * 0.06),
+        Math.cos(angle) * (startR + 0.010 + length * 0.04),
+        baseY + length * 0.28,
+        Math.sin(angle) * (startR + 0.010 + length * 0.04),
       );
       const mid = new THREE.Vector3(
-        Math.cos(angle) * (startR + 0.08 + droop * 0.20) + sway * 0.42,
-        baseY + length * 0.62,
-        Math.sin(angle) * (startR + 0.08 + droop * 0.20) + sway * 0.42,
+        Math.cos(angle) * (startR + 0.035 + droop * 0.10) + sway * 0.30,
+        baseY + length * 0.65,
+        Math.sin(angle) * (startR + 0.035 + droop * 0.10) + sway * 0.30,
       );
       const tip = new THREE.Vector3(
-        Math.cos(angle) * (startR + 0.18 + droop * 0.42) + sway * 0.95,
-        baseY + length - droop * 0.20,
-        Math.sin(angle) * (startR + 0.18 + droop * 0.42) + sway * 0.95,
+        Math.cos(angle) * (startR + 0.070 + droop * 0.20) + sway * 0.65,
+        baseY + length - droop * 0.28,
+        Math.sin(angle) * (startR + 0.070 + droop * 0.20) + sway * 0.65,
       );
       const curve = new THREE.CatmullRomCurve3([start, neck, mid, tip]);
       const tubularSegments = 14;
