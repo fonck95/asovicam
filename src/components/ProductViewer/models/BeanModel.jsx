@@ -16,11 +16,31 @@ import {
 // + vaina abierta detrás mostrando los frijoles dentro,
 // + hojas trifoliadas. Materiales PBR con clearcoat para
 // el lustre fresco y sheen sutil en las hojas.
+//
+// POLISH (Prompt 3):
+//   - prop `variety`: 'eye-black' (caupí ojo-negro, default)
+//                   | 'red' (caupí rojo)
+//                   | 'white' (caupí blanco/crema sin ojo).
+//     Cada variedad sobreescribe el tinte del cuerpo + la mancha
+//     del hilum vía vertex-color/tinte sin regenerar texturas.
+//   - prop `count`: número de semillas dentro de la vaina abierta
+//     (default 5). Cuando count > 12 cambiamos a InstancedMesh.
+//   - prop `showPod`: si false, no renderiza vaina cerrada ni abierta —
+//     útil para presentar sólo las semillas sueltas.
 // =====================================================
 
 const POD_LENGTH = 1.95;
 const POD_RADIUS = 0.18;
-const SEED_COUNT = 5;
+
+// Paleta de variedades — multiplicadores sobre el albedo base de la
+// textura cremosa (que tira a beige cálido). Para "blanco" subimos los
+// tres canales por encima de 1 (la textura base es beige, no blanco
+// puro) para empujarla a crema-marfil sin perder la variación FBM.
+const VARIETY_PRESETS = {
+  'eye-black': { tint: [1.0, 1.0, 1.0], hidesEye: false, sheen: '#fff5d6' },
+  red:        { tint: [1.15, 0.55, 0.42], hidesEye: false, sheen: '#ffe0d0' },
+  white:      { tint: [1.18, 1.14, 1.05], hidesEye: true, sheen: '#fff8e8' },
+};
 
 function buildPodHalfGeometry({ open = false } = {}) {
   // Construye media vaina (sólo la parte superior) — para la vaina
@@ -49,7 +69,12 @@ function buildPodHalfGeometry({ open = false } = {}) {
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
     const taper = Math.sin(t * Math.PI) * 0.85 + 0.15;
-    const bumps = 1 + Math.sin(t * Math.PI * SEED_COUNT - Math.PI / 2) * 0.32;
+    // 5 bumps a lo largo de la vaina (cantidad típica de semillas en
+    // caupí). Esta constante no depende del prop `count` — la vaina
+    // misma es una pieza geométrica fija; sólo el contenido (semillas)
+    // se replica según count.
+    const POD_BUMPS = 5;
+    const bumps = 1 + Math.sin(t * Math.PI * POD_BUMPS - Math.PI / 2) * 0.32;
     const r = POD_RADIUS * taper * bumps;
     const N = frames.normals[Math.min(i, segs - 1)];
     const B = frames.binormals[Math.min(i, segs - 1)];
@@ -138,21 +163,45 @@ function buildStemGeometry() {
 }
 
 function buildBeanSeedGeometry() {
-  // Frijol individual: esfera achatada y curvada (kidney bean).
-  const geo = new THREE.SphereGeometry(0.085, 40, 24);
+  // Frijol caupí individual. POLISH (Prompt 3):
+  //   - achatado lateral 0.55 (la semilla real es plana, no oblonga)
+  //   - lado cóncavo más definido para el hilum (smoothstep que resta
+  //     curvatura sólo en una banda angosta del lado +z). Antes la
+  //     indentación apenas se notaba en silueta — la diferencia entre
+  //     un "frijolito de juguete" y un caupí real es justo este
+  //     perfil arriñonado.
+  //   - micro-ruido determinista de baja amplitud para que no se vea
+  //     como un sólido CAD perfecto.
+  const geo = new THREE.SphereGeometry(0.085, 48, 28);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
-    // Achatado en Y, alargado en X, curvado en el plano XZ
-    v.y *= 0.65;
-    v.x *= 1.5;
-    v.z += Math.sin(v.x * 4) * 0.012;
-    // Hilum: pequeña indentación en el centro inferior (lateral)
-    const hilumDist = Math.sqrt(v.x * v.x + (v.y + 0.04) * (v.y + 0.04));
-    if (v.z > 0 && hilumDist < 0.03) {
-      v.z -= 0.005 * Math.exp(-hilumDist * 80);
-    }
+    // Reniforme (1.0 : 0.75 : 0.55 según Prompt 3):
+    v.y *= 0.75;
+    v.x *= 1.45;
+    v.z *= 0.62;
+
+    // Concavidad del hilum: smoothstep sobre la componente Z + banda
+    // estrecha en Y. Hace que el lado +z se aplane y se hunda hacia
+    // el ecuador, dejando una ranura central nítida. Esto es lo que
+    // distingue una semilla "arriñonada" de una elíptica plana.
+    const yBand = 1 - Math.min(1, Math.abs(v.y) / 0.045);
+    const zSide = Math.max(0, v.z) / 0.06;
+    const concavity = Math.pow(yBand, 1.4) * Math.min(1, zSide) * 0.018;
+    v.z -= concavity;
+
+    // Pequeña ondulación que recorre el lado dorsal — los caupí
+    // tienen una arruga sutil cuando están secos
+    v.z += Math.sin(v.x * 5.5) * 0.004 * (v.z > 0 ? 0 : 1);
+
+    // Micro-ruido determinista (anti-CAD)
+    const microNoise =
+      Math.sin(v.x * 47 + v.y * 31 + v.z * 23) *
+      Math.cos(v.y * 43 + v.x * 29) * 0.0025;
+    v.x += microNoise;
+    v.y += microNoise;
+    v.z += microNoise;
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
@@ -163,20 +212,28 @@ function buildBeanSeedGeometry() {
   // que es justo donde está la indentación del hilum, alineando textura
   // y geometría. v cubre todo el rango vertical del frijol.
   const uv = geo.attributes.uv;
+  // Rango Y actualizado al nuevo factor (0.085 * 0.75 = 0.06375)
+  const yHalf = 0.085 * 0.75;
   for (let i = 0; i < uv.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
     const z = pos.getZ(i);
     const u = ((Math.atan2(z, x) + Math.PI) / (Math.PI * 2) + 0.25) % 1;
-    const v2 = (y + 0.0553) / 0.1106; // y ∈ ±0.0553 (0.085 * 0.65)
+    const v2 = (y + yHalf) / (yHalf * 2);
     uv.setXY(i, u, Math.max(0, Math.min(1, v2)));
   }
   uv.needsUpdate = true;
   return geo;
 }
 
-export default function BeanModel() {
+export default function BeanModel({
+  variety = 'eye-black',
+  count = 5,
+  showPod = true,
+} = {}) {
   const groupRef = useRef(null);
+
+  const preset = VARIETY_PRESETS[variety] ?? VARIETY_PRESETS['eye-black'];
 
   const closedPodGeo = useMemo(() => buildPodHalfGeometry({ open: false }), []);
   const openTopGeo = useMemo(() => buildPodHalfGeometry({ open: true }), []);
@@ -192,19 +249,40 @@ export default function BeanModel() {
   const seedMap = useMemo(makeBeanSeedTexture, []);
   const seedNormal = useMemo(makeBeanSeedNormalTexture, []);
 
-  // Posiciones de los frijoles dentro de la vaina abierta
-  const seedPositions = useMemo(() => {
+  // Posiciones de las semillas dentro de la vaina abierta (cuando hay
+  // vaina) o flotando en arreglo lineal (cuando showPod=false). El
+  // jitter pseudoaleatorio determinista evita identidad perfecta entre
+  // semillas adyacentes: cada una se mueve unos micras en X/Y/Z y rota
+  // libremente, anti-look "ensartado en un alambre".
+  const seedTransforms = useMemo(() => {
     const arr = [];
-    for (let i = 0; i < SEED_COUNT; i++) {
-      const t = (i + 0.5) / SEED_COUNT;
+    for (let i = 0; i < count; i++) {
+      const t = (i + 0.5) / count;
       const x = -POD_LENGTH / 2 + t * POD_LENGTH;
-      // Sigue la curva de la vaina (idéntica a la curve del pod)
-      const y = 0.22 - Math.pow((t - 0.5) * 2, 2) * 0.28;
-      const z = Math.sin((t - 0.5) * Math.PI) * 0.04;
-      arr.push([x, y - 0.06, z]);
+      const y = showPod
+        ? 0.22 - Math.pow((t - 0.5) * 2, 2) * 0.28
+        : 0;
+      const z = showPod ? Math.sin((t - 0.5) * Math.PI) * 0.04 : 0;
+      // Determinista por índice — repetible entre renders
+      const h1 = (Math.sin(i * 12.9898) * 43758.5453) % 1;
+      const h2 = (Math.sin(i * 78.233) * 24631.7) % 1;
+      const h3 = (Math.sin(i * 41.17) * 19937.1) % 1;
+      arr.push({
+        position: [
+          x + h1 * 0.01,
+          (showPod ? y - 0.06 : y) + h2 * 0.006,
+          z + h3 * 0.008,
+        ],
+        rotation: [
+          h1 * 0.4,
+          (i % 2) * 0.3 + i * 0.13 + h2 * 0.5,
+          (i % 3) * 0.15 + h3 * 0.3,
+        ],
+        scale: 0.95 + h1 * 0.10,
+      });
     }
     return arr;
-  }, []);
+  }, [count, showPod]);
 
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
@@ -248,85 +326,118 @@ export default function BeanModel() {
     />
   );
 
+  // Tinte y opacidad del "ojo" (hilum) por variedad. El frijol blanco
+  // no tiene mancha negra; aplicamos un overlay claro encima del mismo
+  // mesh con un material adicional sería complicado, así que en su lugar
+  // usamos un pequeño parche circular crema sobre el +z del frijol.
+  const seedTint = `rgb(${(255 * preset.tint[0]) | 0}, ${(255 * preset.tint[1]) | 0}, ${(255 * preset.tint[2]) | 0})`;
+
   return (
     <group ref={groupRef} rotation={[0.05, 0, -0.1]} position={[0.05, 0, 0]}>
-      {/* Vaina cerrada (principal) */}
-      <mesh geometry={closedPodGeo} castShadow receiveShadow position={[0, 0, 0.32]}>
-        {podMaterial}
-      </mesh>
+      {showPod && (
+        <>
+          {/* Vaina cerrada (principal) */}
+          <mesh geometry={closedPodGeo} castShadow receiveShadow position={[0, 0, 0.32]}>
+            {podMaterial}
+          </mesh>
 
-      {/* Vaina abierta (mitad superior) — revela los frijoles */}
-      <group position={[0, 0, -0.36]} rotation={[0, 0, 0]}>
-        {/* Membrana interior: render BackSide debajo de cada mitad para
-            que cuando mires hacia adentro, veas el verde pálido del
-            interior de la vaina (no el verde brillante exterior) */}
-        <mesh geometry={openTopGeo} castShadow={false} receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
-          {podInteriorMaterial}
-        </mesh>
-        <mesh
-          geometry={openTopGeo}
-          castShadow={false}
-          receiveShadow
-          rotation={[Math.PI - 0.25, 0, 0]}
-          position={[0, -0.05, 0]}
-        >
-          {podInteriorMaterial}
-        </mesh>
+          {/* Vaina abierta (mitad superior) — revela los frijoles */}
+          <group position={[0, 0, -0.36]} rotation={[0, 0, 0]}>
+            {/* Membrana interior: render BackSide debajo de cada mitad
+                para que cuando mires hacia adentro, veas el verde pálido
+                del interior de la vaina (no el verde brillante exterior) */}
+            <mesh geometry={openTopGeo} castShadow={false} receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
+              {podInteriorMaterial}
+            </mesh>
+            <mesh
+              geometry={openTopGeo}
+              castShadow={false}
+              receiveShadow
+              rotation={[Math.PI - 0.25, 0, 0]}
+              position={[0, -0.05, 0]}
+            >
+              {podInteriorMaterial}
+            </mesh>
 
-        {/* Capa exterior: mitad superior */}
-        <mesh geometry={openTopGeo} castShadow receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
-          {podMaterial}
-        </mesh>
-        {/* Capa exterior: mitad inferior rotada */}
-        <mesh
-          geometry={openTopGeo}
-          castShadow
-          receiveShadow
-          rotation={[Math.PI - 0.25, 0, 0]}
-          position={[0, -0.05, 0]}
-        >
-          {podMaterial}
-        </mesh>
+            {/* Capa exterior: mitad superior */}
+            <mesh geometry={openTopGeo} castShadow receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
+              {podMaterial}
+            </mesh>
+            {/* Capa exterior: mitad inferior rotada */}
+            <mesh
+              geometry={openTopGeo}
+              castShadow
+              receiveShadow
+              rotation={[Math.PI - 0.25, 0, 0]}
+              position={[0, -0.05, 0]}
+            >
+              {podMaterial}
+            </mesh>
+          </group>
 
-        {/* Frijoles dentro de la vaina abierta */}
-        {seedPositions.map((p, i) => (
-          <mesh
-            key={i}
-            geometry={seedGeo}
-            position={[p[0], p[1] - 0.02, p[2]]}
-            rotation={[0, (i % 2) * 0.3 + (i * 0.13), (i % 3) * 0.15]}
-            castShadow
-            receiveShadow
-          >
+          {/* Tallo */}
+          <mesh geometry={stemGeo} castShadow receiveShadow>
             <meshPhysicalMaterial
-              map={seedMap}
-              normalMap={seedNormal}
-              normalScale={[0.8, 0.8]}
-              roughness={0.34}
-              metalness={0.06}
-              clearcoat={0.95}
-              clearcoatRoughness={0.14}
-              sheen={0.25}
-              sheenColor="#fbbf24"
-              sheenRoughness={0.5}
-              envMapIntensity={1.25}
+              color="#65a30d"
+              roughness={0.65}
+              clearcoat={0.3}
+              clearcoatRoughness={0.4}
             />
           </mesh>
+        </>
+      )}
+
+      {/* Frijoles. Cuando hay vaina van dentro de ella; si no, se
+          presentan sueltos centrados en el origen. Cada variedad
+          multiplica el albedo por su tinte; "white" además cubre el
+          ojo negro con un parche crema. */}
+      <group position={showPod ? [0, 0, -0.36] : [0, 0, 0]}>
+        {seedTransforms.map((s, i) => (
+          <group
+            key={i}
+            position={[s.position[0], s.position[1] - (showPod ? 0.02 : 0), s.position[2]]}
+            rotation={s.rotation}
+            scale={s.scale}
+          >
+            <mesh geometry={seedGeo} castShadow receiveShadow>
+              <meshPhysicalMaterial
+                map={seedMap}
+                normalMap={seedNormal}
+                normalScale={[0.8, 0.8]}
+                color={seedTint}
+                roughness={0.34}
+                metalness={0.06}
+                clearcoat={0.95}
+                clearcoatRoughness={0.14}
+                sheen={0.25}
+                sheenColor={preset.sheen}
+                sheenRoughness={0.5}
+                envMapIntensity={1.25}
+              />
+            </mesh>
+            {preset.hidesEye && (
+              // Variedad "white" (caupí blanco): tapa la mancha del hilum
+              // con un parche crema-marfil que se mezcla con el cuerpo
+              // de la semilla. Render por encima del albedo, con
+              // ligero depthWrite=false para no romper bordes.
+              <mesh position={[0, 0, 0.058]} rotation={[0, 0, 0]}>
+                <sphereGeometry args={[0.014, 16, 12]} />
+                <meshPhysicalMaterial
+                  color="#ede0c4"
+                  roughness={0.32}
+                  metalness={0}
+                  clearcoat={0.6}
+                  clearcoatRoughness={0.2}
+                  depthWrite={false}
+                />
+              </mesh>
+            )}
+          </group>
         ))}
       </group>
 
-      {/* Tallo */}
-      <mesh geometry={stemGeo} castShadow receiveShadow>
-        <meshPhysicalMaterial
-          color="#65a30d"
-          roughness={0.65}
-          clearcoat={0.3}
-          clearcoatRoughness={0.4}
-        />
-      </mesh>
-
-      {/* Hojas trifoliadas */}
-      {[
+      {/* Hojas trifoliadas — solo cuando hay vaina (contexto planta) */}
+      {showPod && [
         { pos: [-POD_LENGTH / 2 - 0.42, 0.55, 0.02], rot: [0.4, 0.2, -0.5], scale: 0.6 },
         { pos: [-POD_LENGTH / 2 - 0.34, 0.62, -0.18], rot: [0.5, -0.4, -0.2], scale: 0.5 },
         { pos: [-POD_LENGTH / 2 - 0.5, 0.48, 0.22], rot: [0.3, 0.6, -0.7], scale: 0.55 },

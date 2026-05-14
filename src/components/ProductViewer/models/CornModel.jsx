@@ -5,6 +5,7 @@ import {
   makeCornColorTexture,
   makeCornNormalTexture,
   makeCornRoughnessTexture,
+  makeHuskAlphaTexture,
   makeHuskColorTexture,
   makeHuskNormalTexture,
 } from '../textures';
@@ -58,7 +59,15 @@ function buildCobGeometry() {
   //      más hinchados, algunos subdesarrollados — patrón "natural").
   //   3) Bend longitudinal muy ligero (las mazorcas no son perfectamente
   //      rectas; siempre hay una leve curvatura por el crecimiento).
+  // POLISH (Prompt 1): además, asignamos color per-vertex para que ~10%
+  // de los granos se sesguen hacia ámbar maduro (#d4a843) y otro pequeño
+  // % hacia crema pálida (#fef3c7) — la textura procedural pinta el
+  // grano base, y `vertexColors:true` lo multiplica para darle el matiz
+  // de madurez sin necesitar instances ni segundo material.
   const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  // Inicializamos blanco (multiplicador neutro) — la textura manda
+  for (let i = 0; i < colors.length; i++) colors[i] = 1.0;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
@@ -97,8 +106,27 @@ function buildCobGeometry() {
     v.x = Math.cos(theta) * newR + bend;
     v.z = Math.sin(theta) * newR;
     pos.setXYZ(i, v.x, v.y, v.z);
+
+    // Color de madurez per-grano. Otro hash independiente para no
+    // correlacionar madurez con tamaño (en la mazorca real son
+    // procesos distintos: tamaño = espacio disponible, madurez =
+    // tiempo de exposición a azúcares).
+    const matH = Math.abs(Math.sin(rowIdx * 7.31 + colIdx * 41.17) * 24631.7);
+    const matR = matH - Math.floor(matH);
+    let cr = 1.0, cg = 1.0, cb = 1.0;
+    if (matR < 0.10) {
+      // 10% maduro → ámbar (#d4a843 ÷ #f5d76e ≈ 0.86,0.79,0.62)
+      cr = 0.86; cg = 0.79; cb = 0.62;
+    } else if (matR < 0.16) {
+      // 6% lechoso joven → ligeramente más pálido
+      cr = 1.04; cg = 1.03; cb = 1.0;
+    }
+    colors[i * 3 + 0] = cr;
+    colors[i * 3 + 1] = cg;
+    colors[i * 3 + 2] = cb;
   }
   pos.needsUpdate = true;
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   return geo;
 }
@@ -158,55 +186,145 @@ function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
 }
 
 function buildSilkGeometry() {
-  // Una mecha de barbas (silk) — varias curvas Catmull-Rom delgadas.
+  // Mecha de barbas (silk / pelos de elote). POLISH (Prompt 1):
+  //   - densidad subida a ~140 hebras: una mazorca tiene cientos, pero
+  //     >150 satura el draw y los pelos quedan apelmazados.
+  //   - cada hebra tiene 4 control points (start, neck, mid, tip) en
+  //     lugar de 3 → la curva cae con un "drop" más suave y orgánico
+  //     (no parecen alambres rectos).
+  //   - tubeRadius decrece desde la base hasta la punta (taper) — los
+  //     estigmas reales son más gruesos donde emergen del cob.
+  //   - color per-vertex con gradiente #d4a574 (base, cobrizo) →
+  //     #f0d5a0 (punta, rubio claro). El material consume esto vía
+  //     vertexColors:true para evitar uniformidad plástica.
   const strands = [];
-  for (let i = 0; i < 18; i++) {
-    const angle = (i / 18) * Math.PI * 2 + Math.random() * 0.4;
-    const droop = 0.35 + Math.random() * 0.5;
-    const sway = (Math.random() - 0.5) * 0.25;
-    const length = 0.55 + Math.random() * 0.45;
+  const colorBase = new THREE.Color('#d4a574');
+  const colorTip = new THREE.Color('#f0d5a0');
+  const STRANDS = 140;
+  for (let i = 0; i < STRANDS; i++) {
+    // Ángulo con jitter — anchos contra el ápice del cob, no en círculo perfecto
+    const angle = (i / STRANDS) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    const droop = 0.30 + Math.random() * 0.65;
+    const sway = (Math.random() - 0.5) * 0.32;
+    const length = 0.45 + Math.random() * 0.55;
+    // El radio de emergencia varía: algunos pelos brotan más adentro,
+    // otros del borde, para evitar que todos salgan del mismo aro
+    const emerge = 0.015 + Math.random() * 0.05;
 
     const start = new THREE.Vector3(
-      Math.cos(angle) * 0.04,
-      COB_HEIGHT / 2 - 0.02,
-      Math.sin(angle) * 0.04,
+      Math.cos(angle) * emerge,
+      COB_HEIGHT / 2 - 0.025 + Math.random() * 0.02,
+      Math.sin(angle) * emerge,
+    );
+    const neck = new THREE.Vector3(
+      Math.cos(angle) * (emerge + 0.04),
+      COB_HEIGHT / 2 + length * 0.18,
+      Math.sin(angle) * (emerge + 0.04),
     );
     const mid = new THREE.Vector3(
-      Math.cos(angle) * (0.06 + droop * 0.2) + sway,
+      Math.cos(angle) * (0.06 + droop * 0.22) + sway * 0.6,
       COB_HEIGHT / 2 + length * 0.55,
-      Math.sin(angle) * (0.06 + droop * 0.2) + sway,
+      Math.sin(angle) * (0.06 + droop * 0.22) + sway * 0.6,
     );
     const tip = new THREE.Vector3(
-      Math.cos(angle) * (0.18 + droop * 0.55) + sway * 1.5,
-      COB_HEIGHT / 2 + length - droop * 0.15,
-      Math.sin(angle) * (0.18 + droop * 0.55) + sway * 1.5,
+      Math.cos(angle) * (0.20 + droop * 0.6) + sway * 1.6,
+      COB_HEIGHT / 2 + length - droop * 0.22,
+      Math.sin(angle) * (0.20 + droop * 0.6) + sway * 1.6,
     );
-    const curve = new THREE.CatmullRomCurve3([start, mid, tip]);
-    const tube = new THREE.TubeGeometry(curve, 14, 0.0035, 5, false);
+    const curve = new THREE.CatmullRomCurve3([start, neck, mid, tip]);
+    const tubularSegments = 16;
+    const radialSegments = 4; // muy delgado — radial 4 es suficiente
+    const tube = new THREE.TubeGeometry(
+      curve,
+      tubularSegments,
+      0.0030,
+      radialSegments,
+      false,
+    );
+
+    // El TubeGeometry no soporta radio variable; aplicamos taper a mano:
+    // escalamos cada vértice perpendicular al eje proporcional a (1 - t)^0.6
+    // donde t es la posición a lo largo de la tube (0 base → 1 punta).
+    const tp = tube.attributes.position;
+    const verts = tp.count;
+    const ringsCount = tubularSegments + 1;
+    const ringSize = verts / ringsCount; // radial + cap verts
+    for (let r = 0; r <= tubularSegments; r++) {
+      const t = r / tubularSegments;
+      const taper = Math.max(0.35, Math.pow(1 - t, 0.55));
+      // Punto sobre la curva (el "centro" del anillo)
+      const center = curve.getPoint(t);
+      const ringStart = Math.floor(r * ringSize);
+      const ringEnd = Math.floor((r + 1) * ringSize);
+      for (let k = ringStart; k < ringEnd && k < verts; k++) {
+        const px = tp.getX(k);
+        const py = tp.getY(k);
+        const pz = tp.getZ(k);
+        const dx = px - center.x;
+        const dy = py - center.y;
+        const dz = pz - center.z;
+        tp.setXYZ(
+          k,
+          center.x + dx * taper,
+          center.y + dy * taper,
+          center.z + dz * taper,
+        );
+      }
+    }
+    tp.needsUpdate = true;
+    tube.computeVertexNormals();
+
+    // Vertex color per-strand: base oscura → punta clara
+    const tubeColors = new Float32Array(verts * 3);
+    const tmp = new THREE.Color();
+    for (let r = 0; r <= tubularSegments; r++) {
+      const t = r / tubularSegments;
+      tmp.copy(colorBase).lerp(colorTip, t);
+      const ringStart = Math.floor(r * ringSize);
+      const ringEnd = Math.floor((r + 1) * ringSize);
+      for (let k = ringStart; k < ringEnd && k < verts; k++) {
+        tubeColors[k * 3 + 0] = tmp.r;
+        tubeColors[k * 3 + 1] = tmp.g;
+        tubeColors[k * 3 + 2] = tmp.b;
+      }
+    }
+    tube.setAttribute('color', new THREE.BufferAttribute(tubeColors, 3));
     strands.push(tube);
   }
-  // Merge manual
   return mergeBufferGeometries(strands);
 }
 
 function mergeBufferGeometries(geos) {
   // Implementación mínima sin depender de BufferGeometryUtils.
+  // Soporta position + normal + (opcional) color.
   let totalVerts = 0;
   let totalIdx = 0;
+  let hasColor = false;
   for (const g of geos) {
     totalVerts += g.attributes.position.count;
     totalIdx += g.index ? g.index.count : 0;
+    if (g.attributes.color) hasColor = true;
   }
   const positions = new Float32Array(totalVerts * 3);
   const normals = new Float32Array(totalVerts * 3);
+  const colors = hasColor ? new Float32Array(totalVerts * 3) : null;
   const indices = new Uint32Array(totalIdx);
-  let pOff = 0, nOff = 0, iOff = 0, vBase = 0;
+  let pOff = 0, nOff = 0, cOff = 0, iOff = 0, vBase = 0;
   for (const g of geos) {
     const p = g.attributes.position.array;
     const n = g.attributes.normal.array;
     positions.set(p, pOff);
     normals.set(n, nOff);
     pOff += p.length; nOff += n.length;
+    if (colors) {
+      if (g.attributes.color) {
+        colors.set(g.attributes.color.array, cOff);
+      } else {
+        // Fill blanco para geometrías sin color
+        colors.fill(1, cOff, cOff + p.length);
+      }
+      cOff += p.length;
+    }
     if (g.index) {
       const idx = g.index.array;
       for (let k = 0; k < idx.length; k++) indices[iOff + k] = idx[k] + vBase;
@@ -217,6 +335,9 @@ function mergeBufferGeometries(geos) {
   const merged = new THREE.BufferGeometry();
   merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  if (colors) {
+    merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  }
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
   return merged;
 }
@@ -249,6 +370,7 @@ export default function CornModel() {
   const cornRoughness = useMemo(makeCornRoughnessTexture, []);
   const huskColor = useMemo(makeHuskColorTexture, []);
   const huskNormal = useMemo(makeHuskNormalTexture, []);
+  const huskAlpha = useMemo(makeHuskAlphaTexture, []);
 
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
@@ -257,7 +379,8 @@ export default function CornModel() {
 
   return (
     <group ref={groupRef} rotation={[0, 0.3, 0]}>
-      {/* Mazorca */}
+      {/* Mazorca. POLISH: vertexColors:true para que el atributo `color`
+          (madurez 10% ámbar / lechoso) module el albedo de la textura. */}
       <mesh geometry={cobGeometry} castShadow receiveShadow>
         <meshPhysicalMaterial
           map={cornColor}
@@ -278,18 +401,31 @@ export default function CornModel() {
           attenuationColor="#fbbf24"
           attenuationDistance={0.4}
           ior={1.42}
+          vertexColors
         />
       </mesh>
 
-      {/* Barbas (silk) saliendo por la punta */}
+      {/* Barbas (silk). POLISH: vertexColors para el gradiente base→tip
+          (#d4a574 → #f0d5a0). transmission alta + thickness bajo para la
+          translucidez capilar característica del estigma de maíz.
+          sheen alto con sheenColor cálido refuerza el "brillo seda". */}
       <mesh geometry={silkGeometry} castShadow={false}>
         <meshPhysicalMaterial
-          color="#fef3c7"
-          roughness={0.45}
+          color="#ffffff"
+          roughness={0.35}
           metalness={0}
           sheen={1}
-          sheenColor="#fff7d6"
-          sheenRoughness={0.25}
+          sheenColor="#fff0c8"
+          sheenRoughness={0.22}
+          transmission={0.6}
+          thickness={0.04}
+          ior={1.36}
+          attenuationColor="#e8c89a"
+          attenuationDistance={0.25}
+          clearcoat={0.25}
+          clearcoatRoughness={0.4}
+          envMapIntensity={1.1}
+          vertexColors
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -317,6 +453,8 @@ export default function CornModel() {
               map={huskColor}
               normalMap={huskNormal}
               normalScale={[1.1, 1.1]}
+              alphaMap={huskAlpha}
+              alphaTest={0.5}
               roughness={0.78}
               metalness={0}
               sheen={0.5}
