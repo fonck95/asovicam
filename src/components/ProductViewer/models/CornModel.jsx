@@ -604,59 +604,63 @@ export default function CornModel() {
   const silkGeometry = useMemo(buildSilkGeometry, []);
 
   // Distribución filotáctica de las brácteas (hojas envolventes).
-  // En lugar de espaciarlas en ángulos uniformes (i / N · 2π) — que
-  // producían un patrón geométrico irreal con planos paralelos visibles —
-  // ahora cada hoja sucesiva se inserta con un offset de ÁNGULO ÁUREO
-  // (~137.5°) respecto a la anterior. Es la misma filotaxis que rige
-  // las hojas de las gramíneas en la naturaleza: ratios 8/13 ó 13/21.
-  // Los conteos (13 envolventes + 3 desplegadas) son números de Fibonacci.
-  // La VARIACIÓN de longitud, arco y baseY entre hojas no se sortea
-  // al azar: se deriva de la fase i/φ (mod 1), reusando la misma
-  // proporción áurea para que la irregularidad sea matemáticamente
-  // coherente con la distribución angular.
+  // Configuración de SEMI-COBERTURA estilo MARKETING: en vez de envolver
+  // completamente la mazorca (que tapaba la mayoría de los granos), la
+  // mayoría de las hojas están peeled-back y fanned-out alrededor del
+  // olote — como en empaques de elote dulce o fotografía de producto.
+  //  • 7 base wraps cortos que sólo cubren el cuarto inferior del olote
+  //    (anclan la mazorca al pedúnculo sin obstruir los granos).
+  //  • 7 hojas peeled-back largas que se abren en bouquet alrededor de
+  //    la mazorca, dejando expuesta la mayor parte de los granos.
+  // El ángulo de inserción usa el ÁNGULO ÁUREO (~137.5°) — la misma
+  // filotaxis natural de las gramíneas; conteos en Fibonacci (7+7=14).
+  // La variación de longitud, arco y baseY se deriva de la fase i/φ
+  // para que la irregularidad sea matemáticamente coherente con la
+  // distribución angular (no random ruidoso).
   const huskConfig = useMemo(
     () => {
       const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
       const PHI = (1 + Math.sqrt(5)) / 2;
       const wrapping = [];
 
-      const WRAP_COUNT = 13;
-      for (let i = 0; i < WRAP_COUNT; i++) {
-        // fase ∈ [0,1): fracción de i/φ — se distribuye uniformemente
-        // pero sin coincidir con periodos enteros, dando variación
-        // libre de patrones repetitivos visibles.
+      // === Base wraps: hojas cortas en el pedúnculo ===
+      // Largo 0.52-0.72 sobre un cob de 1.75 → cubren sólo el tercio
+      // inferior. Capas alternadas (0-1) para dar grosor a la base.
+      const BASE_WRAP_COUNT = 7;
+      for (let i = 0; i < BASE_WRAP_COUNT; i++) {
         const phase = (i / PHI) - Math.floor(i / PHI);
-        // Capas alternadas en patrón de Fibonacci 1-1-2: dos exteriores
-        // seguidas por una interior recesada. La hoja interior rellena
-        // el hueco angular entre dos exteriores adyacentes.
         const layer = i % 3 === 2 ? 1 : 0;
         wrapping.push({
-          peel: 0.025 + (i % 2) * 0.022,
-          length: 1.40 + phase * 0.22,
-          arcExtent: 0.82 + (1 - phase) * 0.16,
+          peel: 0.04 + (i % 2) * 0.03,
+          length: 0.52 + phase * 0.22,
+          arcExtent: 0.86 + (1 - phase) * 0.14,
           angleOffset: i * GOLDEN_ANGLE,
           layer,
-          baseY: -0.94 + phase * 0.06,
+          baseY: -0.94 + phase * 0.04,
           baseTipFlare: 0,
         });
       }
 
-      // 3 hojas desplegadas (peeled-back) que abren para revelar granos.
-      // Distribuidas también por ángulo áureo desde una fase base
-      // descorrelacionada del wrapping (evita superposición exacta).
-      const PEEL_BASE = 0.7;
-      const peelSpecs = [
-        { peel: 0.78, length: 1.30, arcExtent: 0.85, baseY: -0.55, baseTipFlare: 0.25 },
-        { peel: 0.72, length: 1.22, arcExtent: 0.78, baseY: -0.52, baseTipFlare: 0.22 },
-        { peel: 0.82, length: 1.34, arcExtent: 0.82, baseY: -0.58, baseTipFlare: 0.28 },
-      ];
-      peelSpecs.forEach((spec, i) => {
+      // === Hojas peeled-back: el "bouquet" de marketing ===
+      // 7 hojas largas (1.10-1.40) que emergen alrededor de la base
+      // del olote y se abren hacia afuera. peel 0.72-0.92 garantiza
+      // que se separen claramente del cob; baseY se reparte entre
+      // -0.66 y -0.50 para que las puntas terminen a alturas variadas
+      // (cascada orgánica, no abanico uniforme).
+      const PEEL_COUNT = 7;
+      const PEEL_ANGLE_OFFSET = 0.42; // descorrelaciona con base wraps
+      for (let i = 0; i < PEEL_COUNT; i++) {
+        const phase = ((i + 0.5) / PHI) - Math.floor((i + 0.5) / PHI);
         wrapping.push({
-          ...spec,
-          angleOffset: PEEL_BASE + i * GOLDEN_ANGLE,
+          peel: 0.72 + phase * 0.20,
+          length: 1.10 + phase * 0.30,
+          arcExtent: 0.74 + (1 - phase) * 0.16,
+          angleOffset: PEEL_ANGLE_OFFSET + i * GOLDEN_ANGLE,
           layer: 2,
+          baseY: -0.66 + phase * 0.16,
+          baseTipFlare: 0.22 + phase * 0.18,
         });
-      });
+      }
       return wrapping;
     },
     [],
@@ -819,13 +823,14 @@ export default function CornModel() {
       {huskConfig.map((cfg, i) => {
         const peeled = cfg.peel > 0.4;
         // Capas: outer (layer 0) en el radio mayor, inner (layer 1) más
-        // adentro, peeled (layer 2) salen del top y caen hacia afuera.
+        // adentro, peeled (layer 2) salen alrededor de la base y caen
+        // hacia afuera formando el bouquet de marketing.
         const radialPush = cfg.layer === 1 ? -0.02 : 0;
-        // Tilt: hojas pegadas se inclinan ligeramente hacia el cob;
-        // peeled tienen tilt fuerte hacia afuera + un yaw para que
-        // no caigan exactamente radialmente.
-        const tiltX = peeled ? 0.55 : -0.02 + (i % 2) * 0.015;
-        const tiltZ = peeled ? (i % 2 === 0 ? 0.12 : -0.12) : 0;
+        // Tilt para peeled aumentado a ~0.78 rad (45°): las hojas se
+        // abren francamente hacia afuera revelando los granos. Las
+        // pegadas mantienen una inclinación mínima hacia el cob.
+        const tiltX = peeled ? 0.78 : -0.02 + (i % 2) * 0.015;
+        const tiltZ = peeled ? (i % 2 === 0 ? 0.16 : -0.16) : 0;
         return (
           <mesh
             key={i}

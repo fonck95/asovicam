@@ -295,57 +295,57 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
       {/* === Rebanada === */}
       {showCut && (
       <group position={cutPosition} rotation={cutRotation}>
-        {/* Pulpa con SSS realista. Iteración 2026:
-            - color emissive sutil rojo: contrarresta el wash-out de la
-              transmission cuando la luz atraviesa el slice y ayuda a
-              que la pulpa se vea SATURADA en sombra.
-            - attenuationDistance < SLICE_DEPTH (0.34) para garantizar
-              tinte rojo claro al atravesar la rebanada. Antes 0.42 estaba
-              por encima del grosor → atenuación casi nula → look pálido.
-            - sheen rojo cálido (no rosado-blanco) para que los highlights
-              de borde tinten en rojo en lugar de desaturar.
-            - clearcoat reducido para evitar reflejos blancos del environment
-              que estaban "lavando" la pulpa.
-            - iridescencia desactivada (creaba shimmer azulado en sombras). */}
+        {/* Pulpa con SSS realista. Iteración mayo 2026:
+            - clearcoat bajado a 0.32: reflejos del environment estaban
+              levantando la luminosidad media y leyendo "rosa". Menos
+              clearcoat = saturación roja más visible.
+            - normalScale incrementado a 1.25: realza la geometría
+              cellular voronoi del map de normales para que las celdas
+              se vean más definidas (más "carne jugosa", menos "plástico").
+            - attenuationColor empujado un punto más a wine
+              (#b81a30 → más rojo profundo cuando la luz atraviesa).
+            - sheen sostenido en rojo cálido pero sheenColor más rojo
+              que coral para evitar derivar a tono rosado en bordes.
+            - emissive levemente reforzado para sostener la saturación
+              en zonas que reciben menos luz directa. */}
         <mesh geometry={sliceFleshGeo} castShadow receiveShadow>
           <meshPhysicalMaterial
             attach="material-0"
             map={fleshMap}
             normalMap={fleshNormal}
-            normalScale={[1.05, 1.05]}
+            normalScale={[1.25, 1.25]}
             roughnessMap={fleshRoughness}
-            roughness={0.48}
+            roughness={0.50}
             metalness={0.0}
-            clearcoat={0.55}
-            clearcoatRoughness={0.32}
-            transmission={0.22}
+            clearcoat={0.32}
+            clearcoatRoughness={0.38}
+            transmission={0.20}
             thickness={0.40}
-            attenuationColor="#c8203a"
-            attenuationDistance={0.18}
+            attenuationColor="#b81a30"
+            attenuationDistance={0.16}
             ior={1.39}
-            sheen={0.55}
-            sheenColor="#e8505a"
-            sheenRoughness={0.38}
-            emissive="#3a0612"
-            emissiveIntensity={0.18}
-            envMapIntensity={1.0}
+            sheen={0.50}
+            sheenColor="#d63a48"
+            sheenRoughness={0.42}
+            emissive="#3e0814"
+            emissiveIntensity={0.22}
+            envMapIntensity={0.85}
           />
           {/* Material lateral: cubre los lados extrudidos + el pequeño
-              bevel perimetral. Color rosa-coral que matchea la franja
-              exterior de la textura de pulpa (FLESH_STOPS @ r≈0.84-0.91)
-              para que el bevel mínimo se funda con la transición pulpa→
-              mesocarpio en lugar de leerse como un anillo rojo grueso.
-              Antes #a01a30 producía un "marco rojo" visible alrededor de
-              la cara plana — ahora el canto sólo lo marca la cáscara
-              verde (sliceRindGeometry). */}
+              bevel perimetral. Color coral-rojo más saturado que matchea
+              la nueva franja externa de la pulpa (FLESH_STOPS @ r≈0.88-
+              0.92) para que el bevel mínimo se funda con la transición
+              pulpa → mesocarpio sin leerse como un anillo rosa pastel.
+              Antes #e88896 era demasiado rosado y el canto bajo la
+              cáscara verde se veía pink. */}
           <meshPhysicalMaterial
             attach="material-1"
-            color="#e88896"
-            roughness={0.82}
+            color="#cf5258"
+            roughness={0.78}
             metalness={0}
-            sheen={0.20}
-            sheenColor="#f0b0b8"
-            sheenRoughness={0.6}
+            sheen={0.22}
+            sheenColor="#d88080"
+            sheenRoughness={0.55}
           />
         </mesh>
 
