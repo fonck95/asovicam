@@ -2,12 +2,12 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
-  makeLeafColorTexture,
-  makeLeafNormalTexture,
   makeWatermelonColorTexture,
   makeWatermelonFleshTexture,
   makeWatermelonFleshNormalTexture,
   makeWatermelonFleshRoughnessTexture,
+  makeWatermelonLeafColorTexture,
+  makeWatermelonLeafNormalTexture,
   makeWatermelonNormalTexture,
 } from '../textures';
 
@@ -22,43 +22,69 @@ import {
 const RADIUS = 1.0;
 
 function buildRindGeometry() {
-  const geo = new THREE.SphereGeometry(RADIUS, 192, 128);
+  const geo = new THREE.SphereGeometry(RADIUS, 224, 144);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
+  // Dirección del "ground spot" (la zona plana donde reposó en el campo).
+  // Está descentrada hacia un lado y ligeramente hacia abajo — no es
+  // perfectamente en el polo sur, como en una sandía real.
+  const groundDir = new THREE.Vector3(0.18, -0.95, 0.26).normalize();
+
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const len = v.length();
     const nx = v.x / len, ny = v.y / len, nz = v.z / len;
-    const azimuth = Math.atan2(nz, nx);            // alrededor del eje Y (vertical)
-    const polar = Math.acos(Math.max(-1, Math.min(1, ny))); // desde el polo norte
+    const azimuth = Math.atan2(nz, nx);
+    const polar = Math.acos(Math.max(-1, Math.min(1, ny)));
 
-    // (1) Lóbulos longitudinales — las sandías reales muestran segmentos
-    // muy sutiles del polo del tallo al polo de la flor. 5 ondas anchas + 7
-    // ondas finas, con fade hacia los polos via sin(polar).
-    const lobes = (Math.cos(azimuth * 5 + 0.4) * 0.022 +
-                   Math.cos(azimuth * 7 - 1.2) * 0.009 +
-                   Math.cos(azimuth * 13 + 0.9) * 0.003) * Math.sin(polar);
+    // (1) Lóbulos longitudinales muy SUTILES — una sandía real no tiene
+    // segmentos visibles como una calabaza. Sólo ondulaciones casi
+    // imperceptibles del polo del tallo al polo de la flor.
+    const lobes = (
+      Math.cos(azimuth * 5 + 0.4) * 0.014 +
+      Math.cos(azimuth * 7 - 1.2) * 0.007 +
+      Math.cos(azimuth * 11 + 0.9) * 0.003
+    ) * Math.sin(polar);
 
     // (2) Asimetría tallo/flor: el extremo del tallo (top) se pellizca
-    // ligeramente, el extremo de la flor (bottom) queda más plano.
+    // ligeramente. El extremo de la flor (bottom) queda más plano.
+    // Magnitudes balanceadas para mantener una silueta CASI esférica.
     const stemBlossom = ny > 0
-      ? -Math.pow(ny, 3.0) * 0.045
-      : -Math.pow(-ny, 1.7) * 0.022;
+      ? -Math.pow(ny, 3.2) * 0.052
+      : -Math.pow(-ny, 1.8) * 0.018;
 
-    // (3) Deformación orgánica de mayor frecuencia (bultos naturales)
-    const big = Math.sin(v.x * 2.4) * Math.cos(v.y * 2.1) * Math.sin(v.z * 1.8) * 0.022 +
-                Math.sin(v.x * 5.5 + 0.7) * Math.cos(v.y * 5.1) * Math.sin(v.z * 4.8) * 0.007 +
-                Math.sin(v.x * 11 + 1.4) * Math.cos(v.z * 9.3) * 0.0025;
+    // (3) Ground spot: hueco plano + ligero color shift, donde reposó
+    // sobre la tierra. Se aplana mediante una función gaussiana sobre
+    // el ángulo entre el vértice y groundDir.
+    const dotGround = nx * groundDir.x + ny * groundDir.y + nz * groundDir.z;
+    const groundT = Math.max(0, dotGround - 0.72) / 0.28;
+    const groundFlatten = -Math.pow(groundT, 1.4) * 0.062;
 
-    v.setLength(len + big + lobes + stemBlossom);
+    // (4) Deformación orgánica de baja+alta frecuencia (bultos naturales)
+    // — combinación de tres escalas. La componente más baja crea las
+    // grandes asimetrías que rompen el look "huevo perfecto".
+    const big =
+      Math.sin(v.x * 1.7 + 0.4) * Math.cos(v.y * 1.5 - 0.2) * Math.sin(v.z * 1.3) * 0.034 +
+      Math.sin(v.x * 2.4) * Math.cos(v.y * 2.1) * Math.sin(v.z * 1.8) * 0.020 +
+      Math.sin(v.x * 5.5 + 0.7) * Math.cos(v.y * 5.1) * Math.sin(v.z * 4.8) * 0.0075 +
+      Math.sin(v.x * 11 + 1.4) * Math.cos(v.z * 9.3) * 0.0028;
+
+    // (5) Hash-based jitter de muy baja frecuencia: hace que ningún
+    // hemisferio se vea igual a otro (asimetría real, no especular).
+    const seed = Math.sin(nx * 4.31 + ny * 7.13 + nz * 9.97) * 43758.5453;
+    const sFrac = seed - Math.floor(seed);
+    const asymmetry = (sFrac - 0.5) * 0.014;
+
+    v.setLength(len + big + lobes + stemBlossom + groundFlatten + asymmetry);
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   pos.needsUpdate = true;
   geo.computeVertexNormals();
-  // Forma claramente oblonga (no esfera): alargada en X (eje horizontal),
-  // ligeramente achatada vertical. Relación ~1.34:1 — proporciones de una
-  // sandía Charleston Gray / Allsweet, las más comunes en mercado.
-  geo.scale(1.32, 0.93, 0.97);
+  // Proporciones MENOS oblongas que antes — más cercano a una sandía
+  // tipo Sugar Baby / Crimson Sweet (rango común de mercado, no la
+  // variedad alargada Charleston Gray). Antes 1.32 daba look "huevo
+  // gigante"; 1.16 mantiene un toque oval sin caer en lo artificial.
+  geo.scale(1.16, 0.94, 0.99);
   geo.computeVertexNormals();
   return geo;
 }
@@ -74,31 +100,58 @@ function buildStemGeometry() {
 }
 
 function buildLeafGeometry() {
+  // Hoja de sandía REAL: palmatipartida con 5 lóbulos profundos (el
+  // central es el más largo). Cada lóbulo tiene a su vez sub-lóbulos
+  // pequeños y un margen ligeramente dentado. Se construye con un
+  // contorno azimutal por ángulo, modulando el radio con una suma de
+  // ondas que crea los cortes profundos.
   const shape = new THREE.Shape();
-  const lobes = 5;
-  const N = 96;
+  const N = 220;
+  // Pecíolo (base): empezar en (0, 0)
   shape.moveTo(0, 0);
+
+  // Función de radio polar: gran lóbulo central + 4 laterales con
+  // gargantas (sinus) profundas entre cada par. r(θ) ∈ [0.18, 1.0].
+  const lobeProfile = (theta) => {
+    // theta normalizado a (-PI..PI), pero la hoja vive en (-PI/2 .. 3PI/2)
+    // para que la base (0,0) coincida con la punta inferior del pecíolo.
+    // 5 lóbulos: usamos cos(5θ) como envolvente y restamos cortes profundos
+    const lobeWave = 0.62 + 0.36 * Math.pow(Math.max(0, Math.cos(5 * theta * 0.5)), 1.4);
+    // Cortes (sinus) profundos donde cos cruza cero
+    const cutMod = Math.pow(Math.abs(Math.sin(5 * theta * 0.5)), 3.5);
+    const cut = cutMod * 0.45;
+    // Dentado fino del margen
+    const tooth = Math.sin(theta * 38) * 0.012;
+    // Lóbulo central (theta ≈ PI/2) más alargado
+    const centerLobeBoost = Math.exp(-Math.pow(theta - Math.PI / 2, 2) * 4) * 0.18;
+    return Math.max(0.18, lobeWave - cut + tooth + centerLobeBoost);
+  };
+
   for (let i = 1; i <= N; i++) {
     const t = i / N;
-    const angle = Math.PI * (t - 0.5);
-    const lobe = 0.7 + 0.28 * Math.cos(angle * lobes);
-    const r = lobe * 0.95;
-    const x = Math.sin(angle) * r;
-    const y = (1 - Math.cos(angle)) * r * 0.95;
+    const theta = Math.PI * (t - 0.5) + Math.PI / 2; // mapea a (0..PI), apunta hacia +Y
+    const r = lobeProfile(theta - Math.PI / 2 + Math.PI / 2) * 0.95;
+    const x = Math.cos(theta) * r;
+    const y = Math.sin(theta) * r * 0.98;
     shape.lineTo(x, y);
   }
   shape.lineTo(0, 0);
 
-  const geo = new THREE.ShapeGeometry(shape, 28);
+  const geo = new THREE.ShapeGeometry(shape, 60);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
+    // Curvatura suave en cuenco + leves ondulaciones por lóbulo
+    const dist = Math.sqrt(x * x + y * y);
+    const cup = -Math.pow(dist, 1.5) * 0.10;
+    const radial = Math.cos(Math.atan2(y, x) * 5) * dist * 0.025;
     pos.setZ(
       i,
-      Math.sin(y * 2.2) * 0.07 +
-        Math.cos(x * 3.4) * 0.04 -
-        Math.pow(Math.abs(x), 1.4) * 0.1,
+      Math.sin(y * 2.4) * 0.045 +
+        Math.cos(x * 3.6) * 0.028 +
+        radial +
+        cup,
     );
   }
   pos.needsUpdate = true;
@@ -251,8 +304,8 @@ export default function WatermelonModel() {
   const fleshMap = useMemo(makeWatermelonFleshTexture, []);
   const fleshNormal = useMemo(makeWatermelonFleshNormalTexture, []);
   const fleshRoughness = useMemo(makeWatermelonFleshRoughnessTexture, []);
-  const leafMap = useMemo(makeLeafColorTexture, []);
-  const leafNormal = useMemo(makeLeafNormalTexture, []);
+  const leafMap = useMemo(makeWatermelonLeafColorTexture, []);
+  const leafNormal = useMemo(makeWatermelonLeafNormalTexture, []);
 
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
@@ -267,15 +320,15 @@ export default function WatermelonModel() {
           <meshPhysicalMaterial
             map={rindMap}
             normalMap={rindNormal}
-            normalScale={[1.05, 1.05]}
-            roughness={0.42}
-            metalness={0.04}
-            clearcoat={0.95}
-            clearcoatRoughness={0.22}
-            envMapIntensity={1.25}
-            sheen={0.25}
+            normalScale={[1.15, 1.15]}
+            roughness={0.55}
+            metalness={0.02}
+            clearcoat={0.55}
+            clearcoatRoughness={0.42}
+            envMapIntensity={1.05}
+            sheen={0.22}
             sheenColor="#a3e635"
-            sheenRoughness={0.5}
+            sheenRoughness={0.6}
           />
         </mesh>
 
@@ -295,27 +348,29 @@ export default function WatermelonModel() {
           />
         </mesh>
 
-        {/* Hojas decorativas */}
+        {/* Hojas decorativas — Citrullus lanatus tiene hojas más mates
+            y grisáceas que un frijol; reducimos clearcoat y sheen, y el
+            verde del sheen va a un tono más apagado. */}
         <mesh
           geometry={leafGeo}
-          position={[0.18, RADIUS * 0.88 + 0.08, -0.1]}
-          rotation={[0.6, -0.3, 0.2]}
-          scale={0.42}
+          position={[0.18, RADIUS * 0.88 + 0.05, -0.1]}
+          rotation={[0.55, -0.3, 0.2]}
+          scale={0.46}
           castShadow
           receiveShadow
         >
           <meshPhysicalMaterial
             map={leafMap}
             normalMap={leafNormal}
-            normalScale={[0.85, 0.85]}
-            roughness={0.55}
+            normalScale={[1.0, 1.0]}
+            roughness={0.78}
             metalness={0.02}
-            clearcoat={0.55}
-            clearcoatRoughness={0.4}
-            sheen={0.6}
-            sheenColor="#a3e635"
-            sheenRoughness={0.5}
-            transmission={0.18}
+            clearcoat={0.20}
+            clearcoatRoughness={0.65}
+            sheen={0.35}
+            sheenColor="#8aa658"
+            sheenRoughness={0.7}
+            transmission={0.12}
             thickness={0.05}
             ior={1.4}
             side={THREE.DoubleSide}
@@ -323,24 +378,24 @@ export default function WatermelonModel() {
         </mesh>
         <mesh
           geometry={leafGeo}
-          position={[-0.14, RADIUS * 0.88 + 0.12, 0.12]}
-          rotation={[0.4, 0.5, -0.3]}
-          scale={0.36}
+          position={[-0.18, RADIUS * 0.88 + 0.08, 0.14]}
+          rotation={[0.4, 0.7, -0.35]}
+          scale={0.40}
           castShadow
           receiveShadow
         >
           <meshPhysicalMaterial
             map={leafMap}
             normalMap={leafNormal}
-            normalScale={[0.85, 0.85]}
-            roughness={0.55}
+            normalScale={[1.0, 1.0]}
+            roughness={0.78}
             metalness={0.02}
-            clearcoat={0.55}
-            clearcoatRoughness={0.4}
-            sheen={0.6}
-            sheenColor="#a3e635"
-            sheenRoughness={0.5}
-            transmission={0.18}
+            clearcoat={0.20}
+            clearcoatRoughness={0.65}
+            sheen={0.35}
+            sheenColor="#8aa658"
+            sheenRoughness={0.7}
+            transmission={0.12}
             thickness={0.05}
             ior={1.4}
             side={THREE.DoubleSide}

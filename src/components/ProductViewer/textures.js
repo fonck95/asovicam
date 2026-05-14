@@ -455,112 +455,262 @@ export function makeCornRoughnessTexture() {
 // SANDÍA — exterior (cáscara)
 // =====================================================
 
+// Helper para dibujar una franja orgánica con ancho variable. Cada franja
+// es una banda continua que se ensancha y se estrecha, con leves
+// "bahías" donde el verde claro entra. Esto rompe la apariencia de
+// sinusoide perfecta — las franjas de una sandía real son irregulares,
+// branching, con anchos que varían 2-3× a lo largo del fruto.
+function strokeOrganicStripe(ctx, W, H, opts) {
+  const {
+    cx, baseHalfWidth, wobAmp, wobFreq, phase,
+    widthVariation, taperTop = 0.0, taperBottom = 0.0,
+    fillStyle, segments = 220,
+  } = opts;
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  ctx.save();
+  ctx.beginPath();
+  // Centro de la franja (curva longitudinal serpenteante)
+  const centerAt = (t) =>
+    cx +
+    Math.sin(t * Math.PI * wobFreq + phase) * wobAmp +
+    Math.sin(t * Math.PI * wobFreq * 2.7 - phase * 0.7) * wobAmp * 0.30 +
+    Math.sin(t * Math.PI * wobFreq * 5.1 + phase * 1.4) * wobAmp * 0.12;
+  // Half-width variable a lo largo de la franja (modulado por una
+  // suma de tres ondas de baja frecuencia + un envelope tapered)
+  const halfWidthAt = (t) => {
+    const wave =
+      Math.sin(t * Math.PI * 3.1 + phase * 1.7) * 0.45 +
+      Math.sin(t * Math.PI * 1.7 - phase * 0.9) * 0.30 +
+      Math.sin(t * Math.PI * 6.3 + phase * 0.4) * 0.15;
+    const envBottom = lerp(taperBottom, 1, Math.min(1, t / 0.15));
+    const envTop = lerp(1, taperTop, Math.max(0, (t - 0.85) / 0.15));
+    return baseHalfWidth * (1 + wave * widthVariation) * envBottom * envTop;
+  };
+
+  // Borde derecho (de abajo arriba)
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const y = t * H;
+    const x = centerAt(t) + halfWidthAt(t);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  // Borde izquierdo (de arriba abajo)
+  for (let i = segments; i >= 0; i--) {
+    const t = i / segments;
+    const y = t * H;
+    const x = centerAt(t) - halfWidthAt(t);
+    ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+  ctx.restore();
+}
+
 function paintWatermelonRind(ctx, W, H) {
-  // Base con gradiente bandeado
+  // === Base verde con bandeado vertical (tallo→flor) ===
   const base = ctx.createLinearGradient(0, 0, 0, H);
-  base.addColorStop(0, '#3f6212');
-  base.addColorStop(0.5, '#65a30d');
-  base.addColorStop(1, '#365314');
+  base.addColorStop(0.00, '#3f6212');
+  base.addColorStop(0.18, '#577e1e');
+  base.addColorStop(0.50, '#6ba310');
+  base.addColorStop(0.82, '#56871a');
+  base.addColorStop(1.00, '#365314');
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, W, H);
 
-  // Capa de moteado fino tipo "skin"
-  for (let i = 0; i < 3500; i++) {
+  // === Manchas FBM grandes para variación cromática orgánica ===
+  for (let i = 0; i < 80; i++) {
     const x = Math.random() * W;
     const y = Math.random() * H;
-    const r = 3 + Math.random() * 22;
-    const grn = 100 + Math.random() * 130;
-    ctx.fillStyle = `rgba(${grn * 0.7 | 0}, ${grn | 0}, ${grn * 0.4 | 0}, ${0.04 + Math.random() * 0.12})`;
+    const r = 60 + Math.random() * 220;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const dark = Math.random() < 0.55;
+    if (dark) {
+      g.addColorStop(0, 'rgba(40, 76, 18, 0.18)');
+      g.addColorStop(1, 'rgba(40, 76, 18, 0)');
+    } else {
+      g.addColorStop(0, 'rgba(150, 188, 100, 0.16)');
+      g.addColorStop(1, 'rgba(150, 188, 100, 0)');
+    }
+    ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Franjas oscuras onduladas (con gradiente para volumen)
-  const STRIPES = 11;
-  const stripeWidth = W / STRIPES;
+  // === Moteado fino tipo "skin" ===
+  for (let i = 0; i < 4200; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    const r = 2 + Math.random() * 18;
+    const grn = 90 + Math.random() * 140;
+    ctx.fillStyle = `rgba(${grn * 0.7 | 0}, ${grn | 0}, ${grn * 0.42 | 0}, ${0.04 + Math.random() * 0.12})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // === Franjas oscuras: irregulares, con ancho variable y branches ===
+  // En lugar de N franjas idénticas, se generan ~9 franjas principales
+  // con anchos, fases y variaciones distintos, más algunas franjas
+  // secundarias finas que branching desde las principales.
+  const STRIPES = 9;
+  const slotWidth = W / STRIPES;
+
+  // Parámetros por franja, generados pseudoaleatoriamente con semilla fija
+  const rng = (() => {
+    let s = 17;
+    return () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  })();
+
+  const mainStripes = [];
   for (let s = 0; s < STRIPES; s++) {
-    const cx = s * stripeWidth + stripeWidth / 2;
+    const center = s * slotWidth + slotWidth / 2 + (rng() - 0.5) * slotWidth * 0.28;
+    const baseHalf = slotWidth * (0.20 + rng() * 0.16);
+    const wobAmp = slotWidth * (0.16 + rng() * 0.18);
+    const wobFreq = 1.6 + rng() * 2.2;
+    const phase = rng() * Math.PI * 2;
+    const widthVar = 0.32 + rng() * 0.34;
+    const taperTop = 0.30 + rng() * 0.45;
+    const taperBottom = 0.30 + rng() * 0.45;
+    mainStripes.push({ center, baseHalf, wobAmp, wobFreq, phase, widthVar, taperTop, taperBottom });
+  }
+
+  // Dibujo de cada franja principal
+  for (const sp of mainStripes) {
+    // Gradiente de color profundo en el centro, casi negro
+    const grad = ctx.createLinearGradient(
+      sp.center - sp.baseHalf * 1.2, 0,
+      sp.center + sp.baseHalf * 1.2, 0,
+    );
+    grad.addColorStop(0.0, '#04150a');
+    grad.addColorStop(0.5, '#0a2310');
+    grad.addColorStop(1.0, '#04150a');
+    strokeOrganicStripe(ctx, W, H, {
+      cx: sp.center,
+      baseHalfWidth: sp.baseHalf,
+      wobAmp: sp.wobAmp,
+      wobFreq: sp.wobFreq,
+      phase: sp.phase,
+      widthVariation: sp.widthVar,
+      taperTop: sp.taperTop,
+      taperBottom: sp.taperBottom,
+      fillStyle: grad,
+    });
+  }
+
+  // === Franjas secundarias (branches) finas, parten/terminan en
+  // diferentes alturas — esto da el look "forked" de una sandía real ===
+  for (let i = 0; i < 14; i++) {
+    const parent = mainStripes[i % STRIPES];
+    const sideSign = rng() < 0.5 ? -1 : 1;
+    const yStart = rng() * 0.4;
+    const yEnd = yStart + 0.35 + rng() * 0.4;
+    const offsetMag = parent.baseHalf * (1.6 + rng() * 0.8) * sideSign;
+    const branchHalf = parent.baseHalf * (0.32 + rng() * 0.22);
+    const branchAmp = parent.wobAmp * (0.6 + rng() * 0.4);
+    const branchPhase = parent.phase + rng() * 2.5;
+    const segments = 120;
     ctx.save();
     ctx.beginPath();
-    const segments = 96;
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments;
+    const cAt = (t) =>
+      parent.center + offsetMag +
+      Math.sin(t * Math.PI * 3.4 + branchPhase) * branchAmp * 0.6 +
+      Math.sin(t * Math.PI * 7.1 - branchPhase) * branchAmp * 0.18;
+    for (let k = 0; k <= segments; k++) {
+      const t = k / segments;
+      if (t < yStart || t > yEnd) continue;
+      // Envelope que crece y decrece dentro del rango
+      const localT = (t - yStart) / (yEnd - yStart);
+      const env = Math.sin(localT * Math.PI);
+      const x = cAt(t) + branchHalf * env;
       const y = t * H;
-      const wob =
-        Math.sin(t * 9 + s * 1.3) * stripeWidth * 0.20 +
-        Math.sin(t * 21 + s) * stripeWidth * 0.06 +
-        Math.sin(t * 41 + s * 2.1) * stripeWidth * 0.03;
-      const x = cx + wob - stripeWidth * 0.32;
-      if (i === 0) ctx.moveTo(x, y);
+      if (k === Math.floor(yStart * segments) + 1) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
-    for (let i = segments; i >= 0; i--) {
-      const t = i / segments;
+    for (let k = segments; k >= 0; k--) {
+      const t = k / segments;
+      if (t < yStart || t > yEnd) continue;
+      const localT = (t - yStart) / (yEnd - yStart);
+      const env = Math.sin(localT * Math.PI);
+      const x = cAt(t) - branchHalf * env;
       const y = t * H;
-      const wob =
-        Math.sin(t * 9 + s * 1.3) * stripeWidth * 0.20 +
-        Math.sin(t * 21 + s) * stripeWidth * 0.06 +
-        Math.sin(t * 41 + s * 2.1) * stripeWidth * 0.03;
-      const x = cx + wob + stripeWidth * 0.32;
       ctx.lineTo(x, y);
     }
     ctx.closePath();
-
-    const grad = ctx.createLinearGradient(cx - stripeWidth * 0.4, 0, cx + stripeWidth * 0.4, 0);
-    grad.addColorStop(0, '#03150a');
-    grad.addColorStop(0.5, '#0d2a14');
-    grad.addColorStop(1, '#03150a');
-    ctx.fillStyle = grad;
+    ctx.fillStyle = 'rgba(8, 26, 14, 0.78)';
     ctx.fill();
-
-    ctx.clip();
-    // Detalles dentro de la franja oscura
-    for (let i = 0; i < 160; i++) {
-      const x = cx - stripeWidth * 0.5 + Math.random() * stripeWidth;
-      const y = Math.random() * H;
-      ctx.fillStyle = `rgba(70, 110, 40, ${0.06 + Math.random() * 0.12})`;
-      ctx.beginPath();
-      ctx.arc(x, y, 1 + Math.random() * 7, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Filamentos finos (vetas de cera)
-    for (let i = 0; i < 20; i++) {
-      const yy = Math.random() * H;
-      ctx.strokeStyle = `rgba(20, 40, 12, ${0.18 + Math.random() * 0.18})`;
-      ctx.lineWidth = 0.3 + Math.random() * 0.6;
-      ctx.beginPath();
-      ctx.moveTo(cx - stripeWidth * 0.5, yy);
-      ctx.bezierCurveTo(
-        cx - stripeWidth * 0.2, yy + (Math.random() - 0.5) * 30,
-        cx + stripeWidth * 0.2, yy + (Math.random() - 0.5) * 30,
-        cx + stripeWidth * 0.5, yy,
-      );
-      ctx.stroke();
-    }
     ctx.restore();
   }
 
-  // Sutil cera ceramica (highlights difusos a baja alpha)
-  for (let i = 0; i < 80; i++) {
+  // === Detalles dentro de las franjas (filamentos, granulado) ===
+  // Se hace en un segundo paso con composite multiply para teñir lo que
+  // ya está oscuro sin tocar el verde brillante.
+  ctx.save();
+  ctx.globalCompositeOperation = 'soft-light';
+  for (let i = 0; i < 600; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    ctx.fillStyle = `rgba(60, 100, 36, ${0.10 + Math.random() * 0.18})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1 + Math.random() * 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // === Filamentos finos curvos (vetas naturales) ===
+  for (let i = 0; i < 220; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    ctx.strokeStyle = `rgba(20, 44, 12, ${0.10 + Math.random() * 0.18})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.bezierCurveTo(
+      x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 40,
+      x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 40,
+      x + (Math.random() - 0.5) * 120, y + (Math.random() - 0.5) * 60,
+    );
+    ctx.stroke();
+  }
+
+  // === Cera cerámica (highlights difusos) ===
+  for (let i = 0; i < 70; i++) {
     const x = Math.random() * W;
     const y = Math.random() * H;
     const r = 40 + Math.random() * 100;
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, 'rgba(220, 240, 180, 0.06)');
-    grad.addColorStop(1, 'rgba(220, 240, 180, 0)');
+    grad.addColorStop(0, 'rgba(225, 242, 188, 0.07)');
+    grad.addColorStop(1, 'rgba(225, 242, 188, 0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Pequeñas imperfecciones — manchitas oscuras (cicatrices)
-  for (let i = 0; i < 90; i++) {
+  // === Cicatrices/manchas pequeñas oscuras ===
+  for (let i = 0; i < 110; i++) {
     const x = Math.random() * W;
     const y = Math.random() * H;
     const r = 1 + Math.random() * 3;
-    ctx.fillStyle = `rgba(20, 30, 8, ${0.18 + Math.random() * 0.25})`;
+    ctx.fillStyle = `rgba(18, 32, 8, ${0.18 + Math.random() * 0.28})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // === Lenticelas pálidas (pequeños puntos amarillentos) ===
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    const r = 0.8 + Math.random() * 1.6;
+    ctx.fillStyle = `rgba(230, 235, 178, ${0.30 + Math.random() * 0.35})`;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
@@ -578,41 +728,46 @@ function paintWatermelonHeight(ctx, W, H) {
   ctx.fillStyle = '#9a9a9a';
   ctx.fillRect(0, 0, W, H);
 
-  // Franjas levemente elevadas
-  const STRIPES = 11;
-  const stripeWidth = W / STRIPES;
+  // Franjas elevadas: usa el mismo layout pseudo-random que la color map
+  // para que los relieves coincidan con las franjas oscuras visibles.
+  const STRIPES = 9;
+  const slotWidth = W / STRIPES;
+  const rng = (() => {
+    let s = 17;
+    return () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+  })();
+
   for (let s = 0; s < STRIPES; s++) {
-    const cx = s * stripeWidth + stripeWidth / 2;
-    ctx.save();
-    ctx.beginPath();
-    const segments = 60;
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments;
-      const y = t * H;
-      const wob = Math.sin(t * 9 + s * 1.3) * stripeWidth * 0.20;
-      const x = cx + wob - stripeWidth * 0.32;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    for (let i = segments; i >= 0; i--) {
-      const t = i / segments;
-      const y = t * H;
-      const wob = Math.sin(t * 9 + s * 1.3) * stripeWidth * 0.20;
-      const x = cx + wob + stripeWidth * 0.32;
-      ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = '#bababa';
-    ctx.fill();
-    ctx.restore();
+    const center = s * slotWidth + slotWidth / 2 + (rng() - 0.5) * slotWidth * 0.28;
+    const baseHalf = slotWidth * (0.20 + rng() * 0.16);
+    const wobAmp = slotWidth * (0.16 + rng() * 0.18);
+    const wobFreq = 1.6 + rng() * 2.2;
+    const phase = rng() * Math.PI * 2;
+    const widthVar = 0.32 + rng() * 0.34;
+    const taperTop = 0.30 + rng() * 0.45;
+    const taperBottom = 0.30 + rng() * 0.45;
+    strokeOrganicStripe(ctx, W, H, {
+      cx: center,
+      baseHalfWidth: baseHalf,
+      wobAmp,
+      wobFreq,
+      phase,
+      widthVariation: widthVar,
+      taperTop,
+      taperBottom,
+      fillStyle: '#c6c6c6',
+    });
   }
 
   // Ruido pebbly fino + pequeños hoyitos (poros)
-  for (let i = 0; i < 14000; i++) {
+  for (let i = 0; i < 16000; i++) {
     const x = Math.random() * W;
     const y = Math.random() * H;
-    const r = 0.6 + Math.random() * 2.4;
-    const v = 80 + Math.random() * 150;
+    const r = 0.5 + Math.random() * 2.2;
+    const v = 70 + Math.random() * 160;
     ctx.fillStyle = `rgb(${v},${v},${v})`;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -1719,4 +1874,210 @@ export function makePodInteriorTexture() {
   }
 
   return toColorTexture(canvas);
+}
+
+// =====================================================
+// HOJA DE SANDÍA — distinta a la hoja genérica del frijol.
+// Las hojas de Citrullus lanatus son palmatipartidas (5 lóbulos
+// profundos), color verde grisáceo con haz más claro, nervaduras
+// palmadas radiando desde el pecíolo. Esta textura asume que la
+// geometría está orientada con el pecíolo en (0,0) y la punta hacia +Y.
+// =====================================================
+
+function paintWatermelonLeafColor(ctx, W, H) {
+  // Base con gradiente: borde más oscuro, centro verde grisáceo claro
+  const radial = ctx.createRadialGradient(W / 2, 0, 0, W / 2, 0, Math.max(W, H));
+  radial.addColorStop(0.00, '#5a7a2c');
+  radial.addColorStop(0.45, '#6b8a36');
+  radial.addColorStop(0.85, '#3e5c1a');
+  radial.addColorStop(1.00, '#28401a');
+  ctx.fillStyle = radial;
+  ctx.fillRect(0, 0, W, H);
+
+  // FBM para variación cromática (manchas verde-grisáceas naturales)
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const n = fbm2D(x / W * 5, y / H * 5, 4);
+      const n2 = fbm2D(x / W * 17 + 3.1, y / H * 17 - 1.4, 3);
+      const i = (y * W + x) * 4;
+      const f = 0.85 + n * 0.30;
+      // tinte grisáceo en zonas medias
+      const gray = (n2 - 0.5) * 0.15;
+      img.data[i + 0] = Math.min(255, Math.max(0, img.data[i + 0] * f + gray * 20));
+      img.data[i + 1] = Math.min(255, Math.max(0, img.data[i + 1] * (0.88 + n * 0.28) + gray * 15));
+      img.data[i + 2] = Math.min(255, Math.max(0, img.data[i + 2] * (f - 0.06) + gray * 8));
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Nervaduras palmadas: 5 nervios principales radiando desde el centro
+  // bajo (donde está el pecíolo) hacia cada lóbulo. Cada nervio principal
+  // genera nervios secundarios que se ramifican.
+  const baseX = W / 2;
+  const baseY = H * 0.06;
+  const lobeAngles = [-1.10, -0.55, 0.0, 0.55, 1.10]; // radianes desde +Y
+  ctx.lineCap = 'round';
+
+  for (const angle of lobeAngles) {
+    const tipDist = Math.min(W, H) * 0.95 * (Math.abs(angle) < 0.1 ? 1.0 : 0.85);
+    const tipX = baseX + Math.sin(angle) * tipDist;
+    const tipY = baseY + Math.cos(angle) * tipDist;
+    // Nervio principal: línea curva
+    ctx.strokeStyle = 'rgba(35, 56, 18, 0.78)';
+    ctx.lineWidth = 4.2;
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY);
+    ctx.quadraticCurveTo(
+      baseX + Math.sin(angle * 1.1) * tipDist * 0.45,
+      baseY + Math.cos(angle * 1.1) * tipDist * 0.45,
+      tipX, tipY,
+    );
+    ctx.stroke();
+
+    // Nervios secundarios
+    ctx.strokeStyle = 'rgba(35, 56, 18, 0.45)';
+    ctx.lineWidth = 1.6;
+    const sideSteps = 7;
+    for (let k = 1; k <= sideSteps; k++) {
+      const tt = k / (sideSteps + 1);
+      const mx = baseX + (tipX - baseX) * tt;
+      const my = baseY + (tipY - baseY) * tt;
+      const lenSec = 22 + Math.random() * 28;
+      const perpAngleA = angle + Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+      const perpAngleB = angle - Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.quadraticCurveTo(
+        mx + Math.sin(perpAngleA) * lenSec * 0.4,
+        my + Math.cos(perpAngleA) * lenSec * 0.4,
+        mx + Math.sin(perpAngleA) * lenSec,
+        my + Math.cos(perpAngleA) * lenSec,
+      );
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.quadraticCurveTo(
+        mx + Math.sin(perpAngleB) * lenSec * 0.4,
+        my + Math.cos(perpAngleB) * lenSec * 0.4,
+        mx + Math.sin(perpAngleB) * lenSec,
+        my + Math.cos(perpAngleB) * lenSec,
+      );
+      ctx.stroke();
+    }
+  }
+
+  // Nervaduras terciarias (red fina)
+  ctx.strokeStyle = 'rgba(38, 60, 22, 0.18)';
+  ctx.lineWidth = 0.7;
+  for (let i = 0; i < 220; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(
+      x + (Math.random() - 0.5) * 32,
+      y + (Math.random() - 0.5) * 32,
+    );
+    ctx.stroke();
+  }
+
+  // Highlights translúcidos cerca de las nervaduras
+  for (let i = 0; i < 320; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    ctx.fillStyle = `rgba(190, 220, 130, ${0.04 + Math.random() * 0.07})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 3 + Math.random() * 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Manchas oscuras de pigmentación natural
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    ctx.fillStyle = `rgba(22, 38, 10, ${0.06 + Math.random() * 0.10})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1 + Math.random() * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+export function makeWatermelonLeafColorTexture() {
+  const W = 768, H = 768;
+  const canvas = makeCanvas(W, H);
+  paintWatermelonLeafColor(canvas.getContext('2d'), W, H);
+  return toColorTexture(canvas);
+}
+
+function paintWatermelonLeafHeight(ctx, W, H) {
+  ctx.fillStyle = '#8a8a8a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Nervaduras palmadas elevadas (mismas direcciones que la color map)
+  const baseX = W / 2;
+  const baseY = H * 0.06;
+  const lobeAngles = [-1.10, -0.55, 0.0, 0.55, 1.10];
+
+  for (const angle of lobeAngles) {
+    const tipDist = Math.min(W, H) * 0.95 * (Math.abs(angle) < 0.1 ? 1.0 : 0.85);
+    const tipX = baseX + Math.sin(angle) * tipDist;
+    const tipY = baseY + Math.cos(angle) * tipDist;
+    ctx.strokeStyle = '#dcdcdc';
+    ctx.lineWidth = 6.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY);
+    ctx.quadraticCurveTo(
+      baseX + Math.sin(angle * 1.1) * tipDist * 0.45,
+      baseY + Math.cos(angle * 1.1) * tipDist * 0.45,
+      tipX, tipY,
+    );
+    ctx.stroke();
+
+    ctx.strokeStyle = '#bababa';
+    ctx.lineWidth = 2.4;
+    const sideSteps = 7;
+    for (let k = 1; k <= sideSteps; k++) {
+      const tt = k / (sideSteps + 1);
+      const mx = baseX + (tipX - baseX) * tt;
+      const my = baseY + (tipY - baseY) * tt;
+      const lenSec = 22 + Math.random() * 28;
+      const perpAngleA = angle + Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+      const perpAngleB = angle - Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.lineTo(
+        mx + Math.sin(perpAngleA) * lenSec,
+        my + Math.cos(perpAngleA) * lenSec,
+      );
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.lineTo(
+        mx + Math.sin(perpAngleB) * lenSec,
+        my + Math.cos(perpAngleB) * lenSec,
+      );
+      ctx.stroke();
+    }
+  }
+
+  // Pebbly noise (la superficie de la hoja tiene textura pubescente)
+  for (let i = 0; i < 4500; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    const r = 0.5 + Math.random() * 1.4;
+    const v = 110 + Math.random() * 100;
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+export function makeWatermelonLeafNormalTexture() {
+  const W = 768, H = 768;
+  const canvas = makeCanvas(W, H);
+  paintWatermelonLeafHeight(canvas.getContext('2d'), W, H);
+  return normalTextureFromHeightCanvas(canvas, 1.4);
 }
