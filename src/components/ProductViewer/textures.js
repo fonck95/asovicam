@@ -668,6 +668,76 @@ const FLESH_STOPS = [
   { r: 1.00, c: [178, 200, 128] }, // verde tenue (cáscara interna)
 ];
 
+// =====================================================
+// Layout determinístico de semillas para la rebanada.
+// Antes había 3 anillos concéntricos con conteos {7,9,11} — patrón
+// matemático que se delataba como artificial al primer vistazo. Las
+// sandías reales no tienen semillas en círculos perfectos: las
+// semillas siguen las PLACENTAS (3 tabiques cárpelares) que se
+// proyectan radialmente desde el corazón con curvatura propia y
+// distribución irregular dentro de cada banda.
+//
+// Este generador comparte la misma fuente entre la malla 3D
+// (semillas embebidas) y el canvas 2D (cavidades pintadas bajo cada
+// semilla), de modo que ambas se alinean exactamente. Posiciones
+// normalizadas (nx, ny) ∈ unidades de SLICE_RADIUS, con ny ≥ 0 para
+// quedar en el semicírculo visible del corte.
+// =====================================================
+export function generateWatermelonSeedLayout() {
+  // RNG LCG con seed fijo — la misma distribución cada vez que se
+  // monta el modelo (importante para alinear textura y 3D).
+  let state = 0x6f0d9c1d;
+  const rng = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+
+  const seeds = [];
+  // 3 placentas curvadas en el semicírculo superior. Ángulos base
+  // ligeramente off-center y curvaturas heterogéneas para romper
+  // simetría visual.
+  const placentas = [
+    { ang0: Math.PI * 0.30, curvature: 0.20, density: 11 },
+    { ang0: Math.PI * 0.50, curvature: -0.09, density: 13 },
+    { ang0: Math.PI * 0.70, curvature: 0.17, density: 11 },
+  ];
+
+  for (let p = 0; p < placentas.length; p++) {
+    const pl = placentas[p];
+    for (let i = 0; i < pl.density; i++) {
+      // ~12% de huecos — placentas reales saltan posiciones
+      if (rng() < 0.12) continue;
+      // Parámetro 0..1 a lo largo de la placenta. Le aplicamos un
+      // desplazamiento estocástico pequeño para que las semillas no
+      // queden equiespaciadas dentro del bunch.
+      const t = (i + 0.20 + rng() * 0.55) / pl.density;
+      // Radio sub-linear: más densas hacia el medio que en los
+      // extremos (concentración natural por elongación carpelar).
+      const r = 0.20 + Math.pow(t, 0.92) * 0.62;
+      // Curvatura sinusoidal: ángulo varía con t.
+      const ang = pl.ang0 + Math.sin(t * Math.PI) * pl.curvature
+                + (rng() - 0.5) * 0.10;
+      const radJ = (rng() - 0.5) * 0.07;
+      const tangJ = (rng() - 0.5) * 0.13;
+      const nx = Math.cos(ang) * (r + radJ) - Math.sin(ang) * tangJ;
+      const ny = Math.sin(ang) * (r + radJ) + Math.cos(ang) * tangJ;
+      // Evitar el borde inferior del corte y el rind exterior.
+      if (ny < 0.03 || r > 0.86) continue;
+      seeds.push({
+        nx,
+        ny,
+        // Rotación: alineada con la dirección de la placenta + jitter
+        rotZ: ang + Math.PI / 2 + (rng() - 0.5) * 0.7,
+        scale: 0.72 + rng() * 0.50,
+        // Profundidad estocástica: algunas semillas más expuestas que
+        // otras (variación ±15% del offset frontal en la malla 3D).
+        depthOffset: (rng() - 0.5) * 0.012,
+      });
+    }
+  }
+  return seeds;
+}
+
 function fleshRadialColor(t) {
   // Devuelve [r, g, b] interpolado en la paleta para t ∈ [0, 1]
   const tt = Math.max(0, Math.min(1, t));
@@ -711,6 +781,9 @@ function paintWatermelonFlesh(ctx, W, H) {
   const VORONOI_FINE = 70;
   // La pulpa madura ocupa casi todo el radio: sólo ~5% de pre-corteza
   // blanca antes del rind verde. Antes era 0.83 → demasiado blanco.
+  // FLESH_END/PRECRUST_END son los valores BASE; cada píxel obtiene una
+  // pequeña ondulación angular para que la frontera no sea un círculo
+  // perfecto (ver `wobble` dentro del loop).
   const FLESH_END = 0.91;
   const PRECRUST_END = 0.96;
 
@@ -720,6 +793,13 @@ function paintWatermelonFlesh(ctx, W, H) {
       const dxN = (x - cx) / maxR;
       const dist = Math.sqrt(dxN * dxN + dyN * dyN);
       const i = (y * W + x) * 4;
+      // Frontera pulpa↔pre-corteza ligeramente ondulada (no círculo
+      // perfecto). La pulpa real avanza hacia la cáscara en lóbulos
+      // suaves siguiendo los haces vasculares.
+      const angRaw = Math.atan2(dyN, dxN);
+      const boundaryWobble = (fbm2D(angRaw * 1.4 + 7, dist * 0.6, 2) - 0.5) * 0.020;
+      const fleshEnd = FLESH_END + boundaryWobble;
+      const precrustEnd = PRECRUST_END + boundaryWobble * 0.6;
 
       // Fuera del disco visible — pintamos verde-rind en lugar de
       // cream para que cualquier sangrado por bevel o anisotropic
@@ -738,8 +818,40 @@ function paintWatermelonFlesh(ctx, W, H) {
       // 1. Color radial base (gradiente fotométrico)
       let [r, g, b] = fleshRadialColor(dist);
 
+      // 1b. Variación cromática de GRAN ESCALA — el problema antes
+      // era que el gradiente radial era perfectamente simétrico y
+      // suave, lo que se leía como "render plástico". Una sandía real
+      // tiene parches asimétricos: zonas algo más wine, otras más rojo
+      // brillante, y bandas que cortan oblicuamente la pulpa. Usamos
+      // dos FBM de baja frecuencia (3-5 ciclos sobre todo el disco)
+      // para introducir esa irregularidad sin destruir el gradiente
+      // base. Restringido a la zona de pulpa.
+      if (dist < fleshEnd * 0.98) {
+        const macro = fbm2D((x / W) * 3.2, (y / H) * 3.2, 4) - 0.5;
+        const macroSwing = (1 - Math.pow(dist / FLESH_END, 1.4)) * 22;
+        r += macro * macroSwing;
+        g += macro * macroSwing * 0.35;
+        b += macro * macroSwing * 0.25;
+
+        const macro2 = fbm2D((x / W) * 5.6 + 47, (y / H) * 5.6 + 19, 3) - 0.5;
+        r += macro2 * 11;
+        g -= macro2 * 5;
+        b -= macro2 * 3;
+
+        // Manchas wine localizadas — sólo donde el ruido grande supera
+        // un umbral, se hunde la luminosidad. Da el efecto de "zonas
+        // más maduras" sin teñir la pulpa entera.
+        const patch = valueNoise2D((x / W) * 4.5 + 11, (y / H) * 4.5 + 31);
+        if (patch > 0.62) {
+          const p = smoothstep(0.62, 0.85, patch);
+          r *= 1 - p * 0.10;
+          g *= 1 - p * 0.18;
+          b *= 1 - p * 0.16;
+        }
+      }
+
       // 2. Voronoi celular — pulpa roja con variación por saturación
-      if (dist < FLESH_END) {
+      if (dist < fleshEnd) {
         const v = voronoi2D((x / W) * VORONOI_SCALE, (y / H) * VORONOI_SCALE);
 
         // 2a. Variación por celda en SATURACIÓN: las celdas "claras"
@@ -827,7 +939,7 @@ function paintWatermelonFlesh(ctx, W, H) {
       // 3. Haces vasculares radiales — la sandía tiene 3-4 placentas
       // donde se anclan las semillas. De ellas salen fibras tenues hacia
       // la corteza. Modeladas como FBM angular modulado por radio.
-      if (dist > 0.04 && dist < FLESH_END) {
+      if (dist > 0.04 && dist < fleshEnd) {
         // 6 "rayos" principales con FBM aleatorio para ondulación
         const fiberAng = angle * 6;
         const fiberFract = fiberAng - Math.floor(fiberAng);
@@ -856,7 +968,7 @@ function paintWatermelonFlesh(ctx, W, H) {
 
       // 4. Micro-grano FBM — ruido fino que rompe regularidad Voronoi
       const fineN = fbm2D((x / W) * 110, (y / H) * 110, 3) - 0.5;
-      const grainAmt = dist < FLESH_END ? 11 : 4;
+      const grainAmt = dist < fleshEnd ? 11 : 4;
       r += fineN * grainAmt;
       g += fineN * grainAmt * 0.55;
       b += fineN * grainAmt * 0.55;
@@ -864,7 +976,7 @@ function paintWatermelonFlesh(ctx, W, H) {
       // 4b. Capa adicional de "moteado" rojo profundo — sutiles puntos
       // más oscuros distribuidos en la pulpa (cromatóforos / azúcar
       // localmente más concentrada). Aumenta la sensación de profundidad.
-      if (dist < FLESH_END * 0.96) {
+      if (dist < fleshEnd * 0.96) {
         const speckle = valueNoise2D((x / W) * 220, (y / H) * 220);
         if (speckle > 0.78) {
           const sp = (speckle - 0.78) / 0.22;
@@ -879,7 +991,7 @@ function paintWatermelonFlesh(ctx, W, H) {
       // visibles en macro como rayas pálidas-amarillentas casi rectas.
       // Las renderizamos como un ruido FBM modulado por una función
       // angular de alta frecuencia, restringido a la pulpa madura.
-      if (dist > 0.05 && dist < FLESH_END * 0.94) {
+      if (dist > 0.05 && dist < fleshEnd * 0.94) {
         const radialFiberAng = angle * 38;
         const rfFract = radialFiberAng - Math.floor(radialFiberAng);
         const rfMid = Math.min(rfFract, 1 - rfFract);
@@ -898,7 +1010,7 @@ function paintWatermelonFlesh(ctx, W, H) {
       // pequeños y dispersos, característicos de sandía dulce madura.
       // Aparecen sólo donde el ruido alcanza umbrales altos para
       // mantenerlos escasos y puntuales (no una capa global).
-      if (dist < FLESH_END * 0.92) {
+      if (dist < fleshEnd * 0.92) {
         const sugar = valueNoise2D((x / W) * 480, (y / H) * 480);
         if (sugar > 0.86) {
           const sg = (sugar - 0.86) / 0.14;
@@ -911,8 +1023,8 @@ function paintWatermelonFlesh(ctx, W, H) {
       // 5. Pre-corteza fibrosa: BANDA DELGADA entre pulpa y cáscara.
       // En la sandía real es ~5% del radio — el blanco aquí es fibroso
       // con vetas radiales muy marcadas, no homogéneo.
-      if (dist >= FLESH_END && dist < PRECRUST_END) {
-        const t = (dist - FLESH_END) / (PRECRUST_END - FLESH_END); // 0..1
+      if (dist >= fleshEnd && dist < precrustEnd) {
+        const t = (dist - fleshEnd) / (precrustEnd - fleshEnd); // 0..1
         // Fibras estiradas radialmente — alta frecuencia angular
         const fiberN = fbm2D(angle * 90, dist * 95, 3);
         const fiberN2 = valueNoise2D(angle * 160, dist * 32);
@@ -1035,39 +1147,35 @@ function paintWatermelonFlesh(ctx, W, H) {
   }
 
   // 8. Cavidades de semilla con halo MÁS PROFUNDO Y CONTRASTADO.
-  // Cada cavidad tiene: bowl oscuro central + anillo wine + leve
-  // highlight rosado en el borde donde la pulpa rezuma.
-  const seedRings = [
-    { r: maxR * 0.42, count: 7 },
-    { r: maxR * 0.58, count: 9 },
-    { r: maxR * 0.74, count: 11 },
-  ];
-  for (const ring of seedRings) {
-    for (let k = 0; k < ring.count; k++) {
-      const t = (k + 0.5) / ring.count;
-      const a = Math.PI - t * Math.PI; // sólo semicírculo superior
-      const jitter = (hash2(ring.r, k) - 0.5) * 0.04 * maxR;
-      const x = cx + Math.cos(a) * (ring.r + jitter);
-      const y = cy + Math.sin(a) * (ring.r + jitter);
-      const haloR = 19;
-      const halo = ctx.createRadialGradient(x, y, 0, x, y, haloR);
-      halo.addColorStop(0, 'rgba(55, 2, 12, 0.62)');     // bowl central
-      halo.addColorStop(0.40, 'rgba(85, 6, 20, 0.30)');  // wine anillo
-      halo.addColorStop(0.70, 'rgba(140, 18, 36, 0.10)'); // ruby fade
-      halo.addColorStop(1, 'rgba(140, 18, 36, 0)');
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(x, y, haloR, 0, Math.PI * 2);
-      ctx.fill();
-      // Highlight cálido en el borde superior-izq de cada cavidad
-      const sheenG = ctx.createRadialGradient(x - 3, y - 3, 0, x - 3, y - 3, 6);
-      sheenG.addColorStop(0, 'rgba(255, 215, 215, 0.32)');
-      sheenG.addColorStop(1, 'rgba(255, 215, 215, 0)');
-      ctx.fillStyle = sheenG;
-      ctx.beginPath();
-      ctx.arc(x - 3, y - 3, 6, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  // Usan el MISMO layout placental que la malla 3D (las semillas
+  // reales se montan sobre estas cavidades), por lo que la cavidad
+  // pintada queda alineada bajo cada semilla y se siente que la
+  // semilla está "asentada" en una huella oscura de la pulpa, no
+  // flotando sobre la superficie.
+  const seedLayout = generateWatermelonSeedLayout();
+  for (const s of seedLayout) {
+    const x = cx + s.nx * maxR;
+    const y = cy + s.ny * maxR;
+    // Tamaño del halo modulado por la escala de la semilla 3D —
+    // semillas pequeñas dejan huella más pequeña.
+    const haloR = 14 + s.scale * 10;
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+    halo.addColorStop(0, 'rgba(55, 2, 12, 0.62)');     // bowl central
+    halo.addColorStop(0.40, 'rgba(85, 6, 20, 0.30)');  // wine anillo
+    halo.addColorStop(0.70, 'rgba(140, 18, 36, 0.10)'); // ruby fade
+    halo.addColorStop(1, 'rgba(140, 18, 36, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(x, y, haloR, 0, Math.PI * 2);
+    ctx.fill();
+    // Highlight cálido en el borde superior-izq de cada cavidad
+    const sheenG = ctx.createRadialGradient(x - 3, y - 3, 0, x - 3, y - 3, 6);
+    sheenG.addColorStop(0, 'rgba(255, 215, 215, 0.32)');
+    sheenG.addColorStop(1, 'rgba(255, 215, 215, 0)');
+    ctx.fillStyle = sheenG;
+    ctx.beginPath();
+    ctx.arc(x - 3, y - 3, 6, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // 9. Glaze de marketing: softbox superior-izq muy tenue. Bajamos

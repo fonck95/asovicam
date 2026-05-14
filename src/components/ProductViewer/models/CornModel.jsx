@@ -245,6 +245,7 @@ function buildHuskGeometry({
   peel = 0,
   baseY = -0.92,
   baseTipFlare = 0.0, // para hojas peeled: cuánto se abren hacia afuera en la punta
+  droopAmt = 0,       // factor de caída vertical de la punta (en unidades de length)
 } = {}) {
   // Hoja envolvente centrada en el EJE del olote. A diferencia de la
   // versión anterior (que offset-eaba cada hoja en radio y dejaba
@@ -253,6 +254,15 @@ function buildHuskGeometry({
   // cilindro virtual de radio HUSK_WRAP_RADIUS. Posicionar 8–10 hojas
   // con rotaciones Y distintas crea capas que se traslapan de forma
   // continua, igual que las brácteas reales del maíz.
+  //
+  // droopAmt > 0 introduce CURVATURA en Y: la parte alta de la hoja
+  // se inclina HACIA ABAJO formando un arco natural — el efecto de
+  // bráctea peeled-back de marketing. Antes esto se intentaba con una
+  // rotación tiltX=0.78 sobre el mesh entero, que pivotaba la hoja
+  // alrededor del eje del olote y la metía POR DENTRO del cuerpo de
+  // la mazorca en el extremo superior. Ahora la curva está en la
+  // propia geometría: la base queda firmemente anclada al pedúnculo
+  // y la punta cae hacia afuera y abajo como una pétalo.
   const lengthSegs = 36;
   const widthSegs = 16;
   const positions = [];
@@ -261,7 +271,14 @@ function buildHuskGeometry({
 
   for (let i = 0; i <= lengthSegs; i++) {
     const t = i / lengthSegs;
-    const y = baseY + t * length;
+    // Curva descendente: la hoja sube linealmente hasta t≈0.30 (zona
+    // donde abraza el olote) y a partir de ahí se inclina hacia abajo
+    // de manera no lineal. Esto reproduce la silueta de "S" suave de
+    // una bráctea pulled-back real: tramo de adherencia + tramo de
+    // caída exterior.
+    const droopT = Math.max(0, t - 0.30) / 0.70;
+    const droopY = droopAmt * Math.pow(droopT, 1.7) * length;
+    const y = baseY + t * length - droopY;
     // Ancho efectivo según t: pegada-ancha en la base, taper progresivo,
     // termina en punta acuminada en t=1 (forma de bráctea real).
     const taper =
@@ -273,8 +290,12 @@ function buildHuskGeometry({
     // Despliegue hacia afuera (peel): la hoja se separa progresivamente
     // del cilindro a medida que sube. peel=0 → siempre pegada;
     // peel=1 → al llegar a la punta está totalmente expuesta y fan-out.
+    // Ampliado a 0.32 (antes 0.22) porque ahora es el único mecanismo
+    // que aleja la punta del cob — sin el tilt agresivo del mesh, el
+    // peel intrínseco de la geometría tiene que aportar todo el
+    // espaciado radial entre hoja y cuerpo de la mazorca.
     const fanOut = peel * Math.pow(t, 1.25);
-    const radius = HUSK_WRAP_RADIUS + fanOut * 0.22;
+    const radius = HUSK_WRAP_RADIUS + fanOut * 0.32;
     // En la punta de las hojas pulled-back agregamos un flare lateral
     // para que el final caiga hacia afuera en lugar de quedar recto.
     const tipFlare = baseTipFlare * Math.pow(t, 2.2);
@@ -297,7 +318,7 @@ function buildHuskGeometry({
       const wave = Math.sin(t * 4.6 + uRel * 2.3) * 0.014 * (1 - peel * 0.45);
       // Curl hacia afuera de las puntas peeled (sólo afecta hojas con peel>0)
       const peelLift = peel > 0
-        ? (-fanOut * 0.25 * (1 - Math.abs(uRel) * 0.4))
+        ? (-fanOut * 0.28 * (1 - Math.abs(uRel) * 0.4))
         : 0;
       // Flare lateral en la punta de hojas peeled — las orillas se
       // separan más que el centro al final.
@@ -610,8 +631,15 @@ export default function CornModel() {
   // olote — como en empaques de elote dulce o fotografía de producto.
   //  • 7 base wraps cortos que sólo cubren el cuarto inferior del olote
   //    (anclan la mazorca al pedúnculo sin obstruir los granos).
-  //  • 7 hojas peeled-back largas que se abren en bouquet alrededor de
-  //    la mazorca, dejando expuesta la mayor parte de los granos.
+  //  • 7 hojas peeled-back largas que TODAS arrancan del pedúnculo
+  //    (mismo nivel que las wraps) y se abren+caen hacia afuera. Antes
+  //    estas hojas tenían baseY en la mitad del olote y un tiltX de
+  //    +0.78 rad sobre el mesh entero — combinación que pivotaba la
+  //    hoja alrededor del eje del olote y empujaba la punta DENTRO del
+  //    cuerpo de la mazorca. El usuario reportó "se superponen sobre
+  //    el cuerpo". Ahora la curva descendente vive en la geometría
+  //    (droopAmt) y todas las hojas anclan en la base, evitando el
+  //    clipping con los granos.
   // El ángulo de inserción usa el ÁNGULO ÁUREO (~137.5°) — la misma
   // filotaxis natural de las gramíneas; conteos en Fibonacci (7+7=14).
   // La variación de longitud, arco y baseY se deriva de la fase i/φ
@@ -638,27 +666,31 @@ export default function CornModel() {
           layer,
           baseY: -0.94 + phase * 0.04,
           baseTipFlare: 0,
+          droopAmt: 0,
         });
       }
 
       // === Hojas peeled-back: el "bouquet" de marketing ===
-      // 7 hojas largas (1.10-1.40) que emergen alrededor de la base
-      // del olote y se abren hacia afuera. peel 0.72-0.92 garantiza
-      // que se separen claramente del cob; baseY se reparte entre
-      // -0.66 y -0.50 para que las puntas terminen a alturas variadas
-      // (cascada orgánica, no abanico uniforme).
+      // 7 hojas largas (1.10-1.45) que arrancan en el pedúnculo
+      // (baseY ≈ -0.90, mismo nivel que las wraps) y caen en cascada
+      // hacia afuera. La curvatura está enteramente en la geometría
+      // (droopAmt 1.2-1.5): cada hoja sube los primeros 30% pegada al
+      // olote y a partir de ahí se desvía hacia afuera+abajo formando
+      // una S suave. Como TODAS las bases tocan el pedúnculo, no hay
+      // hojas "flotando" en el aire ni traspasando el cuerpo del cob.
       const PEEL_COUNT = 7;
       const PEEL_ANGLE_OFFSET = 0.42; // descorrelaciona con base wraps
       for (let i = 0; i < PEEL_COUNT; i++) {
         const phase = ((i + 0.5) / PHI) - Math.floor((i + 0.5) / PHI);
         wrapping.push({
           peel: 0.72 + phase * 0.20,
-          length: 1.10 + phase * 0.30,
-          arcExtent: 0.74 + (1 - phase) * 0.16,
+          length: 1.10 + phase * 0.35,
+          arcExtent: 0.72 + (1 - phase) * 0.16,
           angleOffset: PEEL_ANGLE_OFFSET + i * GOLDEN_ANGLE,
           layer: 2,
-          baseY: -0.66 + phase * 0.16,
-          baseTipFlare: 0.22 + phase * 0.18,
+          baseY: -0.90 + phase * 0.08,
+          baseTipFlare: 0.24 + phase * 0.18,
+          droopAmt: 1.15 + phase * 0.40,
         });
       }
       return wrapping;
@@ -672,6 +704,7 @@ export default function CornModel() {
       peel: cfg.peel,
       baseY: cfg.baseY,
       baseTipFlare: cfg.baseTipFlare,
+      droopAmt: cfg.droopAmt,
     })),
     [huskConfig],
   );
@@ -818,19 +851,26 @@ export default function CornModel() {
           olote y se ubica en (0, baseY, 0) con una rotación Y. Como
           todas comparten el mismo cilindro virtual (HUSK_WRAP_RADIUS),
           se traslapan continuamente unas con otras sin huecos. Las
-          peeled-back además se inclinan hacia afuera para revelar los
-          granos del extremo superior. */}
+          peeled-back ahora obtienen su CURVA descendente directamente
+          desde la geometría (`droopAmt` en buildHuskGeometry), por lo
+          que ya NO aplicamos un tiltX agresivo aquí. Antes tiltX=+0.78
+          pivotaba la hoja entera alrededor del eje del olote y la
+          punta terminaba dentro del cuerpo de la mazorca; ahora la
+          base permanece atornillada al pedúnculo y la punta se
+          desplaza hacia afuera+abajo siguiendo el arco intrínseco. */}
       {huskConfig.map((cfg, i) => {
-        const peeled = cfg.peel > 0.4;
         // Capas: outer (layer 0) en el radio mayor, inner (layer 1) más
         // adentro, peeled (layer 2) salen alrededor de la base y caen
         // hacia afuera formando el bouquet de marketing.
         const radialPush = cfg.layer === 1 ? -0.02 : 0;
-        // Tilt para peeled aumentado a ~0.78 rad (45°): las hojas se
-        // abren francamente hacia afuera revelando los granos. Las
-        // pegadas mantienen una inclinación mínima hacia el cob.
-        const tiltX = peeled ? 0.78 : -0.02 + (i % 2) * 0.015;
-        const tiltZ = peeled ? (i % 2 === 0 ? 0.16 : -0.16) : 0;
+        // Sin tilt agresivo: dejamos micro-variación (±0.025 rad ≈ 1.4°)
+        // sólo para que las hojas no queden todas perfectamente paralelas
+        // en su eje longitudinal.
+        const tiltX = -0.015 + (i % 3) * 0.012;
+        // Twist axial alternado: cada hoja peeled gira ligeramente sobre
+        // su propio eje, dando la asimetría natural de bráctea torcida.
+        const peeled = cfg.peel > 0.4;
+        const tiltZ = peeled ? (i % 2 === 0 ? 0.12 : -0.12) : 0;
         return (
           <mesh
             key={i}
