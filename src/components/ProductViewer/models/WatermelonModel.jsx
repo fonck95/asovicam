@@ -73,13 +73,17 @@ function buildSliceFleshGeometry() {
   shape.absarc(0, 0, r, Math.PI, 0, true);
   shape.lineTo(-r, 0);
 
+  // Bevel notablemente más grande y con muchos más segmentos → borde
+  // redondeado del corte en lugar de canto duro. Hace que la pulpa
+  // "se asome" suavemente al costado y permite que la cáscara verde se
+  // funda con el bevel sin línea visible de transición.
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: SLICE_DEPTH,
     bevelEnabled: true,
-    bevelThickness: 0.025,
-    bevelSize: 0.025,
-    bevelSegments: 6,
-    curveSegments: 96,
+    bevelThickness: 0.045,
+    bevelSize: 0.048,
+    bevelSegments: 12,
+    curveSegments: 128,
   });
   geo.translate(0, 0, -SLICE_DEPTH / 2);
   return remapSliceUVs(geo);
@@ -102,60 +106,67 @@ function remapSliceUVs(geo) {
 }
 
 function buildSliceRindGeometry() {
-  const arcPoints = [];
-  const segments = 96;
-  const r = SLICE_RADIUS + 0.02;
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const a = Math.PI - t * Math.PI;
-    arcPoints.push(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0));
+  // Cáscara verde envolviendo el canto curvo del slice. Sweep de un
+  // perfil tipo media-elipse a lo largo del arco. El perfil es más alto
+  // que ancho (alto ≈ grosor del slice, ancho ≈ grosor de la corteza)
+  // y se hunde hacia adentro en los extremos verticales para que pase
+  // exactamente por la esquina redondeada del bevel de la pulpa,
+  // eliminando la costura blanca/gris entre pulpa y cáscara.
+  const arcSegs = 192;
+  const profileSegs = 32;
+  const halfDepth = SLICE_DEPTH / 2;       // 0.17
+  // Perfil: en theta=0 sobresale `outward` hacia afuera; en theta=±π/2
+  // entra `inward` hacia la pulpa (radial negativo).
+  const outward = 0.060;
+  const inward = 0.052;
+  const profileTopZ = halfDepth + 0.022;   // los tips suben/bajan un poco más allá del slice
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  for (let i = 0; i <= arcSegs; i++) {
+    const u = i / arcSegs;
+    const a = Math.PI - u * Math.PI;
+    const ax = Math.cos(a);
+    const ay = Math.sin(a);
+    for (let j = 0; j <= profileSegs; j++) {
+      const v = j / profileSegs;
+      const theta = -Math.PI / 2 + v * Math.PI;
+      const ct = Math.cos(theta);
+      const st = Math.sin(theta);
+      // Lerp entre extremo exterior (+outward) y extremo interior (-inward)
+      // usando cos(theta) — suave, sin esquinas.
+      const radial = ct * outward - (1 - ct) * inward;
+      const z = st * profileTopZ;
+      const rTotal = SLICE_RADIUS + radial;
+      positions.push(ax * rTotal, ay * rTotal, z);
+      uvs.push(u, v);
+    }
   }
-  const curve = new THREE.CatmullRomCurve3(arcPoints, false);
-  return new THREE.TubeGeometry(curve, 128, SLICE_DEPTH / 2 + 0.04, 22, false);
-}
-
-// POLISH (Prompt 2): mesocarpio = banda blanca-verdosa entre cáscara y
-// pulpa (1–2 cm en la sandía real; aquí ~0.04 unidades). Es un anillo
-// extruido apenas más estrecho que la cáscara y ligeramente más ancho
-// que la pulpa, mapeado con un gradiente blanco→verde tenue para que
-// se mezcle suavemente con ambos lados. Lo que faltaba en el corte
-// para que no se viera "pulpa pegada directo a cáscara".
-const MESO_THICKNESS = 0.04;
-function buildMesocarpGeometry() {
-  const shape = new THREE.Shape();
-  const rOut = SLICE_RADIUS + 0.005;
-  const rIn = SLICE_RADIUS - MESO_THICKNESS;
-  shape.moveTo(-rOut, 0);
-  shape.absarc(0, 0, rOut, Math.PI, 0, true);
-  shape.lineTo(rIn, 0);
-  shape.absarc(0, 0, rIn, 0, Math.PI, false);
-  shape.lineTo(-rOut, 0);
-
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: SLICE_DEPTH * 0.97,
-    bevelEnabled: true,
-    bevelThickness: 0.012,
-    bevelSize: 0.012,
-    bevelSegments: 3,
-    curveSegments: 96,
-  });
-  geo.translate(0, 0, -SLICE_DEPTH * 0.97 / 2);
-  // UV simple radial: el centro de la rebanada es u=0.5, el borde es 0/1
-  const pos = geo.attributes.position;
-  const uv = geo.attributes.uv;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const d = Math.sqrt(x * x + y * y);
-    // d normalizado al espesor de la banda: 0 = lado pulpa, 1 = lado cáscara
-    const t = Math.max(0, Math.min(1, (d - rIn) / (rOut - rIn)));
-    uv.setXY(i, t, (x + rOut) / (2 * rOut));
+  const cols = profileSegs + 1;
+  for (let i = 0; i < arcSegs; i++) {
+    for (let j = 0; j < profileSegs; j++) {
+      const a = i * cols + j;
+      const b = a + 1;
+      const c = a + cols;
+      const d = c + 1;
+      indices.push(a, c, b);
+      indices.push(b, c, d);
+    }
   }
-  uv.needsUpdate = true;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
   return geo;
 }
 
-// Posiciones realistas de semillas en una rebanada
+// Posiciones realistas de semillas en una rebanada.
+// La Z se calcula respecto a la cara plana del slice (después del bevel),
+// con un offset pequeño para que las semillas queden semi-embebidas
+// en la pulpa en lugar de flotando claramente por encima.
+const SEED_FRONT_Z = SLICE_DEPTH / 2 - 0.045 + 0.020;  // ~0.145
+const SEED_BACK_Z = -SEED_FRONT_Z;
 function generateSeedPositions() {
   const seeds = [];
   const rings = [
@@ -171,7 +182,7 @@ function generateSeedPositions() {
       const x = Math.cos(a) * (ring.r + jitter);
       const y = Math.sin(a) * (ring.r + jitter);
       seeds.push({
-        position: [x, y, SLICE_DEPTH / 2 + 0.020],
+        position: [x, y, SEED_FRONT_Z],
         rotation: [0, 0, a + Math.PI / 2 + (Math.random() - 0.5) * 0.4],
         scale: 0.85 + Math.random() * 0.3,
       });
@@ -210,7 +221,9 @@ function generateJuiceDropPositions() {
     const x = Math.cos(angle) * r;
     const y = Math.abs(Math.sin(angle)) * r * 0.9 + 0.04;
     drops.push({
-      position: [x, y, SLICE_DEPTH / 2 + 0.024],
+      // Pegadas a la cara plana de la pulpa, no flotando — antes era
+      // SLICE_DEPTH/2 + 0.024 que ahora flota por encima del bevel ampliado.
+      position: [x, y, SEED_FRONT_Z + 0.008],
       scale: 0.6 + Math.random() * 1.1,
     });
   }
@@ -226,7 +239,6 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
   const rindGeo = useMemo(buildRindGeometry, []);
   const sliceFleshGeo = useMemo(buildSliceFleshGeometry, []);
   const sliceRindGeo = useMemo(buildSliceRindGeometry, []);
-  const mesocarpGeo = useMemo(buildMesocarpGeometry, []);
   const seedGeo = useMemo(buildSeedGeometry, []);
   const seedPositions = useMemo(generateSeedPositions, []);
   const juiceDrops = useMemo(generateJuiceDropPositions, []);
@@ -335,36 +347,32 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
           />
         </mesh>
 
-        {/* Cáscara verde alrededor del borde curvo */}
+        {/* Cáscara verde envolviendo el canto curvo de la rebanada.
+            Geometría sweep elipsoidal — se funde con el bevel de la pulpa
+            sin línea visible. polygonOffset empuja la cáscara hacia atrás
+            del bevel para evitar z-fighting en el lateral.
+            NOTA: la banda blanca-verdosa interior (mesocarpio) ya está
+            pintada DENTRO de la textura de la pulpa (pre-corteza fibrosa
+            entre t=0.91 y t=0.96 del radio). El antiguo mesh de mesocarpio
+            duplicaba ese trabajo y se peleaba en Z con la pulpa, dejando
+            la "línea blanca" visible en el corte. */}
         <mesh geometry={sliceRindGeo} castShadow receiveShadow>
           <meshPhysicalMaterial
             map={rindMap}
             normalMap={rindNormal}
             normalScale={[1.05, 1.05]}
-            roughness={0.4}
+            roughness={0.42}
             metalness={0.04}
-            clearcoat={0.9}
-            clearcoatRoughness={0.25}
-            envMapIntensity={1.2}
-          />
-        </mesh>
-
-        {/* Mesocarpio: banda blanca-verdosa entre cáscara y pulpa.
-            Sin texturas (sólo color sólido) para no romper la lectura
-            del corte; sheen sutil verdoso para que se asome el color de
-            la corteza interior. Es la "carnita blanca" que en una sandía
-            real separa la pulpa roja del verde duro. */}
-        <mesh geometry={mesocarpGeo} castShadow={false} receiveShadow>
-          <meshPhysicalMaterial
-            color="#e8e4c0"
-            roughness={0.85}
-            metalness={0}
+            clearcoat={0.85}
+            clearcoatRoughness={0.28}
+            envMapIntensity={1.15}
             sheen={0.25}
-            sheenColor="#c5d4a8"
-            sheenRoughness={0.6}
-            clearcoat={0.18}
-            clearcoatRoughness={0.55}
-            envMapIntensity={0.85}
+            sheenColor="#a3e635"
+            sheenRoughness={0.55}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+            side={THREE.DoubleSide}
           />
         </mesh>
 
@@ -396,7 +404,7 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
           <mesh
             key={`b-${i}`}
             geometry={seedGeo}
-            position={[s.position[0], s.position[1], -SLICE_DEPTH / 2 - 0.020]}
+            position={[s.position[0], s.position[1], SEED_BACK_Z]}
             rotation={s.rotation}
             scale={s.scale}
             castShadow

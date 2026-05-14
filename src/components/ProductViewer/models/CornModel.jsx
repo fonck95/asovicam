@@ -205,54 +205,79 @@ function buildKernelInstanceData() {
   return items;
 }
 
-function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
-  // Hoja con curva. peel = 0..1 controla qué tanto se "abre" la hoja
-  // hacia afuera (0 = pegada, 1 = pulled-back). La hoja "pegada" se
-  // envuelve cilíndricamente alrededor de la mazorca (los bordes
-  // laterales se acercan al eje del olote); la hoja peelada se
-  // despliega plana hacia afuera.
-  const lengthSegs = 28;
-  const widthSegs = 10;
+// Radio del cilindro virtual sobre el que se enrollan las hojas.
+// Apenas mayor que el envolvente de los granos (KERNEL surface ≈ 0.44).
+// Las hojas pegadas viven justo encima de este cilindro y se traslapan
+// unas con otras alrededor del eje del olote.
+const HUSK_WRAP_RADIUS = 0.49;
+
+function buildHuskGeometry({
+  length = 1.55,
+  arcExtent = 0.95,   // semi-arco angular que cubre la hoja (rad)
+  peel = 0,
+  baseY = -0.92,
+  baseTipFlare = 0.0, // para hojas peeled: cuánto se abren hacia afuera en la punta
+} = {}) {
+  // Hoja envolvente centrada en el EJE del olote. A diferencia de la
+  // versión anterior (que offset-eaba cada hoja en radio y dejaba
+  // huecos entre vecinas), aquí cada hoja se construye con su origen
+  // local en el axis y simplemente cubre un sector angular del
+  // cilindro virtual de radio HUSK_WRAP_RADIUS. Posicionar 8–10 hojas
+  // con rotaciones Y distintas crea capas que se traslapan de forma
+  // continua, igual que las brácteas reales del maíz.
+  const lengthSegs = 36;
+  const widthSegs = 16;
   const positions = [];
   const uvs = [];
   const indices = [];
 
-  // Radio aproximado del cuerpo que la hoja envuelve (granos + olote).
-  // Las hojas pegadas envuelven tangencialmente este cilindro.
-  const WRAP_RADIUS = 0.48;
-  const wrapStrength = 1 - peel;
-
   for (let i = 0; i <= lengthSegs; i++) {
     const t = i / lengthSegs;
-    const y = -length * 0.05 + t * length;
+    const y = baseY + t * length;
+    // Ancho efectivo según t: pegada-ancha en la base, taper progresivo,
+    // termina en punta acuminada en t=1 (forma de bráctea real).
     const taper =
-      Math.sin(Math.pow(t, 0.85) * Math.PI) * 0.85 +
-      0.15 -
-      Math.max(0, (t - 0.92) * 4) ** 2 * 0.45;
+      Math.sin(Math.pow(t, 0.78) * Math.PI) * 0.85 +
+      0.18 -
+      Math.max(0, (t - 0.90) * 4) ** 2 * 0.42;
+    const widthScale = Math.max(0.05, taper);
 
-    // Despliegue hacia afuera de la hoja (curl forward): mínimo en
-    // hojas pegadas, dominante en hojas peeled-back.
-    const peelCurve = peel * Math.pow(t, 1.5) * 0.62;
-    const baseForward = (Math.sin(t * Math.PI * 0.7) * 0.04 + Math.pow(t, 2) * 0.05) * (0.3 + peel * 0.7);
-    const curlZ = baseForward + peelCurve;
+    // Despliegue hacia afuera (peel): la hoja se separa progresivamente
+    // del cilindro a medida que sube. peel=0 → siempre pegada;
+    // peel=1 → al llegar a la punta está totalmente expuesta y fan-out.
+    const fanOut = peel * Math.pow(t, 1.25);
+    const radius = HUSK_WRAP_RADIUS + fanOut * 0.22;
+    // En la punta de las hojas pulled-back agregamos un flare lateral
+    // para que el final caiga hacia afuera en lugar de quedar recto.
+    const tipFlare = baseTipFlare * Math.pow(t, 2.2);
 
     for (let j = 0; j <= widthSegs; j++) {
       const u = j / widthSegs;
-      const xRaw = (u - 0.5) * 2;
-      const w = width * Math.max(0.04, taper);
-      // Wrap cilíndrico: los bordes laterales (|xRaw|=1) se curvan hacia
-      // el eje del olote. La hoja peeled se mantiene casi plana.
-      const wrapAngle = xRaw * (w / WRAP_RADIUS) * wrapStrength;
-      const x = wrapStrength > 0.05
-        ? WRAP_RADIUS * Math.sin(wrapAngle) + xRaw * w * (1 - wrapStrength)
-        : xRaw * w;
-      const wrapZ = wrapStrength > 0.05
-        ? -WRAP_RADIUS * (1 - Math.cos(wrapAngle))
+      const uRel = (u - 0.5) * 2; // -1..+1
+      const ang = uRel * arcExtent * widthScale;
+      // Punto sobre el cilindro virtual a este ángulo. Local frame:
+      //   +X = lateral derecha en el sector cubierto
+      //   +Y = arriba (a lo largo del olote)
+      //   +Z = al frente, alejándose del cilindro (se usa para "salir"
+      //       en hojas peeled o para la nervadura central)
+      const sx = Math.sin(ang) * radius;
+      const sz = -Math.cos(ang) * radius;
+      // Nervadura central: cresta a lo largo de u=0.5 que sobresale
+      // ligeramente hacia afuera (en dirección -Z local del cilindro).
+      const rib = (1 - Math.abs(uRel)) * 0.022 * (1 - fanOut * 0.4);
+      // Onda lateral baja-frecuencia para no parecer plana.
+      const wave = Math.sin(t * 4.6 + uRel * 2.3) * 0.014 * (1 - peel * 0.45);
+      // Curl hacia afuera de las puntas peeled (sólo afecta hojas con peel>0)
+      const peelLift = peel > 0
+        ? (-fanOut * 0.25 * (1 - Math.abs(uRel) * 0.4))
         : 0;
-      const rib = (1 - Math.abs(xRaw)) * 0.04;
-      // Pequeña ondulación lateral para no parecer plana
-      const lateralWave = Math.sin(t * 6 + xRaw * 2) * 0.010 * (1 - peel * 0.4);
-      positions.push(x, y, curlZ + wrapZ + rib + lateralWave);
+      // Flare lateral en la punta de hojas peeled — las orillas se
+      // separan más que el centro al final.
+      const flare = tipFlare * Math.sign(uRel) * Math.abs(uRel);
+
+      const x = sx + Math.sin(ang) * rib + flare * 0.18;
+      const z = sz - Math.cos(ang) * rib + peelLift;
+      positions.push(x, y + wave * 0.6, z);
       uvs.push(u, t);
     }
   }
@@ -277,102 +302,219 @@ function buildHuskGeometry({ length = 1.55, width = 0.45, peel = 0 } = {}) {
   return geo;
 }
 
+function buildHuskCollarGeometry() {
+  // Anillo "cuello" en la base de la mazorca donde todas las hojas
+  // se unen visualmente. Sin este collar, la base se ve dividida en
+  // hojas sueltas pegadas a la nada. Un toro aplanado provee la
+  // continuidad de tejido que conecta las brácteas con el pedúnculo.
+  const segs = 96;
+  const tubeSegs = 14;
+  const ringR = HUSK_WRAP_RADIUS + 0.005;
+  const tubeR = 0.085;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  for (let i = 0; i <= segs; i++) {
+    const u = i / segs;
+    const a = u * Math.PI * 2;
+    for (let j = 0; j <= tubeSegs; j++) {
+      const v = j / tubeSegs;
+      const theta = -Math.PI * 0.5 + v * Math.PI; // -π/2..π/2 (medio toro inferior abierto)
+      const r = ringR + Math.cos(theta) * tubeR * 0.9;
+      const y = Math.sin(theta) * tubeR * 1.2;
+      positions.push(Math.cos(a) * r, y, Math.sin(a) * r);
+      uvs.push(u, v);
+    }
+  }
+  const cols = tubeSegs + 1;
+  for (let i = 0; i < segs; i++) {
+    for (let j = 0; j < tubeSegs; j++) {
+      const a = i * cols + j;
+      const b = a + 1;
+      const c = a + cols;
+      const d = c + 1;
+      indices.push(a, c, b);
+      indices.push(b, c, d);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function buildSilkBaseGeometry() {
+  // Casquete suave en la punta del olote desde donde "brotan" los pelos.
+  // Sin este casquete las hebras aparecían colgando del aire. Lo
+  // construimos como semiesfera achatada justo encima del último anillo
+  // de granos, con un color cremoso-tostado que se mezcla entre el cob
+  // core y la base dorada de las barbas. Aporta la cohesión visual
+  // hair-to-body que faltaba.
+  const geo = new THREE.SphereGeometry(0.20, 28, 18, 0, Math.PI * 2, 0, Math.PI / 2);
+  const pos = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    // Achatar verticalmente — casquete plano, no cúpula
+    v.y *= 0.42;
+    // Pequeña irregularidad: el casquete no es perfecto, tiene
+    // ondulaciones bajas-frecuencia que imitan los huecos entre granos.
+    const noise =
+      Math.sin(v.x * 14 + v.z * 11) * 0.006 +
+      Math.cos(v.x * 9 + v.z * 17) * 0.005;
+    v.y += noise;
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function buildSilkGeometry() {
-  // Mecha de barbas (silk / pelos de elote). Cada hebra es un tubo con
-  // 4 control points (start, neck, mid, tip) → curva orgánica con drop
-  // natural. Radio decreciente (taper) y gradiente cobrizo→rubio claro.
-  // Las hebras emergen desde la punta del olote y forman un mechón
-  // cohesivo (no fuegos artificiales): la mayoría sube ligeramente
-  // hacia adelante y cae con gravedad natural.
+  // Mecha de barbas (silk / pelos de elote). Mejorado para realismo:
+  // 1) Las hebras emergen desde un ÁREA distribuida en la punta del
+  //    olote (no de un solo punto-axial) — algunas de cerca del axis,
+  //    otras desde las "grietas" entre los granos del último anillo,
+  //    cubriendo radios hasta 0.30.
+  // 2) Hay 3 longitudes coexistentes: stubby (cortas, recién emergidas),
+  //    medianas y largas (maduras y caídas) — el efecto es de tuft
+  //    capilar tridimensional, no plumero plano.
+  // 3) Las hebras se agrupan en clusters: bunches angulares con
+  //    pequeña dispersión interna; refleja como crecen los estigmas
+  //    realmente (hilo por kernel, agrupados por filas).
+  // 4) Color base ligeramente verdoso cerca del olote (fresco) →
+  //    cobrizo en medio → rubio claro al extremo (gradiente fotográfico).
   const strands = [];
-  const colorBase = new THREE.Color('#d4a574');
-  const colorTip = new THREE.Color('#f0d5a0');
-  const STRANDS = 170;
-  for (let i = 0; i < STRANDS; i++) {
-    const angle = (i / STRANDS) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
-    const droop = 0.18 + Math.random() * 0.32;
-    const sway = (Math.random() - 0.5) * 0.18;
-    const length = 0.55 + Math.random() * 0.35;
-    // Emerge desde la zona del olote justo arriba del último anillo de
-    // granos — los pelos parecen brotar desde el cuerpo de la mazorca,
-    // no desde un punto invisible.
-    const emerge = 0.045 + Math.random() * 0.055;
+  const colorRoot = new THREE.Color('#bfa874');  // base verdoso-tostada
+  const colorMid = new THREE.Color('#d6b27a');   // cobre cálido
+  const colorTip = new THREE.Color('#f3dba0');   // rubio claro
+  const CLUSTERS = 26;
+  const STRANDS_PER_CLUSTER = 9;
+  let strandIdx = 0;
+  for (let c = 0; c < CLUSTERS; c++) {
+    const baseAngle = (c / CLUSTERS) * Math.PI * 2 + (Math.random() - 0.5) * 0.16;
+    // El cluster nace desde una posición en la zona superior del olote.
+    // El radio del PUNTO DE EMERGENCIA varía: la mayoría sale de cerca
+    // del axis (donde el olote ya no tiene granos), pero un tercio sale
+    // de la "corona" — entre los kernels del último anillo.
+    const fromCorona = Math.random() < 0.35;
+    const baseR = fromCorona
+      ? 0.18 + Math.random() * 0.12   // entre kernels
+      : 0.03 + Math.random() * 0.10;  // de la zona axial
+    const baseY = fromCorona
+      ? COB_HEIGHT / 2 - 0.04 - Math.random() * 0.05
+      : COB_HEIGHT / 2 - 0.02 + Math.random() * 0.04;
 
-    const start = new THREE.Vector3(
-      Math.cos(angle) * emerge,
-      COB_HEIGHT / 2 - 0.06 + Math.random() * 0.04,
-      Math.sin(angle) * emerge,
-    );
-    const neck = new THREE.Vector3(
-      Math.cos(angle) * (emerge + 0.02),
-      COB_HEIGHT / 2 + length * 0.22,
-      Math.sin(angle) * (emerge + 0.02),
-    );
-    const mid = new THREE.Vector3(
-      Math.cos(angle) * (0.05 + droop * 0.16) + sway * 0.4,
-      COB_HEIGHT / 2 + length * 0.62,
-      Math.sin(angle) * (0.05 + droop * 0.16) + sway * 0.4,
-    );
-    const tip = new THREE.Vector3(
-      Math.cos(angle) * (0.10 + droop * 0.38) + sway * 0.9,
-      COB_HEIGHT / 2 + length - droop * 0.18,
-      Math.sin(angle) * (0.10 + droop * 0.38) + sway * 0.9,
-    );
-    const curve = new THREE.CatmullRomCurve3([start, neck, mid, tip]);
-    const tubularSegments = 16;
-    const radialSegments = 4;
-    const tube = new THREE.TubeGeometry(
-      curve,
-      tubularSegments,
-      0.0030,
-      radialSegments,
-      false,
-    );
+    for (let s = 0; s < STRANDS_PER_CLUSTER; s++) {
+      strandIdx++;
+      const localScatter = (Math.random() - 0.5) * 0.18;
+      const angle = baseAngle + localScatter;
+      // Longitudes mezcladas en cada cluster: 25% stubby, 55% mid, 20% larga
+      let length;
+      const lengthRand = Math.random();
+      if (lengthRand < 0.25) length = 0.10 + Math.random() * 0.18;      // stubby
+      else if (lengthRand < 0.80) length = 0.45 + Math.random() * 0.32;  // mid
+      else length = 0.80 + Math.random() * 0.40;                          // larga
 
-    // Taper a mano sobre los anillos del tubo
-    const tp = tube.attributes.position;
-    const verts = tp.count;
-    const ringsCount = tubularSegments + 1;
-    const ringSize = verts / ringsCount;
-    for (let r = 0; r <= tubularSegments; r++) {
-      const t = r / tubularSegments;
-      const taper = Math.max(0.35, Math.pow(1 - t, 0.55));
-      const center = curve.getPoint(t);
-      const ringStart = Math.floor(r * ringSize);
-      const ringEnd = Math.floor((r + 1) * ringSize);
-      for (let k = ringStart; k < ringEnd && k < verts; k++) {
-        const px = tp.getX(k);
-        const py = tp.getY(k);
-        const pz = tp.getZ(k);
-        const dx = px - center.x;
-        const dy = py - center.y;
-        const dz = pz - center.z;
-        tp.setXYZ(
-          k,
-          center.x + dx * taper,
-          center.y + dy * taper,
-          center.z + dz * taper,
+      const droop = 0.20 + Math.random() * 0.40;
+      const sway = (Math.random() - 0.5) * 0.20;
+      const radialJit = (Math.random() - 0.5) * 0.025;
+      const startR = baseR + radialJit;
+
+      const start = new THREE.Vector3(
+        Math.cos(angle) * startR,
+        baseY,
+        Math.sin(angle) * startR,
+      );
+      const neck = new THREE.Vector3(
+        Math.cos(angle) * (startR + 0.015 + length * 0.06),
+        baseY + length * 0.22,
+        Math.sin(angle) * (startR + 0.015 + length * 0.06),
+      );
+      const mid = new THREE.Vector3(
+        Math.cos(angle) * (startR + 0.08 + droop * 0.20) + sway * 0.42,
+        baseY + length * 0.62,
+        Math.sin(angle) * (startR + 0.08 + droop * 0.20) + sway * 0.42,
+      );
+      const tip = new THREE.Vector3(
+        Math.cos(angle) * (startR + 0.18 + droop * 0.42) + sway * 0.95,
+        baseY + length - droop * 0.20,
+        Math.sin(angle) * (startR + 0.18 + droop * 0.42) + sway * 0.95,
+      );
+      const curve = new THREE.CatmullRomCurve3([start, neck, mid, tip]);
+      const tubularSegments = 14;
+      const radialSegments = 4;
+      const tube = new THREE.TubeGeometry(
+        curve,
+        tubularSegments,
+        0.0034,
+        radialSegments,
+        false,
+      );
+
+      // Taper sobre los anillos del tubo: empieza más grueso en la raíz
+      // (donde se "ancla" al casquete), termina filiforme en la punta.
+      const tp = tube.attributes.position;
+      const verts = tp.count;
+      const ringSize = verts / (tubularSegments + 1);
+      for (let r = 0; r <= tubularSegments; r++) {
+        const t = r / tubularSegments;
+        // Anillo de raíz un poco más ancho para que se vea anclado,
+        // luego rápido taper.
+        const rootBulge = t < 0.08 ? 1 + (0.08 - t) * 4.5 : 1;
+        const taper = Math.max(0.30, Math.pow(1 - t, 0.55)) * rootBulge;
+        const center = curve.getPoint(t);
+        const ringStart = Math.floor(r * ringSize);
+        const ringEnd = Math.floor((r + 1) * ringSize);
+        for (let k = ringStart; k < ringEnd && k < verts; k++) {
+          const px = tp.getX(k);
+          const py = tp.getY(k);
+          const pz = tp.getZ(k);
+          const dx = px - center.x;
+          const dy = py - center.y;
+          const dz = pz - center.z;
+          tp.setXYZ(
+            k,
+            center.x + dx * taper,
+            center.y + dy * taper,
+            center.z + dz * taper,
+          );
+        }
+      }
+      tp.needsUpdate = true;
+      tube.computeVertexNormals();
+
+      const tubeColors = new Float32Array(verts * 3);
+      const tmp = new THREE.Color();
+      const tmp2 = new THREE.Color();
+      for (let r = 0; r <= tubularSegments; r++) {
+        const t = r / tubularSegments;
+        // Gradiente 3-stop: root → mid → tip con curva suave.
+        if (t < 0.5) {
+          tmp.copy(colorRoot).lerp(colorMid, t * 2);
+        } else {
+          tmp.copy(colorMid).lerp(colorTip, (t - 0.5) * 2);
+        }
+        // Variación por hebra individual
+        const hueShift = (strandIdx * 17 % 13) / 13 - 0.5;
+        tmp2.setRGB(
+          Math.min(1, tmp.r + hueShift * 0.04),
+          Math.min(1, tmp.g + hueShift * 0.02),
+          Math.min(1, tmp.b - hueShift * 0.06),
         );
+        const ringStart = Math.floor(r * ringSize);
+        const ringEnd = Math.floor((r + 1) * ringSize);
+        for (let k = ringStart; k < ringEnd && k < verts; k++) {
+          tubeColors[k * 3 + 0] = tmp2.r;
+          tubeColors[k * 3 + 1] = tmp2.g;
+          tubeColors[k * 3 + 2] = tmp2.b;
+        }
       }
+      tube.setAttribute('color', new THREE.BufferAttribute(tubeColors, 3));
+      strands.push(tube);
     }
-    tp.needsUpdate = true;
-    tube.computeVertexNormals();
-
-    const tubeColors = new Float32Array(verts * 3);
-    const tmp = new THREE.Color();
-    for (let r = 0; r <= tubularSegments; r++) {
-      const t = r / tubularSegments;
-      tmp.copy(colorBase).lerp(colorTip, t);
-      const ringStart = Math.floor(r * ringSize);
-      const ringEnd = Math.floor((r + 1) * ringSize);
-      for (let k = ringStart; k < ringEnd && k < verts; k++) {
-        tubeColors[k * 3 + 0] = tmp.r;
-        tubeColors[k * 3 + 1] = tmp.g;
-        tubeColors[k * 3 + 2] = tmp.b;
-      }
-    }
-    tube.setAttribute('color', new THREE.BufferAttribute(tubeColors, 3));
-    strands.push(tube);
   }
   return mergeBufferGeometries(strands);
 }
@@ -432,27 +574,70 @@ export default function CornModel() {
   const kernelGeometry = useMemo(buildKernelGeometry, []);
   const kernelInstances = useMemo(buildKernelInstanceData, []);
   const silkGeometry = useMemo(buildSilkGeometry, []);
+  const silkBaseGeometry = useMemo(buildSilkBaseGeometry, []);
 
-  // 8 hojas: 6 pegadas (wrap alrededor de la base/centro) + 2 peeled-back
-  // (revelan los granos). Más hojas = mejor cobertura tangencial sin
-  // huecos visibles entre ellas.
+  // 12 hojas envolventes + 3 peeled-back. Las envolventes están
+  // espaciadas en pares de capas a radios ligeramente distintos para
+  // que se traslapen tangencialmente sin huecos (real corn husk overlap).
+  // Cada hoja cubre un sector angular ~110° y al haber muchas con
+  // rotaciones distribuidas, no hay punto del cob sin cobertura.
   const huskConfig = useMemo(
-    () => [
-      { peel: 0.05, length: 1.55, width: 0.44 },
-      { peel: 0.08, length: 1.5, width: 0.42 },
-      { peel: 0.06, length: 1.55, width: 0.46 },
-      { peel: 0.10, length: 1.48, width: 0.44 },
-      { peel: 0.07, length: 1.52, width: 0.45 },
-      { peel: 0.09, length: 1.5, width: 0.43 },
-      { peel: 0.78, length: 1.42, width: 0.48 },
-      { peel: 0.65, length: 1.36, width: 0.42 },
-    ],
+    () => {
+      const wrapping = [];
+      // Capa exterior: 7 hojas largas
+      const OUTER = 7;
+      for (let i = 0; i < OUTER; i++) {
+        wrapping.push({
+          peel: 0.03 + (i % 2) * 0.025,
+          length: 1.54 + (i % 3) * 0.04,
+          arcExtent: 0.95 + (i % 2) * 0.05,
+          angleOffset: (i / OUTER) * Math.PI * 2,
+          layer: 0,
+          baseY: -0.92 - (i % 3) * 0.01,
+          baseTipFlare: 0,
+        });
+      }
+      // Capa intermedia: 5 hojas más cortas para rellenar gaps
+      const INNER = 5;
+      for (let i = 0; i < INNER; i++) {
+        wrapping.push({
+          peel: 0.04 + (i % 2) * 0.02,
+          length: 1.40 + (i % 2) * 0.06,
+          arcExtent: 0.78 + (i % 2) * 0.06,
+          angleOffset: ((i + 0.5) / INNER) * Math.PI * 2,
+          layer: 1,
+          baseY: -0.88 - (i % 2) * 0.02,
+          baseTipFlare: 0,
+        });
+      }
+      // Peeled-back: 3 hojas anchas que abren y revelan granos
+      wrapping.push({
+        peel: 0.78, length: 1.30, arcExtent: 0.85,
+        angleOffset: 0.5, layer: 2, baseY: -0.55, baseTipFlare: 0.25,
+      });
+      wrapping.push({
+        peel: 0.72, length: 1.22, arcExtent: 0.78,
+        angleOffset: 2.5, layer: 2, baseY: -0.50, baseTipFlare: 0.22,
+      });
+      wrapping.push({
+        peel: 0.82, length: 1.34, arcExtent: 0.82,
+        angleOffset: 4.6, layer: 2, baseY: -0.58, baseTipFlare: 0.28,
+      });
+      return wrapping;
+    },
     [],
   );
   const huskGeometries = useMemo(
-    () => huskConfig.map((cfg) => buildHuskGeometry(cfg)),
+    () => huskConfig.map((cfg) => buildHuskGeometry({
+      length: cfg.length,
+      arcExtent: cfg.arcExtent,
+      peel: cfg.peel,
+      baseY: cfg.baseY,
+      baseTipFlare: cfg.baseTipFlare,
+    })),
     [huskConfig],
   );
+  const huskCollarGeometry = useMemo(buildHuskCollarGeometry, []);
 
   const huskColor = useMemo(makeHuskColorTexture, []);
   const huskNormal = useMemo(makeHuskNormalTexture, []);
@@ -540,6 +725,28 @@ export default function CornModel() {
         />
       </instancedMesh>
 
+      {/* Casquete carnoso en la punta del olote — el "tejido" desde donde
+          brotan los pelos. Sin él los silks se veían suspendidos del aire.
+          Color cremoso-tostado que se mezcla con la base de las hebras. */}
+      <mesh
+        geometry={silkBaseGeometry}
+        position={[0, COB_HEIGHT / 2 - 0.04, 0]}
+        castShadow
+        receiveShadow
+      >
+        <meshPhysicalMaterial
+          color="#e8d39a"
+          roughness={0.65}
+          metalness={0}
+          sheen={0.6}
+          sheenColor="#f0d8a8"
+          sheenRoughness={0.45}
+          clearcoat={0.25}
+          clearcoatRoughness={0.5}
+          envMapIntensity={1.1}
+        />
+      </mesh>
+
       {/* Barbas (silk) en la punta */}
       <mesh geometry={silkGeometry} castShadow={false}>
         <meshPhysicalMaterial
@@ -562,30 +769,51 @@ export default function CornModel() {
         />
       </mesh>
 
-      {/* Hojas (husks) ancladas al ras de la base de la mazorca, justo
-          por fuera del envolvente de granos (KERNEL surface ≈ 0.44).
-          Las pegadas envuelven el cilindro de granos vía wrapZ en la
-          geometría; las peeled-back se inclinan hacia afuera con tilt
-          negativo y se separan del cuerpo. */}
+      {/* Cuello / collar de la base: aro de tejido que conecta todas
+          las hojas con el pedúnculo. Sin esta unión visual, la base de
+          la mazorca se ve como un manojo de hojas sueltas pegadas al
+          aire. Color un poco más cremoso que las hojas para imitar
+          la transición pedúnculo → bráctea joven en la base. */}
+      <mesh
+        geometry={huskCollarGeometry}
+        position={[0, -COB_HEIGHT * 0.50, 0]}
+        castShadow
+        receiveShadow
+      >
+        <meshPhysicalMaterial
+          color="#a8a36a"
+          roughness={0.85}
+          metalness={0}
+          sheen={0.4}
+          sheenColor="#cbd5b1"
+          sheenRoughness={0.6}
+          clearcoat={0.1}
+          clearcoatRoughness={0.7}
+        />
+      </mesh>
+
+      {/* Hojas (husks) — cada una se construye centrada en el eje del
+          olote y se ubica en (0, baseY, 0) con una rotación Y. Como
+          todas comparten el mismo cilindro virtual (HUSK_WRAP_RADIUS),
+          se traslapan continuamente unas con otras sin huecos. Las
+          peeled-back además se inclinan hacia afuera para revelar los
+          granos del extremo superior. */}
       {huskConfig.map((cfg, i) => {
-        const angle = (i / huskConfig.length) * Math.PI * 2 + 0.2;
         const peeled = cfg.peel > 0.4;
-        const huskRadius = peeled ? 0.46 : 0.50;
-        // Pegadas: leve tilt hacia el eje (negativo) para abrazar el
-        // contorno. Peeled: tilt positivo (se inclinan hacia afuera).
-        const tilt = peeled ? 0.35 + (i % 2) * 0.06 : -0.04 + (i % 2) * 0.02;
-        const scale = 1 + (i % 2) * 0.06;
+        // Capas: outer (layer 0) en el radio mayor, inner (layer 1) más
+        // adentro, peeled (layer 2) salen del top y caen hacia afuera.
+        const radialPush = cfg.layer === 1 ? -0.02 : 0;
+        // Tilt: hojas pegadas se inclinan ligeramente hacia el cob;
+        // peeled tienen tilt fuerte hacia afuera + un yaw para que
+        // no caigan exactamente radialmente.
+        const tiltX = peeled ? 0.55 : -0.02 + (i % 2) * 0.015;
+        const tiltZ = peeled ? (i % 2 === 0 ? 0.12 : -0.12) : 0;
         return (
           <mesh
             key={i}
             geometry={huskGeometries[i]}
-            position={[
-              Math.cos(angle) * huskRadius,
-              -COB_HEIGHT * 0.50,
-              Math.sin(angle) * huskRadius,
-            ]}
-            rotation={[tilt, Math.PI / 2 - angle, 0]}
-            scale={scale}
+            position={[0, 0, radialPush]}
+            rotation={[tiltX, cfg.angleOffset, tiltZ]}
             castShadow
             receiveShadow
           >
@@ -594,7 +822,7 @@ export default function CornModel() {
               normalMap={huskNormal}
               normalScale={[1.1, 1.1]}
               alphaMap={huskAlpha}
-              alphaTest={0.5}
+              alphaTest={0.42}
               roughness={0.78}
               metalness={0}
               sheen={0.5}

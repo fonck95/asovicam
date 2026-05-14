@@ -240,6 +240,16 @@ export default function BeanModel({
   const leafGeo = useMemo(buildLeafGeometry, []);
   const stemGeo = useMemo(buildStemGeometry, []);
   const seedGeo = useMemo(buildBeanSeedGeometry, []);
+  const sutureGeo = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-POD_LENGTH / 2 + 0.05, 0.02, 0),
+      new THREE.Vector3(-POD_LENGTH / 4, 0.06, 0.03),
+      new THREE.Vector3(0, 0.07, 0),
+      new THREE.Vector3(POD_LENGTH / 4, 0.06, -0.03),
+      new THREE.Vector3(POD_LENGTH / 2 - 0.05, 0.02, 0),
+    ]);
+    return new THREE.TubeGeometry(curve, 48, 0.006, 6, false);
+  }, []);
 
   const podMap = useMemo(makePodColorTexture, []);
   const podNormal = useMemo(makePodNormalTexture, []);
@@ -289,7 +299,13 @@ export default function BeanModel({
     groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.6) * 0.015;
   });
 
-  const podMaterial = (
+  // Material exterior de la vaina cerrada: DoubleSide está bien porque
+  // la vaina cerrada es un tubo completo. Para la vaina abierta usamos
+  // FrontSide en el exterior + BackSide en la membrana interior,
+  // así no compiten en z por el mismo pixel (antes ambos meshes ocupaban
+  // exactamente la misma posición → z-fighting visible como flickering
+  // entre verde brillante y crema pálido).
+  const podMaterialClosed = (
     <meshPhysicalMaterial
       map={podMap}
       normalMap={podNormal}
@@ -308,6 +324,28 @@ export default function BeanModel({
       attenuationDistance={0.4}
       ior={1.4}
       side={THREE.DoubleSide}
+    />
+  );
+
+  const podMaterialOpenExterior = (
+    <meshPhysicalMaterial
+      map={podMap}
+      normalMap={podNormal}
+      normalScale={[1.2, 1.2]}
+      roughness={0.38}
+      metalness={0.04}
+      clearcoat={0.7}
+      clearcoatRoughness={0.28}
+      sheen={0.4}
+      sheenColor="#a3e635"
+      sheenRoughness={0.5}
+      envMapIntensity={1.15}
+      transmission={0.06}
+      thickness={0.08}
+      attenuationColor="#84cc16"
+      attenuationDistance={0.4}
+      ior={1.4}
+      side={THREE.FrontSide}
     />
   );
 
@@ -338,41 +376,100 @@ export default function BeanModel({
         <>
           {/* Vaina cerrada (principal) */}
           <mesh geometry={closedPodGeo} castShadow receiveShadow position={[0, 0, 0.32]}>
-            {podMaterial}
+            {podMaterialClosed}
+          </mesh>
+          {/* Sutura dorsal sutil sobre la vaina cerrada — línea fina más
+              oscura que el cuerpo, recorre la cresta. En vaina real la
+              sutura es la "costura" por donde se abre cuando madura. */}
+          <mesh
+            geometry={sutureGeo}
+            castShadow={false}
+            receiveShadow={false}
+            position={[0, 0.18, 0.32]}
+          >
+            <meshPhysicalMaterial
+              color="#3d6b18"
+              roughness={0.55}
+              clearcoat={0.35}
+              clearcoatRoughness={0.4}
+            />
           </mesh>
 
-          {/* Vaina abierta (mitad superior) — revela los frijoles */}
+          {/* Vaina abierta — revela los frijoles. Acercamos las dos mitades
+              (offset Y reducido) para que toquen en el extremo y se vea
+              UNA vaina partida, no dos hojuelas separadas con un hueco. */}
           <group position={[0, 0, -0.36]} rotation={[0, 0, 0]}>
-            {/* Membrana interior: render BackSide debajo de cada mitad
-                para que cuando mires hacia adentro, veas el verde pálido
-                del interior de la vaina (no el verde brillante exterior) */}
-            <mesh geometry={openTopGeo} castShadow={false} receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
+            {/* Membrana interior: inset hacia el interior de la vaina
+                vía scale<1 para que NO comparta pixels con la cáscara
+                exterior. Esto elimina el flickering por z-fighting que
+                había antes con ambas mitades en la misma posición. */}
+            <mesh
+              geometry={openTopGeo}
+              castShadow={false}
+              receiveShadow
+              rotation={[0.32, 0, 0]}
+              position={[0, 0.030, 0]}
+              scale={[1, 0.92, 0.92]}
+            >
               {podInteriorMaterial}
             </mesh>
             <mesh
               geometry={openTopGeo}
               castShadow={false}
               receiveShadow
-              rotation={[Math.PI - 0.25, 0, 0]}
-              position={[0, -0.05, 0]}
+              rotation={[Math.PI - 0.32, 0, 0]}
+              position={[0, -0.030, 0]}
+              scale={[1, 0.92, 0.92]}
             >
               {podInteriorMaterial}
             </mesh>
 
-            {/* Capa exterior: mitad superior */}
-            <mesh geometry={openTopGeo} castShadow receiveShadow rotation={[0.25, 0, 0]} position={[0, 0.05, 0]}>
-              {podMaterial}
+            {/* Capa exterior: mitad superior. FrontSide solo — al mirar
+                hacia adentro, esta capa no estorba y vemos la membrana
+                interior. polygonOffset empuja la exterior fuera de la
+                interior para que no compitan en el bevel. */}
+            <mesh geometry={openTopGeo} castShadow receiveShadow rotation={[0.32, 0, 0]} position={[0, 0.030, 0]}>
+              {podMaterialOpenExterior}
             </mesh>
-            {/* Capa exterior: mitad inferior rotada */}
+            {/* Capa exterior: mitad inferior */}
             <mesh
               geometry={openTopGeo}
               castShadow
               receiveShadow
-              rotation={[Math.PI - 0.25, 0, 0]}
-              position={[0, -0.05, 0]}
+              rotation={[Math.PI - 0.32, 0, 0]}
+              position={[0, -0.030, 0]}
             >
-              {podMaterial}
+              {podMaterialOpenExterior}
             </mesh>
+
+            {/* Pivot hinge — pequeños trozos de cáscara en los dos
+                extremos de la vaina abierta que unen visualmente las dos
+                mitades, simulando que la vaina se rajó desde la sutura
+                pero las puntas siguen pegadas. Sin esto, las hojuelas
+                parecen dos cosas distintas que no se tocan. */}
+            {[-1, 1].map((dir) => (
+              <mesh
+                key={dir}
+                castShadow
+                receiveShadow
+                position={[dir * (POD_LENGTH / 2 - 0.04), 0, 0]}
+                rotation={[0, 0, dir * 0.18]}
+              >
+                <sphereGeometry args={[0.085, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.6]} />
+                <meshPhysicalMaterial
+                  map={podMap}
+                  normalMap={podNormal}
+                  normalScale={[1.0, 1.0]}
+                  roughness={0.45}
+                  metalness={0.04}
+                  clearcoat={0.55}
+                  clearcoatRoughness={0.35}
+                  sheen={0.35}
+                  sheenColor="#a3e635"
+                  sheenRoughness={0.55}
+                />
+              </mesh>
+            ))}
           </group>
 
           {/* Tallo */}
