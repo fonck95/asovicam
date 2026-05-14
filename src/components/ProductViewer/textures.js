@@ -647,22 +647,24 @@ export function makeWatermelonNormalTexture() {
 //  5. Micro-gotas de jugo y glaze de humedad sobre toda la superficie.
 // =====================================================
 
-// Paleta de la pulpa: stops del gradiente radial. Calibrada con macro
-// real de sandía Charleston Gray madura — la pulpa permanece roja
-// saturada en >85% del radio; sólo una banda fina de pre-corteza blanca
-// (~5%) precede a la cáscara. Antes el rojo se desvanecía a coral
-// demasiado pronto, dando un look "rosa pálido" en lugar de marketing.
+// Paleta de la pulpa: stops del gradiente radial. RECALIBRADA hacia
+// rojo verdadero sandía-madura (NO rosa): la versión anterior llegaba
+// a coral [222,102,110] al 84% del radio, lo que combinado con bevel
+// + transmisión producía una pulpa que se leía rosa-pastel en lugar
+// de roja jugosa. Esta paleta mantiene rojo saturado hasta el 88% del
+// radio y comprime toda la transición a coral/rosa/crema en una banda
+// fina del 9% antes del rind verde.
 const FLESH_STOPS = [
-  { r: 0.00, c: [118,  8, 24] },   // corazón ruby/vino profundo
-  { r: 0.08, c: [162, 14, 38] },   // wine red
-  { r: 0.20, c: [196, 22, 48] },   // rojo profundo saturado
-  { r: 0.38, c: [218, 32, 56] },   // ★ rojo sandía clásico (banda principal)
-  { r: 0.58, c: [222, 42, 64] },   // rojo vibrante (la pulpa madura sigue muy roja)
-  { r: 0.72, c: [220, 60, 78] },   // rojo-coral cálido
-  { r: 0.84, c: [222, 102, 110] }, // coral medio (transición fina)
-  { r: 0.91, c: [232, 168, 168] }, // pink-coral (sólo aquí empieza a aclarar)
-  { r: 0.94, c: [246, 218, 200] }, // rosa-crema (banda blanca delgada)
-  { r: 0.97, c: [232, 226, 188] }, // crema-amarillento (rind interior)
+  { r: 0.00, c: [132, 10, 26] },   // corazón ruby/vino muy profundo
+  { r: 0.06, c: [172, 16, 38] },   // wine red
+  { r: 0.14, c: [200, 22, 46] },   // rojo profundo saturado
+  { r: 0.30, c: [218, 28, 50] },   // ★ rojo sandía clásico (banda principal)
+  { r: 0.58, c: [222, 32, 54] },   // rojo vibrante mantenido (mínimo shift)
+  { r: 0.78, c: [218, 42, 60] },   // rojo cálido (sin pivotar a coral)
+  { r: 0.88, c: [208, 70, 76] },   // coral profundo (transición arrancando)
+  { r: 0.92, c: [222, 142, 138] }, // coral-rosa (banda fina de transición)
+  { r: 0.95, c: [240, 214, 192] }, // rosa-crema (pre-corteza fibrosa)
+  { r: 0.97, c: [228, 224, 184] }, // crema-amarillento (rind interior)
   { r: 1.00, c: [178, 200, 128] }, // verde tenue (cáscara interna)
 ];
 
@@ -740,73 +742,82 @@ function paintWatermelonFlesh(ctx, W, H) {
       if (dist < FLESH_END) {
         const v = voronoi2D((x / W) * VORONOI_SCALE, (y / H) * VORONOI_SCALE);
 
-        // 2a. Variación por celda: en una sandía madura las celdas
-        // varían en SATURACIÓN, no en luminosidad. Las "claras" son
-        // más cálido/anaranjado, las "oscuras" son wine. Antes el
-        // brillo subía r,g,b por igual y el resultado era rosa-blanco.
+        // 2a. Variación por celda en SATURACIÓN: las celdas "claras"
+        // empujan rojo (cálido), las oscuras se hunden en wine. Antes
+        // los desplazamientos cruzados de r/g/b creaban un balance que
+        // visualmente leía rosado. Ahora reducimos el shift de g/b para
+        // que la variación sea dentro de la familia roja, no entre rojo
+        // y rosa.
         const cellVar = v.cellId - 0.5;             // -0.5..+0.5
-        r *= 1 + cellVar * 0.14;                    // ±7% rojo
-        g *= 1 - cellVar * 0.06;                    // inverso → más saturado
-        b *= 1 - cellVar * 0.10;                    // inverso → más cálido
+        r *= 1 + cellVar * 0.12;                    // ±6% rojo
+        g *= 1 - cellVar * 0.04;
+        b *= 1 - cellVar * 0.06;
 
-        // Tinte estocástico por celda — algunas con un toque coral,
-        // otras un toque ruby. Mantiene la dominante roja.
-        const cellHue = (hash2(v.cellId * 100, 7) - 0.5) * 18;
-        r += cellHue * 0.6;
-        g -= cellHue * 0.3;
-        b -= cellHue * 0.2;
+        // Tinte estocástico por celda — algunas más ruby, otras más
+        // crimson; sin desviarse a coral. Reducido el factor que
+        // permitía pivotar a rosa.
+        const cellHue = (hash2(v.cellId * 100, 7) - 0.5) * 14;
+        r += cellHue * 0.7;
+        g -= cellHue * 0.2;
+        b -= cellHue * 0.1;
 
-        // 2b. Borde celular — pared dura entre células. Más oscuro
-        // que antes para resaltar la geometría celular como en macro.
+        // 2b. Borde celular — pared dura entre células. Más profundo
+        // (oscurece más g y b que r) para que los bordes lean wine
+        // contra el centro rojo claro.
         const edge = v.f2 - v.f1;
         const borderStrength = 1 - smoothstep(0.0, 0.07, edge);
-        r *= 1 - borderStrength * 0.30;
-        g *= 1 - borderStrength * 0.40;
-        b *= 1 - borderStrength * 0.42;
+        r *= 1 - borderStrength * 0.32;
+        g *= 1 - borderStrength * 0.46;
+        b *= 1 - borderStrength * 0.48;
 
-        // 2c. Highlight intra-celda — destello "joya" cristalino.
-        // Antes brillaba R,G,B casi igual → highlight rosa-blanco.
-        // Ahora dominante en rojo → highlight rojo-jugo brillante.
+        // 2c. Highlight intra-celda — destello "joya" cristalino con
+        // dominante muy roja. Antes el +56 R / +18 G subía la
+        // luminosidad media y desplazaba el tono a rosa-coral.
+        // Recalibrado para que el highlight sea rojo brillante sin
+        // levantar mucho la saturación verde/azul.
         const cellLight = (1 - smoothstep(0.0, 0.40, v.f1)) *
-                          (0.30 + v.cellId * 0.45);
-        r += cellLight * 56;
-        g += cellLight * 18;
-        b += cellLight * 22;
+                          (0.28 + v.cellId * 0.42);
+        r += cellLight * 48;
+        g += cellLight * 10;
+        b += cellLight * 12;
 
         // 2d. Capa fina secundaria de Voronoi: micro-vesículas dentro
-        // de cada celda grande (en la sandía real, cada celda contiene
-        // miles de pequeñas células llenas de jugo). Da textura de
-        // "azúcar" / cristalino que el ojo asocia con jugosidad.
+        // de cada celda grande (cada celda real contiene miles de
+        // pequeñas células llenas de jugo). Da textura de "azúcar"
+        // cristalino que el ojo asocia con jugosidad.
         const vf = voronoi2D((x / W) * VORONOI_FINE, (y / H) * VORONOI_FINE);
         const fineCenter = 1 - smoothstep(0.0, 0.32, vf.f1);
         const fineEdge = 1 - smoothstep(0.0, 0.05, vf.f2 - vf.f1);
-        // Micro-highlights cálidos
-        r += fineCenter * 16;
-        g += fineCenter * 5;
-        b += fineCenter * 6;
+        // Micro-highlights rojos (no rosados): bajamos los aportes
+        // verdes/azules para que el sparkle se vea como "punto de
+        // azúcar rojo" no como destello blanco-rosado.
+        r += fineCenter * 18;
+        g += fineCenter * 3;
+        b += fineCenter * 4;
         // Micro-bordes apenas perceptibles
         r *= 1 - fineEdge * 0.06;
-        g *= 1 - fineEdge * 0.10;
-        b *= 1 - fineEdge * 0.10;
+        g *= 1 - fineEdge * 0.12;
+        b *= 1 - fineEdge * 0.12;
 
         // 2e. Celdas más oscuras (micro-cavidad / sombra interna)
         if (v.cellId < 0.12) {
           const dark = (0.12 - v.cellId) / 0.12;
-          r *= 1 - dark * 0.18;
-          g *= 1 - dark * 0.28;
-          b *= 1 - dark * 0.30;
+          r *= 1 - dark * 0.16;
+          g *= 1 - dark * 0.30;
+          b *= 1 - dark * 0.32;
         }
-        // Celdas sobremaduras: red WINE más profundo (no más claras)
+        // Celdas sobremaduras: wine más profundo (manteniendo rojez)
         if (v.cellId > 0.88) {
           const overripe = (v.cellId - 0.88) / 0.12;
-          r *= 1 - overripe * 0.04;
-          g *= 1 - overripe * 0.18;
-          b *= 1 - overripe * 0.16;
+          r *= 1 - overripe * 0.03;
+          g *= 1 - overripe * 0.22;
+          b *= 1 - overripe * 0.20;
         }
 
-        // 2f. Boost de saturación radial: el corazón es más vino,
-        // hacia el ecuador más rojo-coral. Refuerza el gradiente rojo.
-        const satBoost = (1 - dist / FLESH_END) * 0.06 + 0.02;
+        // 2f. Boost de saturación radial: el corazón es más wine,
+        // hacia el ecuador más rojo brillante. Refuerza el gradiente
+        // rojo y previene el "lavado" hacia coral.
+        const satBoost = (1 - dist / FLESH_END) * 0.08 + 0.04;
         const lum = (r + g + b) / 3;
         r = lum + (r - lum) * (1 + satBoost);
         g = lum + (g - lum) * (1 + satBoost);
@@ -857,9 +868,43 @@ function paintWatermelonFlesh(ctx, W, H) {
         const speckle = valueNoise2D((x / W) * 220, (y / H) * 220);
         if (speckle > 0.78) {
           const sp = (speckle - 0.78) / 0.22;
-          r *= 1 - sp * 0.12;
-          g *= 1 - sp * 0.20;
-          b *= 1 - sp * 0.20;
+          r *= 1 - sp * 0.14;
+          g *= 1 - sp * 0.24;
+          b *= 1 - sp * 0.24;
+        }
+      }
+
+      // 4c. Fibras radiales finas — el tejido placentario de la sandía
+      // tiene fibras tenues que viajan desde el corazón hacia la corteza,
+      // visibles en macro como rayas pálidas-amarillentas casi rectas.
+      // Las renderizamos como un ruido FBM modulado por una función
+      // angular de alta frecuencia, restringido a la pulpa madura.
+      if (dist > 0.05 && dist < FLESH_END * 0.94) {
+        const radialFiberAng = angle * 38;
+        const rfFract = radialFiberAng - Math.floor(radialFiberAng);
+        const rfMid = Math.min(rfFract, 1 - rfFract);
+        const rfCloseness = 1 - smoothstep(0.05, 0.18, rfMid);
+        const rfNoise = fbm2D(angle * 22, dist * 28, 2);
+        const fiberStrength = rfCloseness * rfNoise *
+                              (1 - smoothstep(0, FLESH_END, dist)) * 0.18;
+        // Fibras pálidas cálidas — empujan rojo abajo, otros un poco arriba
+        // (efecto desaturación local muy sutil que da la línea fibrosa).
+        r += fiberStrength * 4;
+        g += fiberStrength * 14;
+        b += fiberStrength * 10;
+      }
+
+      // 4d. Cristales de azúcar — micro-destellos blanquecinos muy
+      // pequeños y dispersos, característicos de sandía dulce madura.
+      // Aparecen sólo donde el ruido alcanza umbrales altos para
+      // mantenerlos escasos y puntuales (no una capa global).
+      if (dist < FLESH_END * 0.92) {
+        const sugar = valueNoise2D((x / W) * 480, (y / H) * 480);
+        if (sugar > 0.86) {
+          const sg = (sugar - 0.86) / 0.14;
+          r += sg * 24;
+          g += sg * 18;
+          b += sg * 14;
         }
       }
 
@@ -957,33 +1002,35 @@ function paintWatermelonFlesh(ctx, W, H) {
   }
   ctx.restore();
 
-  // 7. Gotitas de jugo — destellos especulares con TONO CÁLIDO ROSADO
-  // (no blanco puro). En foto macro real, los destellos sobre pulpa
-  // recogen el tono del entorno + un toque rojo. Antes eran blancas
-  // y desaturaban toda la pulpa.
-  for (let i = 0; i < 1900; i++) {
+  // 7. Gotitas de jugo — destellos especulares puntuales con tono
+  // rojo-cálido (NO rosa). Cantidad y opacidad reducidas respecto a
+  // la versión anterior — antes 1900 drops a alpha 0.28-0.70 elevaba
+  // la luminosidad media de la pulpa y la teñía rosa-pastel. Ahora
+  // 1100 drops más pequeños y con halo prácticamente desaturado.
+  for (let i = 0; i < 1100; i++) {
     const a = Math.random() * Math.PI * 2;
     const rt = Math.pow(Math.random(), 0.55) * maxR * FLESH_END;
     const x = cx + Math.cos(a) * rt;
     const y = cy + Math.sin(a) * rt;
-    const sz = 0.4 + Math.random() * 1.6;
-    const alpha = 0.28 + Math.random() * 0.42;
-    // Mezcla aleatoria entre destellos cálidos rosados y unos pocos blancos
-    const warmDrop = Math.random() < 0.7;
+    const sz = 0.3 + Math.random() * 1.3;
+    const alpha = 0.20 + Math.random() * 0.30;
+    // Mezcla: la mayoría son destellos cálidos rojos (no rosados)
+    // y un pequeño porcentaje blancos puros para variación.
+    const warmDrop = Math.random() < 0.72;
     const fillCol = warmDrop
-      ? `rgba(255, 222, 222, ${alpha})`   // jugo rosado dominante
-      : `rgba(255, 250, 244, ${alpha * 0.85})`; // raros destellos blanco
+      ? `rgba(255, 200, 195, ${alpha})`   // rojo-cálido (no rosa)
+      : `rgba(255, 246, 238, ${alpha * 0.78})`;
     ctx.fillStyle = fillCol;
     ctx.beginPath();
     ctx.arc(x, y, sz, 0, Math.PI * 2);
     ctx.fill();
-    // Halo cálido difuso
-    const halo = ctx.createRadialGradient(x, y, 0, x, y, sz * 4.5);
-    halo.addColorStop(0, 'rgba(255, 220, 220, 0.12)');
-    halo.addColorStop(1, 'rgba(255, 220, 220, 0)');
+    // Halo más cerrado y tenue
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, sz * 3.6);
+    halo.addColorStop(0, 'rgba(255, 200, 200, 0.07)');
+    halo.addColorStop(1, 'rgba(255, 200, 200, 0)');
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(x, y, sz * 4.5, 0, Math.PI * 2);
+    ctx.arc(x, y, sz * 3.6, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -1023,27 +1070,28 @@ function paintWatermelonFlesh(ctx, W, H) {
     }
   }
 
-  // 9. Glaze de marketing: softbox superior-izq con tono CÁLIDO suave.
-  // Antes era blanco puro 0.12 → restaba saturación al rojo.
+  // 9. Glaze de marketing: softbox superior-izq muy tenue. Bajamos
+  // la opacidad para que el glaze no aporte rosa-claro al frame:
+  // ahora sólo aporta un destello focal sin lavar la saturación.
   const glaze = ctx.createRadialGradient(
     cx + maxR * 0.18, cy - maxR * 0.22, 0,
-    cx + maxR * 0.18, cy - maxR * 0.22, maxR * 0.65,
+    cx + maxR * 0.18, cy - maxR * 0.22, maxR * 0.60,
   );
-  glaze.addColorStop(0, 'rgba(255, 232, 220, 0.10)');
-  glaze.addColorStop(0.6, 'rgba(255, 232, 220, 0.03)');
-  glaze.addColorStop(1, 'rgba(255, 232, 220, 0)');
+  glaze.addColorStop(0, 'rgba(255, 224, 210, 0.06)');
+  glaze.addColorStop(0.6, 'rgba(255, 224, 210, 0.02)');
+  glaze.addColorStop(1, 'rgba(255, 224, 210, 0)');
   ctx.fillStyle = glaze;
   ctx.beginPath();
   ctx.arc(cx, cy, maxR * 0.95, 0, Math.PI * 2);
   ctx.fill();
 
-  // 10. Saturación global ligera al rojo (multiply tenue) — empuja
-  // todo el frame hacia un look de pulpa madura. Sólo en la zona
-  // de pulpa (no toca pre-corteza ni rind).
+  // 10. Saturación global al rojo (multiply) — reforzada respecto a la
+  // versión anterior para empujar el frame entero hacia pulpa madura.
+  // Sólo en la zona de pulpa (no toca pre-corteza ni rind).
   const sat = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * FLESH_END);
-  sat.addColorStop(0, 'rgba(220, 28, 50, 0.06)');
-  sat.addColorStop(0.7, 'rgba(220, 28, 50, 0.04)');
-  sat.addColorStop(1, 'rgba(220, 28, 50, 0)');
+  sat.addColorStop(0, 'rgba(216, 22, 44, 0.10)');
+  sat.addColorStop(0.7, 'rgba(216, 22, 44, 0.06)');
+  sat.addColorStop(1, 'rgba(216, 22, 44, 0)');
   ctx.globalCompositeOperation = 'multiply';
   ctx.fillStyle = sat;
   ctx.beginPath();
