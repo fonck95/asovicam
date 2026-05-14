@@ -17,6 +17,13 @@ import {
 // marketing). La pulpa usa transmisión + atenuación de color
 // para simular subsurface scattering (la luz "atraviesa" la
 // pulpa rosada como en una sandía real bañada de luz).
+//
+// POLISH (Prompt 2):
+//   - prop `mode`: 'whole' | 'cut' | 'both' (default 'both').
+//   - Banda explícita de mesocarpio (corteza interior crema-verdosa,
+//     ~1.5 cm en escala real) entre cáscara y pulpa en la rebanada.
+//   - Cuando el modo es 'whole' o 'cut', el modelo se centra en lugar
+//     de quedar descentrado a la izquierda como en el layout de marketing.
 // =====================================================
 
 const RADIUS = 1.0;
@@ -172,6 +179,47 @@ function buildSliceRindGeometry() {
   return new THREE.TubeGeometry(curve, 128, SLICE_DEPTH / 2 + 0.04, 22, false);
 }
 
+// POLISH (Prompt 2): mesocarpio = banda blanca-verdosa entre cáscara y
+// pulpa (1–2 cm en la sandía real; aquí ~0.04 unidades). Es un anillo
+// extruido apenas más estrecho que la cáscara y ligeramente más ancho
+// que la pulpa, mapeado con un gradiente blanco→verde tenue para que
+// se mezcle suavemente con ambos lados. Lo que faltaba en el corte
+// para que no se viera "pulpa pegada directo a cáscara".
+const MESO_THICKNESS = 0.04;
+function buildMesocarpGeometry() {
+  const shape = new THREE.Shape();
+  const rOut = SLICE_RADIUS + 0.005;
+  const rIn = SLICE_RADIUS - MESO_THICKNESS;
+  shape.moveTo(-rOut, 0);
+  shape.absarc(0, 0, rOut, Math.PI, 0, true);
+  shape.lineTo(rIn, 0);
+  shape.absarc(0, 0, rIn, 0, Math.PI, false);
+  shape.lineTo(-rOut, 0);
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: SLICE_DEPTH * 0.97,
+    bevelEnabled: true,
+    bevelThickness: 0.012,
+    bevelSize: 0.012,
+    bevelSegments: 3,
+    curveSegments: 96,
+  });
+  geo.translate(0, 0, -SLICE_DEPTH * 0.97 / 2);
+  // UV simple radial: el centro de la rebanada es u=0.5, el borde es 0/1
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const d = Math.sqrt(x * x + y * y);
+    // d normalizado al espesor de la banda: 0 = lado pulpa, 1 = lado cáscara
+    const t = Math.max(0, Math.min(1, (d - rIn) / (rOut - rIn)));
+    uv.setXY(i, t, (x + rOut) / (2 * rOut));
+  }
+  uv.needsUpdate = true;
+  return geo;
+}
+
 // Posiciones realistas de semillas en una rebanada
 function generateSeedPositions() {
   const seeds = [];
@@ -234,14 +282,18 @@ function generateJuiceDropPositions() {
   return drops;
 }
 
-export default function WatermelonModel() {
+export default function WatermelonModel({ mode = 'both' } = {}) {
   const groupRef = useRef(null);
+
+  const showWhole = mode === 'whole' || mode === 'both';
+  const showCut = mode === 'cut' || mode === 'both';
 
   const rindGeo = useMemo(buildRindGeometry, []);
   const stemGeo = useMemo(buildStemGeometry, []);
   const leafGeo = useMemo(buildLeafGeometry, []);
   const sliceFleshGeo = useMemo(buildSliceFleshGeometry, []);
   const sliceRindGeo = useMemo(buildSliceRindGeometry, []);
+  const mesocarpGeo = useMemo(buildMesocarpGeometry, []);
   const seedGeo = useMemo(buildSeedGeometry, []);
   const seedPositions = useMemo(generateSeedPositions, []);
   const juiceDrops = useMemo(generateJuiceDropPositions, []);
@@ -259,10 +311,19 @@ export default function WatermelonModel() {
     groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.5) * 0.015;
   });
 
+  // En modo 'both' mantenemos el layout marketing (entera izda + corte
+  // derecha). En modos solo-entera o solo-corte, centramos el sujeto.
+  const wholePosition = showCut ? [-0.55, 0, -0.1] : [0, 0, 0];
+  const cutPosition = showWhole ? [1.1, -0.55, 0.4] : [0, -0.2, 0];
+  const cutRotation = showWhole
+    ? [-Math.PI / 2.4, 0.05, -0.18]
+    : [-Math.PI / 2.8, 0.08, -0.1];
+
   return (
     <group ref={groupRef} rotation={[0.06, 0, 0.04]}>
-      {/* === Sandía completa (a la izquierda) === */}
-      <group position={[-0.55, 0, -0.1]}>
+      {/* === Sandía completa === */}
+      {showWhole && (
+      <group position={wholePosition}>
         <mesh geometry={rindGeo} castShadow receiveShadow>
           <meshPhysicalMaterial
             map={rindMap}
@@ -347,9 +408,11 @@ export default function WatermelonModel() {
           />
         </mesh>
       </group>
+      )}
 
-      {/* === Rebanada (a la derecha, ligeramente al frente) === */}
-      <group position={[1.1, -0.55, 0.4]} rotation={[-Math.PI / 2.4, 0.05, -0.18]}>
+      {/* === Rebanada === */}
+      {showCut && (
+      <group position={cutPosition} rotation={cutRotation}>
         {/* Pulpa con SSS realista. Iteración 2026:
             - color emissive sutil rojo: contrarresta el wash-out de la
               transmission cuando la luz atraviesa el slice y ayuda a
@@ -413,6 +476,25 @@ export default function WatermelonModel() {
             clearcoat={0.9}
             clearcoatRoughness={0.25}
             envMapIntensity={1.2}
+          />
+        </mesh>
+
+        {/* Mesocarpio: banda blanca-verdosa entre cáscara y pulpa.
+            Sin texturas (sólo color sólido) para no romper la lectura
+            del corte; sheen sutil verdoso para que se asome el color de
+            la corteza interior. Es la "carnita blanca" que en una sandía
+            real separa la pulpa roja del verde duro. */}
+        <mesh geometry={mesocarpGeo} castShadow={false} receiveShadow>
+          <meshPhysicalMaterial
+            color="#e8e4c0"
+            roughness={0.85}
+            metalness={0}
+            sheen={0.25}
+            sheenColor="#c5d4a8"
+            sheenRoughness={0.6}
+            clearcoat={0.18}
+            clearcoatRoughness={0.55}
+            envMapIntensity={0.85}
           />
         </mesh>
 
@@ -490,6 +572,7 @@ export default function WatermelonModel() {
           </mesh>
         ))}
       </group>
+      )}
     </group>
   );
 }

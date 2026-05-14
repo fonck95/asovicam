@@ -1651,6 +1651,49 @@ export function makeHuskNormalTexture() {
   return normalTextureFromHeightCanvas(canvas, 1.2);
 }
 
+// Alpha map de la hoja envolvente: blanco en el interior, recortes
+// irregulares en bordes laterales y punta superior. Se aplica con
+// alphaTest=0.5 para que las hojas pierdan la silueta de rectángulo y
+// adopten contornos rasgados como las brácteas reales secas.
+export function makeHuskAlphaTexture() {
+  const W = 512, H = 1024;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let y = 0; y < H; y++) {
+    // Borde lateral: noise FBM modula el ancho efectivo
+    const yt = y / H;
+    const leftNoise = fbm2D(yt * 18, 0, 4);
+    const rightNoise = fbm2D(yt * 18, 100, 4);
+    // Tip rasgado: por encima de yt=0.88 introducimos mucho más recorte
+    const tipFade = yt > 0.88 ? Math.pow((yt - 0.88) / 0.12, 1.4) : 0;
+    const leftCut = leftNoise * 0.06 + tipFade * 0.45;
+    const rightCut = rightNoise * 0.06 + tipFade * 0.45;
+
+    for (let x = 0; x < W; x++) {
+      const xt = x / W;
+      let a = 1.0;
+      if (xt < leftCut || xt > 1 - rightCut) a = 0.0;
+      // Pequeñas mordeduras random a media hoja (rasgaduras internas)
+      if (yt > 0.55) {
+        const tear = fbm2D(xt * 22, yt * 12, 3);
+        if (tear > 0.78 && (xt < 0.15 || xt > 0.85)) a = 0.0;
+      }
+      const i = (y * W + x) * 4;
+      const v = (a * 255) | 0;
+      img.data[i + 0] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toLinearTexture(canvas);
+}
+
 // =====================================================
 // VAINA INTERIOR (membrana del frijol abierta)
 // =====================================================
