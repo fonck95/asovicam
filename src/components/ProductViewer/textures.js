@@ -1719,48 +1719,102 @@ export function makeLeafNormalTexture() {
 // =====================================================
 
 function paintHuskColor(ctx, W, H) {
+  // Gradiente vertical de bráctea madura: la base (junto al pedicelo)
+  // es VERDE FRESCO (donde sigue viva la hoja); el medio es verde-amarillo
+  // (transición de clorofila a senescencia); la punta es TAN/PAJA seca.
+  // Coordenada vertical: y=0 = PUNTA (paja seca), y=H = BASE (verde).
+  // Esta orientación replica una hoja real de elote en mercado, con la
+  // punta seca como "pelillos" y la base aún verde donde abraza el olote.
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#cdb380');
-  grad.addColorStop(0.35, '#a3a380');
-  grad.addColorStop(0.65, '#84cc16');
-  grad.addColorStop(0.92, '#65a30d');
-  grad.addColorStop(1, '#3f6212');
+  grad.addColorStop(0, '#d4c089');     // punta seca (paja tostada)
+  grad.addColorStop(0.18, '#bdb574');  // transición seca-amarillenta
+  grad.addColorStop(0.42, '#9eb551');  // amarillo-verde (senescencia)
+  grad.addColorStop(0.70, '#84a833');  // verde maduro
+  grad.addColorStop(0.92, '#5e8a1f');  // verde fresco base
+  grad.addColorStop(1, '#446b1d');     // verde oscuro (anclaje al pedicelo)
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // FBM para variación cromática
+  // FBM para variación cromática orgánica (manchas claras / oscuras)
   const img = ctx.getImageData(0, 0, W, H);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const n = fbm2D(x / W * 6, y / H * 6, 5);
       const i = (y * W + x) * 4;
-      const f = 0.85 + n * 0.3;
+      const f = 0.85 + n * 0.30;
       img.data[i + 0] = Math.min(255, img.data[i + 0] * f);
-      img.data[i + 1] = Math.min(255, img.data[i + 1] * (0.9 + n * 0.25));
-      img.data[i + 2] = Math.min(255, img.data[i + 2] * (0.8 + n * 0.4));
+      img.data[i + 1] = Math.min(255, img.data[i + 1] * (0.90 + n * 0.25));
+      img.data[i + 2] = Math.min(255, img.data[i + 2] * (0.80 + n * 0.40));
     }
   }
   ctx.putImageData(img, 0, 0);
 
-  // Venas verticales
-  for (let i = 0; i < 40; i++) {
-    const x = (i / 40) * W;
-    ctx.strokeStyle = `rgba(40, 70, 10, ${0.18 + Math.random() * 0.22})`;
-    ctx.lineWidth = 0.6 + Math.random() * 1.2;
+  // VENAS LONGITUDINALES MÚLTIPLES — el rasgo más visible de la bráctea.
+  // Antes 40 venas con stroke fino → resultado plano. Ahora 96 venas
+  // distribuidas en tres tipos:
+  //   • Mayor (cada 12): contrastada, ancha — define los pliegues
+  //     principales del acanalado de la hoja
+  //   • Media (cada 4): fina, marcada — refuerza las nervaduras
+  //   • Menor (resto): trazo suave — agrega densidad sin saturar
+  const VEIN_COUNT = 96;
+  for (let i = 0; i < VEIN_COUNT; i++) {
+    const x = ((i + 0.5) / VEIN_COUNT) * W;
+    const isMajor = i % 12 === 0;
+    const isMid = !isMajor && i % 4 === 0;
+    const alphaBase = isMajor ? 0.40 : isMid ? 0.26 : 0.12;
+    const alpha = alphaBase + Math.random() * 0.14;
+    const widthLine = isMajor
+      ? 1.4 + Math.random() * 0.9
+      : isMid
+        ? 0.7 + Math.random() * 0.4
+        : 0.35 + Math.random() * 0.3;
+    // Color más oscuro abajo (verde), más cobrizo arriba (seco)
+    const veinDark = isMajor ? '20, 38, 6' : '38, 60, 14';
+    ctx.strokeStyle = `rgba(${veinDark}, ${alpha})`;
+    ctx.lineWidth = widthLine;
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    for (let y = 0; y <= H; y += 18) {
-      ctx.lineTo(x + Math.sin(y * 0.02) * 1.6, y);
+    for (let y = 0; y <= H; y += 14) {
+      // Ligeras curvas para que las venas no sean perfectamente rectas
+      ctx.lineTo(x + Math.sin(y * 0.018 + i * 0.41) * 1.4, y);
     }
     ctx.stroke();
   }
 
-  // Manchas de sol y desgaste
-  for (let i = 0; i < 110; i++) {
+  // Highlights claros entre venas mayores — son los "lomos" del acanalado
+  // que reciben más luz. Pintamos líneas claras en los huecos.
+  for (let i = 0; i < VEIN_COUNT; i++) {
+    if (i % 12 !== 6) continue; // sólo en el "valle" entre venas mayores
+    const x = ((i + 0.5) / VEIN_COUNT) * W;
+    ctx.strokeStyle = `rgba(255, 245, 200, ${0.12 + Math.random() * 0.10})`;
+    ctx.lineWidth = 1.4 + Math.random() * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    for (let y = 0; y <= H; y += 16) {
+      ctx.lineTo(x + Math.sin(y * 0.015 + i * 0.23) * 1.2, y);
+    }
+    ctx.stroke();
+  }
+
+  // Marcas de senescencia: pequeñas manchas oscuras donde el verde se
+  // está secando. Más densas en la mitad superior (zona de transición).
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * W;
+    const yt = Math.pow(Math.random(), 1.6); // sesgo hacia arriba
+    const y = yt * H * 0.55;
+    const r = 1 + Math.random() * 3;
+    ctx.fillStyle = `rgba(85, 70, 28, ${0.20 + Math.random() * 0.20})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Manchas de sol / pulido — highlights cálidos sobre toda la hoja
+  for (let i = 0; i < 130; i++) {
     const x = Math.random() * W;
     const y = Math.random() * H;
-    const r = 5 + Math.random() * 18;
-    ctx.fillStyle = `rgba(245, 230, 180, ${0.04 + Math.random() * 0.1})`;
+    const r = 5 + Math.random() * 22;
+    ctx.fillStyle = `rgba(245, 230, 180, ${0.04 + Math.random() * 0.09})`;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
@@ -1775,36 +1829,69 @@ export function makeHuskColorTexture() {
 }
 
 function paintHuskHeight(ctx, W, H) {
-  ctx.fillStyle = '#9a9a9a';
+  // Base media — las venas (más claras) y los surcos (más oscuros)
+  // se pintan encima como modulación de altura.
+  ctx.fillStyle = '#888888';
   ctx.fillRect(0, 0, W, H);
-  for (let i = 0; i < 35; i++) {
-    const x = (i / 35) * W;
-    ctx.strokeStyle = '#dcdcdc';
+
+  // Acanalado dominante: 48 surcos paralelos. En lugar de pintar líneas
+  // sueltas, generamos directamente un patrón sinusoidal pixel-a-pixel
+  // que produce CRESTAS Y VALLES alternados. Esto da al normal map una
+  // estructura periódica que las luces direccionales convierten en el
+  // brillo acanalado característico de la bráctea.
+  const RIDGE_COUNT = 48;
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const xRel = x / W;
+      // Onda principal: surcos paralelos
+      const ridge = Math.cos(xRel * Math.PI * 2 * RIDGE_COUNT);
+      // FBM sutil para que el acanalado no sea perfectamente uniforme
+      const noiseHi = (fbm2D(x / W * 14, y / H * 28, 3) - 0.5) * 0.35;
+      // Pequeñas roturas (rasgaduras) en el sentido vertical
+      const tear = (fbm2D(x / W * 3, y / H * 32, 2) - 0.5) * 0.15;
+      // Altura final, 0..1
+      const h = 0.50 + ridge * 0.32 + noiseHi * 0.18 + tear * 0.18;
+      const v = Math.max(0, Math.min(255, h * 255));
+      const i = (y * W + x) * 4;
+      img.data[i + 0] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Venas mayores — destacadas como crestas más altas (cada 12 columnas)
+  for (let i = 0; i < RIDGE_COUNT; i += 4) {
+    const x = (i / RIDGE_COUNT) * W;
+    ctx.strokeStyle = '#e8e8e8';
     ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    for (let y = 0; y <= H; y += 18) {
-      ctx.lineTo(x + Math.sin(y * 0.02) * 1.6, y);
+    for (let y = 0; y <= H; y += 16) {
+      ctx.lineTo(x + Math.sin(y * 0.018 + i * 0.41) * 1.4, y);
     }
     ctx.stroke();
   }
-  // ruido fino
-  for (let i = 0; i < 2400; i++) {
+
+  // Ruido fino para granularidad de fibra
+  for (let i = 0; i < 3200; i++) {
     const x = Math.random() * W;
     const y = Math.random() * H;
-    const v = 110 + Math.random() * 100;
+    const v = 100 + Math.random() * 110;
     ctx.fillStyle = `rgb(${v},${v},${v})`;
     ctx.beginPath();
-    ctx.arc(x, y, 0.5 + Math.random() * 1.2, 0, Math.PI * 2);
+    ctx.arc(x, y, 0.4 + Math.random() * 1.0, 0, Math.PI * 2);
     ctx.fill();
   }
 }
 
 export function makeHuskNormalTexture() {
-  const W = 256, H = 1024;
+  const W = 512, H = 2048;
   const canvas = makeCanvas(W, H);
   paintHuskHeight(canvas.getContext('2d'), W, H);
-  return normalTextureFromHeightCanvas(canvas, 1.2);
+  return normalTextureFromHeightCanvas(canvas, 2.2);
 }
 
 // Alpha map de la hoja envolvente: blanco en el interior, recortes

@@ -20,53 +20,58 @@ import {
 // =====================================================
 
 // Proporciones más realistas: mazorca esbelta (ratio length:diameter ≈ 3:1).
-// Antes 1.7×0.96 (ratio 1.77:1) — demasiado ancha; ahora la diámetro real
-// final con granos protruidos es ~0.62, dando un ratio visual ~2.8:1, en
-// línea con el maíz fotográfico.
+// Referencia: fotografía de producto de maíz dent maduro, donde el cuerpo
+// es casi perfectamente cilíndrico — la curvatura es mucho menor de lo
+// que la gente cree por memoria. El diámetro visible final con granos
+// protruidos es ~0.62, dando un ratio visual ~2.8:1.
 const COB_HEIGHT = 1.75;
 // CORE_RADIUS = radio del olote (cob axis) donde se montan los granos.
 // Es menor que el radio visible final porque cada grano protruye desde
 // la superficie del core.
 const CORE_RADIUS = 0.26;
 // Densidad de granos: filas longitudinales × filas circunferenciales.
-// 34 filas verticales (Fibonacci) × 18 columnas (par, encaja en el
-// nuevo perímetro). El maíz real tiene siempre filas en cantidad par
-// entre 12 y 22; 18 es típico para dent corn.
-const KERNEL_ROWS = 34;
+// 38 filas verticales × 18 columnas (par, encaja en el perímetro). El
+// maíz dent comercial real tiene 16-20 filas alrededor y 30-50 a lo
+// largo — 38×18 = 684 granos potenciales (algunos se descartan en la
+// punta), exactamente el rango fotográfico de una mazorca madura.
+const KERNEL_ROWS = 38;
 const KERNEL_COLS = 18;
 // Tamaño base del grano (radio de la esfera fuente antes de deformar).
 // Escalado proporcionalmente al CORE_RADIUS reducido para preservar
 // la relación grano/olote.
-const KERNEL_R = 0.044;
+const KERNEL_R = 0.046;
 
 function cobProfileAt(t) {
   // Perfil de la mazorca como función de la altura normalizada t∈[0,1].
-  // Base con ramp-up corto (donde se atornilla al tallo), sección media
-  // casi cilíndrica con leve panza, hombro al ~82%, y después un DOMO
-  // redondeado (cuarto de elipse) que termina la mazorca en una punta
-  // suave — no en un cono ni en un disco plano. Es desde este domo,
-  // como prolongación natural del propio olote, que emergen las barbas.
-  // Antes el cob terminaba en un pico casi-cero y un casquete separado
-  // se colocaba encima — el resultado era un efecto "hongo" del que
-  // los silks parecían colgar. Ahora el domo ES la parte superior.
+  // Referencia: fotografía de mazorca madura mostrando el cuerpo como
+  // cilindro casi perfecto. Tramos:
+  //   0-7%   : Ramp-up del pedicelo al cuerpo (curva suave, no lineal)
+  //   7-78%  : Cuerpo casi cilíndrico — sólo ~1.5% de bulge en el medio
+  //   78-91% : Hombro: taper gradual hacia el inicio del domo
+  //   91-100%: Domo apical (cuarto de elipse) — punta redondeada de la
+  //            cual emergen las barbas como continuación del tejido del
+  //            propio olote (no de un casquete encima).
   // La MISMA función la usan el cob core (lathe) y el placement de
   // granos para que ambos coincidan en superficie.
-  if (t < 0.10) {
-    return 0.05 + Math.pow(t / 0.10, 0.65) * 0.89;
-  } else if (t < 0.82) {
-    const u = (t - 0.10) / 0.72;
-    return 0.94 + Math.sin(u * Math.PI) * 0.045 - Math.cos(u * 2.3 * Math.PI) * 0.010;
-  } else if (t < 0.94) {
-    // Hombro: taper gradual desde el cuerpo hasta el comienzo del domo
-    const u = (t - 0.82) / 0.12;
-    return 0.95 - u * 0.40 + Math.sin(u * Math.PI) * 0.02;
+  if (t < 0.07) {
+    return 0.04 + Math.pow(t / 0.07, 0.55) * 0.94;
+  } else if (t < 0.78) {
+    const u = (t - 0.07) / 0.71;
+    // Cuerpo casi recto: bulge muy sutil en el centro (1.5%), ondulación
+    // periódica imperceptible para textura. Antes la oscilación era de
+    // ~5.5% y daba un cuerpo "panzón" no realista.
+    return 0.985 + Math.sin(u * Math.PI) * 0.020 - Math.cos(u * 3.1 * Math.PI) * 0.006;
+  } else if (t < 0.91) {
+    // Hombro: taper gradual desde el cuerpo hasta el inicio del domo
+    const u = (t - 0.78) / 0.13;
+    return 1.00 - Math.pow(u, 1.3) * 0.46 + Math.sin(u * Math.PI) * 0.018;
   } else {
     // Domo apical: cuarto de elipse convexo. Pendiente horizontal al
     // empezar (hombro suave) y vertical al llegar al ápice (punta
     // redondeada). De aquí emergen los silks como continuación del
     // tejido del olote, no de un casquete pegado encima.
-    const u = (t - 0.94) / 0.06;
-    return 0.55 * Math.sqrt(Math.max(0, 1 - u * u));
+    const u = (t - 0.91) / 0.09;
+    return 0.54 * Math.sqrt(Math.max(0, 1 - u * u));
   }
 }
 
@@ -96,34 +101,76 @@ function buildCobCoreGeometry() {
 }
 
 function buildKernelGeometry() {
-  // Geometría base de UN grano de maíz. Forma de gota: espalda aplanada
-  // (toca el cob), corona redondeada bulging hacia afuera, base más
-  // estrecha (germen). Coordenadas locales:
-  //   +X = afuera (radial), -X = pegado al cob
-  //   +Y = arriba (corona), -Y = abajo (germen)
-  //   ±Z = lateral (filas adyacentes)
+  // Geometría base de UN grano de maíz dent. Antes era una "gota"
+  // (esfera deformada suavemente) — visualmente leía como blob/píldora.
+  // Real: tooth-shape característico del dent corn, con:
+  //   • Espalda PLANA pegada al olote (no curvada)
+  //   • Corona ANCHA y ligeramente HUNDIDA (el "dent" que da el nombre
+  //     a esta variedad — visible en cualquier mazorca de marketing)
+  //   • Lados PLANOS donde los granos vecinos se aprietan unos contra
+  //     otros (no son esferas, son cuñas redondeadas)
+  //   • Germen INFERIOR estrecho — el grano se afina hacia abajo donde
+  //     se ancla al olote
+  // Coordenadas locales:
+  //   +X = afuera (radial), -X = pegado al cob (espalda plana)
+  //   +Y = arriba (corona ancha), -Y = abajo (germen estrecho)
+  //   ±Z = lateral (filas adyacentes, lados aplanados)
   // Después del build, trasladamos para que la cara posterior quede
   // anclada en X=0 — así al posicionar el grano en (r·cosθ, y, r·sinθ)
   // la espalda toca exactamente la superficie del core de radio r.
-  const geo = new THREE.SphereGeometry(KERNEL_R, 14, 10);
+  const geo = new THREE.SphereGeometry(KERNEL_R, 18, 14);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
-  const backScale = 0.30;   // factor de aplastado de la espalda
-  const frontScale = 1.08;  // factor de protrusión de la corona
+  const backScale = 0.18;   // espalda muy aplanada (toca al cob)
+  const frontScale = 1.22;  // corona protruye fuerte hacia afuera
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const yNorm = v.y / KERNEL_R; // -1..1
-    if (v.x < 0) {
-      v.x *= backScale;
-    } else {
-      v.x *= frontScale;
-    }
-    // Estirar verticalmente — el grano es más alto que ancho
+    const zNorm = v.z / KERNEL_R; // -1..1
+
+    // 1. Asimetría radial: espalda plana, corona protruida
+    if (v.x < 0) v.x *= backScale;
+    else v.x *= frontScale;
+
+    // 2. Estirar verticalmente — el grano es más alto que ancho.
+    // Calibrado para que la altura del grano (~0.123) sea ligeramente
+    // mayor que el row spacing (~0.046) y se generen filas continuas
+    // sin overlap excesivo entre kernels verticalmente adyacentes.
     v.y *= 1.32;
-    // Taper hacia el germen
-    const taper = yNorm < 0 ? 0.55 + (1 + yNorm) * 0.45 : 1.0;
-    v.z *= taper;
-    if (v.x > 0) v.x *= taper;
+
+    // 3. Taper piramidal: corona ANCHA, germen ESTRECHO. yT=0 abajo, 1 arriba.
+    //    Antes el top mantenía Z al 100% (forma esférica de "gota");
+    //    ahora la mitad inferior se afina hacia un germen puntiagudo y
+    //    el top conserva más anchura tangencial (cara superior plana).
+    const yT = (yNorm + 1) / 2;
+    const taperZ = 0.42 + Math.pow(yT, 0.65) * 0.58;
+    v.z *= taperZ;
+    if (v.x > 0) v.x *= 0.62 + yT * 0.38;
+
+    // 4. Aplanado lateral: las caras Z donde se aprietan los vecinos se
+    //    aplanan. Sólo afecta a los costados (|z| grande), creando los
+    //    "lados rectos" característicos del grano de maíz — como un
+    //    diente cuyas caras laterales contactan con sus vecinos.
+    if (Math.abs(zNorm) > 0.45) {
+      const sideStrength = (Math.abs(zNorm) - 0.45) / 0.55;
+      v.z *= 1 - sideStrength * 0.20;
+    }
+
+    // 5. Dent apical: depresión sutil en la corona delantera. El "dent"
+    //    es el rasgo característico del dent corn — visible en cada
+    //    fotografía de elote maduro. Se aplica sólo en la corona (+Y alto)
+    //    y la mitad delantera (+X). Se atenúa hacia los bordes Z (la
+    //    depresión es central, no toca los lados). Forma: parábola
+    //    invertida tipo cuenco.
+    if (yNorm > 0.42 && v.x > 0) {
+      const dentRamp = (yNorm - 0.42) / 0.58;
+      const sideFalloff = Math.max(0, 1 - Math.pow(Math.abs(zNorm), 1.4) * 1.2);
+      const dent = Math.pow(dentRamp, 1.3) * KERNEL_R * 0.34 * sideFalloff;
+      v.x -= dent;
+      // Pequeño "bowl" vertical: el centro de la corona también desciende
+      v.y -= dent * 0.20;
+    }
+
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   // Anclar la espalda en X=0
@@ -190,21 +237,24 @@ function buildKernelInstanceData() {
       const h3 = h3raw - Math.floor(h3raw);
 
       // Hacia la punta perdemos granos (la mazorca real no llena la corona)
-      if (t > 0.85) {
-        const tipChance = (t - 0.85) / 0.08;
-        if (h3 < tipChance * 0.75) continue;
+      if (t > 0.83) {
+        const tipChance = (t - 0.83) / 0.10;
+        if (h3 < tipChance * 0.80) continue;
       }
-      // ~3% subdesarrollados (más pequeños, hundidos)
-      const underdev = h1 < 0.03;
+      // ~2.5% subdesarrollados (más pequeños, hundidos)
+      const underdev = h1 < 0.025;
 
       // Tamaños: escala radial (profundidad), vertical, y arc-tangencial.
       // arcWidth = espaciado real entre granos adyacentes en la fila;
-      // dividir entre KERNEL_R*1.9 deja un pequeño solape tangencial
-      // — los granos en mazorca real se aprietan unos contra otros.
+      // dividir entre KERNEL_R*1.65 hace que cada grano AOCUPE casi todo
+      // el espacio tangencial — los granos en mazorca real se aprietan
+      // unos contra otros formando hileras CONTINUAS sin huecos. Las
+      // caras laterales aplanadas (en buildKernelGeometry) absorben ese
+      // sobrelapse sin clipping visible.
       const arcWidth = (2 * Math.PI * radius) / KERNEL_COLS;
-      const scaleX = (0.88 + h1 * 0.22) * (underdev ? 0.50 : 1);
-      const scaleY = (0.92 + h2 * 0.20) * (underdev ? 0.55 : 1);
-      const scaleZ = (arcWidth / (KERNEL_R * 1.85)) * (0.94 + h2 * 0.12) * (underdev ? 0.55 : 1);
+      const scaleX = (0.92 + h1 * 0.16) * (underdev ? 0.50 : 1);
+      const scaleY = (0.95 + h2 * 0.14) * (underdev ? 0.55 : 1);
+      const scaleZ = (arcWidth / (KERNEL_R * 1.55)) * (0.97 + h2 * 0.08) * (underdev ? 0.55 : 1);
 
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
@@ -311,9 +361,19 @@ function buildHuskGeometry({
       //       en hojas peeled o para la nervadura central)
       const sx = Math.sin(ang) * radius;
       const sz = -Math.cos(ang) * radius;
-      // Nervadura central: cresta a lo largo de u=0.5 que sobresale
-      // ligeramente hacia afuera (en dirección -Z local del cilindro).
-      const rib = (1 - Math.abs(uRel)) * 0.022 * (1 - fanOut * 0.4);
+      // Sistema de NERVADURAS MÚLTIPLES — el rasgo más visible de una
+      // hoja de maíz real. Antes había sólo una cresta central (rib =
+      // (1-|uRel|)·0.022) que hacía la hoja "lisa con dorso curvo",
+      // dejando los bordes laterales planos como cartón. Ahora añadimos:
+      //   • mainRib: cresta central pronunciada (todavía la más alta)
+      //   • secRibs: 5 venas paralelas distribuidas a través del ancho
+      //     que crean la textura acanalada característica de la bráctea.
+      // Las nervaduras se atenúan hacia el borde (1-|uRel|^3) y hacia
+      // la punta peeled (donde la hoja se relaja y se aplana).
+      const ribFalloff = 1 - Math.pow(Math.abs(uRel), 3);
+      const mainRib = ribFalloff * 0.022 * (1 - fanOut * 0.35);
+      const secRibs = Math.cos(uRel * Math.PI * 5.5) * 0.0085 * ribFalloff * (1 - fanOut * 0.5);
+      const rib = mainRib + Math.max(0, secRibs);
       // Onda lateral baja-frecuencia para no parecer plana.
       const wave = Math.sin(t * 4.6 + uRel * 2.3) * 0.014 * (1 - peel * 0.45);
       // Curl hacia afuera de las puntas peeled (sólo afecta hojas con peel>0)
@@ -414,17 +474,20 @@ function buildSilkGeometry() {
   // 4) Trayectoria dominada por cascada vertical (droop) con apertura
   //    radial moderada: el tuft cae como una cabellera, no explota
   //    en abanico.
-  // 5) Color base verdoso → cobre → rubio claro al extremo.
+  // 5) Color: root cremoso (recién emergido, húmedo) → mid dorado →
+  //    tip tostado (oxidado por el sol). Antes la gradiente iba al revés
+  //    (tip pálido), que no coincide con la realidad: las hebras se
+  //    OSCURECEN hacia la punta al envejecer y secarse.
   const strands = [];
-  const colorRoot = new THREE.Color('#bfa874');  // base verdoso-tostada
-  const colorMid = new THREE.Color('#d6b27a');   // cobre cálido
-  const colorTip = new THREE.Color('#f3dba0');   // rubio claro
+  const colorRoot = new THREE.Color('#fff5d6');  // crema pálida (raíz húmeda)
+  const colorMid = new THREE.Color('#e6c179');   // dorado cálido
+  const colorTip = new THREE.Color('#a87444');   // tostado seco (oxidado)
 
-  // 21 clusters y 8 hebras/cluster — ambos números de Fibonacci.
-  // Total = 168 hebras: suficiente densidad para un manojo cohesivo
-  // sin saturar el ápice.
+  // 21 clusters y 10 hebras/cluster — más densidad que antes (8) para
+  // un manojo más cohesivo. Total = 210 hebras: suficiente para un buen
+  // tuft visual sin saturar la GPU.
   const CLUSTERS = 21;
-  const STRANDS_PER_CLUSTER = 8;
+  const STRANDS_PER_CLUSTER = 10;
   // Ángulo dorado en radianes (≈ 137.5°). Patrón filotáctico del
   // ápice de la inflorescencia del maíz.
   const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -624,73 +687,82 @@ export default function CornModel() {
   const kernelInstances = useMemo(buildKernelInstanceData, []);
   const silkGeometry = useMemo(buildSilkGeometry, []);
 
-  // Distribución filotáctica de las brácteas (hojas envolventes).
-  // Configuración de SEMI-COBERTURA estilo MARKETING: en vez de envolver
-  // completamente la mazorca (que tapaba la mayoría de los granos), la
-  // mayoría de las hojas están peeled-back y fanned-out alrededor del
-  // olote — como en empaques de elote dulce o fotografía de producto.
-  //  • 7 base wraps cortos que sólo cubren el cuarto inferior del olote
-  //    (anclan la mazorca al pedúnculo sin obstruir los granos).
-  //  • 7 hojas peeled-back largas que TODAS arrancan del pedúnculo
-  //    (mismo nivel que las wraps) y se abren+caen hacia afuera. Antes
-  //    estas hojas tenían baseY en la mitad del olote y un tiltX de
-  //    +0.78 rad sobre el mesh entero — combinación que pivotaba la
-  //    hoja alrededor del eje del olote y empujaba la punta DENTRO del
-  //    cuerpo de la mazorca. El usuario reportó "se superponen sobre
-  //    el cuerpo". Ahora la curva descendente vive en la geometría
-  //    (droopAmt) y todas las hojas anclan en la base, evitando el
-  //    clipping con los granos.
-  // El ángulo de inserción usa el ÁNGULO ÁUREO (~137.5°) — la misma
-  // filotaxis natural de las gramíneas; conteos en Fibonacci (7+7=14).
-  // La variación de longitud, arco y baseY se deriva de la fase i/φ
-  // para que la irregularidad sea matemáticamente coherente con la
-  // distribución angular (no random ruidoso).
+  // Distribución filotáctica de las brácteas (hojas envolventes) en
+  // TRES NIVELES para mejor layering — como un buqué real de mazorca
+  // con pelillos pelados (look de mercado o fotografía profesional):
+  //   • Nivel 1 (5 base wraps): hojas cortas pegadas al pedicelo,
+  //     anclan visualmente la base. Cubren el tercio inferior.
+  //   • Nivel 2 (4 mid-wraps): hojas medianas semi-abiertas que
+  //     llenan el espacio entre el cob y las hojas peeled. Antes este
+  //     nivel no existía y se notaba un "salto" entre las wraps cortas
+  //     y las peeled largas. Cubren hasta la mitad del olote.
+  //   • Nivel 3 (5 peeled-back): hojas largas que se abren formando
+  //     el bouquet característico. Antes eran 7 — reducimos a 5 para
+  //     que cada hoja sea más prominente y la silueta menos "saturada".
+  // El ángulo de inserción usa el ÁNGULO ÁUREO (~137.5°) por nivel —
+  // distribución filotáctica natural de las gramíneas. La variación de
+  // longitud/arco/baseY se deriva de la fase i/φ para que la irregularidad
+  // sea matemáticamente coherente con la distribución angular.
   const huskConfig = useMemo(
     () => {
       const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
       const PHI = (1 + Math.sqrt(5)) / 2;
       const wrapping = [];
 
-      // === Base wraps: hojas cortas en el pedúnculo ===
-      // Largo 0.52-0.72 sobre un cob de 1.75 → cubren sólo el tercio
-      // inferior. Capas alternadas (0-1) para dar grosor a la base.
-      const BASE_WRAP_COUNT = 7;
+      // === Nivel 1: base wraps cortos (cubren el tercio inferior) ===
+      const BASE_WRAP_COUNT = 5;
       for (let i = 0; i < BASE_WRAP_COUNT; i++) {
         const phase = (i / PHI) - Math.floor(i / PHI);
-        const layer = i % 3 === 2 ? 1 : 0;
         wrapping.push({
           peel: 0.04 + (i % 2) * 0.03,
-          length: 0.52 + phase * 0.22,
-          arcExtent: 0.86 + (1 - phase) * 0.14,
+          length: 0.55 + phase * 0.22,
+          arcExtent: 0.92 + (1 - phase) * 0.14,
           angleOffset: i * GOLDEN_ANGLE,
-          layer,
+          layer: 0,
           baseY: -0.94 + phase * 0.04,
           baseTipFlare: 0,
           droopAmt: 0,
         });
       }
 
-      // === Hojas peeled-back: el "bouquet" de marketing ===
-      // 7 hojas largas (1.10-1.45) que arrancan en el pedúnculo
-      // (baseY ≈ -0.90, mismo nivel que las wraps) y caen en cascada
-      // hacia afuera. La curvatura está enteramente en la geometría
-      // (droopAmt 1.2-1.5): cada hoja sube los primeros 30% pegada al
-      // olote y a partir de ahí se desvía hacia afuera+abajo formando
-      // una S suave. Como TODAS las bases tocan el pedúnculo, no hay
-      // hojas "flotando" en el aire ni traspasando el cuerpo del cob.
-      const PEEL_COUNT = 7;
-      const PEEL_ANGLE_OFFSET = 0.42; // descorrelaciona con base wraps
+      // === Nivel 2: mid-wraps semi-abiertos (cubren hasta la mitad) ===
+      // Antes este nivel no existía — había un salto visual brusco entre
+      // las wraps muy cortas y las peeled muy largas. Estas hojas medianas
+      // llenan el "hueco" intermedio y dan profundidad al layering.
+      const MID_WRAP_COUNT = 4;
+      const MID_ANGLE_OFFSET = 0.22; // descorrelaciona con base wraps
+      for (let i = 0; i < MID_WRAP_COUNT; i++) {
+        const phase = ((i + 0.3) / PHI) - Math.floor((i + 0.3) / PHI);
+        wrapping.push({
+          peel: 0.32 + phase * 0.18,
+          length: 0.85 + phase * 0.20,
+          arcExtent: 0.80 + (1 - phase) * 0.14,
+          angleOffset: MID_ANGLE_OFFSET + i * GOLDEN_ANGLE,
+          layer: 1,
+          baseY: -0.92 + phase * 0.06,
+          baseTipFlare: 0.10 + phase * 0.08,
+          droopAmt: 0.45 + phase * 0.25,
+        });
+      }
+
+      // === Nivel 3: peeled-back leaves (bouquet) ===
+      // 5 hojas largas que arrancan en el pedicelo y caen en cascada
+      // hacia afuera. La curvatura está en la geometría (droopAmt 1.15-
+      // 1.55): cada hoja sube los primeros 30% pegada al olote y a
+      // partir de ahí se desvía hacia afuera+abajo formando una S suave.
+      const PEEL_COUNT = 5;
+      const PEEL_ANGLE_OFFSET = 0.55; // descorrelaciona con los otros niveles
       for (let i = 0; i < PEEL_COUNT; i++) {
         const phase = ((i + 0.5) / PHI) - Math.floor((i + 0.5) / PHI);
         wrapping.push({
-          peel: 0.72 + phase * 0.20,
-          length: 1.10 + phase * 0.35,
-          arcExtent: 0.72 + (1 - phase) * 0.16,
+          peel: 0.74 + phase * 0.20,
+          length: 1.15 + phase * 0.35,
+          arcExtent: 0.74 + (1 - phase) * 0.16,
           angleOffset: PEEL_ANGLE_OFFSET + i * GOLDEN_ANGLE,
           layer: 2,
           baseY: -0.90 + phase * 0.08,
-          baseTipFlare: 0.24 + phase * 0.18,
-          droopAmt: 1.15 + phase * 0.40,
+          baseTipFlare: 0.26 + phase * 0.18,
+          droopAmt: 1.18 + phase * 0.42,
         });
       }
       return wrapping;
@@ -771,7 +843,14 @@ export default function CornModel() {
       </mesh>
 
       {/* Granos: cada uno es una malla 3D real (no textura) instanciada.
-          El color base lo aporta cada instancia vía setColorAt. */}
+          El color base lo aporta cada instancia vía setColorAt.
+          Material: pelícuda exterior natural — antes el clearcoat=0.85
+          y roughness=0.40 daban un look de "plástico húmedo / juguete".
+          Ahora roughness=0.55 (más matte) y clearcoat=0.35 (sutil) imitan
+          la pielcita cerosa del grano fresco sin caer en lo brillante.
+          Subsurface (transmission+thickness) sube ligeramente para que
+          la luz del rim atraviese el grano y aporte un halo amarillo
+          dorado en los bordes — efecto SSS clásico de fotografía. */}
       <instancedMesh
         ref={kernelMeshRef}
         args={[kernelGeometry, undefined, kernelInstances.length]}
@@ -780,19 +859,19 @@ export default function CornModel() {
       >
         <meshPhysicalMaterial
           color="#ffffff"
-          roughness={0.40}
-          metalness={0.02}
-          clearcoat={0.85}
-          clearcoatRoughness={0.18}
-          envMapIntensity={1.25}
-          sheen={0.30}
-          sheenColor="#fef3c7"
-          sheenRoughness={0.55}
-          transmission={0.06}
-          thickness={0.12}
-          attenuationColor="#fbbf24"
-          attenuationDistance={0.4}
-          ior={1.42}
+          roughness={0.55}
+          metalness={0}
+          clearcoat={0.35}
+          clearcoatRoughness={0.32}
+          envMapIntensity={1.05}
+          sheen={0.45}
+          sheenColor="#fff0c0"
+          sheenRoughness={0.40}
+          transmission={0.10}
+          thickness={0.18}
+          attenuationColor="#f59e0b"
+          attenuationDistance={0.30}
+          ior={1.40}
         />
       </instancedMesh>
 
@@ -883,16 +962,21 @@ export default function CornModel() {
             <meshPhysicalMaterial
               map={huskColor}
               normalMap={huskNormal}
-              normalScale={[1.1, 1.1]}
+              normalScale={[1.6, 1.6]}
               alphaMap={huskAlpha}
               alphaTest={0.42}
-              roughness={0.78}
+              roughness={0.82}
               metalness={0}
-              sheen={0.5}
-              sheenColor="#cbd5b1"
-              sheenRoughness={0.55}
-              clearcoat={0.18}
-              clearcoatRoughness={0.6}
+              sheen={0.65}
+              sheenColor="#d4dfa8"
+              sheenRoughness={0.50}
+              clearcoat={0.10}
+              clearcoatRoughness={0.7}
+              transmission={0.18}
+              thickness={0.06}
+              attenuationColor="#a8b070"
+              attenuationDistance={0.18}
+              ior={1.42}
               side={THREE.DoubleSide}
             />
           </mesh>
