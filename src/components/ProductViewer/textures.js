@@ -628,6 +628,110 @@ export function makeWatermelonNormalTexture() {
 }
 
 // =====================================================
+// SANDÍA — Roughness map de la cáscara (PBR microfaceta)
+//
+// Anti-patrón explícito: "Roughness uniforme en toda la superficie".
+// La sandía real tiene una distribución muy heterogénea de cera
+// epicuticular concentrada en las franjas oscuras (más pulidas)
+// y abrasiones/manchas distribuidas (mate). GGX integrado con esta
+// rugosidad produce highlights ROTOS — la firma visual de la fruta
+// fresca frente al renderizado "plástico".
+//
+// El layout (franjas + ondulación) replica el de paintWatermelonHeight
+// para que el highlight especular se reposicione exactamente donde
+// la geometría dicta (alineamiento canal-a-canal con color y normal).
+// =====================================================
+export function makeWatermelonRindRoughnessTexture() {
+  const W = 1024, H = 512;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  // Base ~0.60 (lámina entre franjas, más expuesta y abrasionada)
+  ctx.fillStyle = '#9c9c9c';
+  ctx.fillRect(0, 0, W, H);
+
+  // FBM macro/micro: variación cera fresca ↔ wax abrasionado a escala
+  // grande y pequeña. Sin esto, las franjas se leen como anillos uniformes.
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const macro = fbm2D(x / W * 3.4, y / H * 3.4, 4);
+      const micro = fbm2D(x / W * 22, y / H * 22, 3);
+      const i = (y * W + x) * 4;
+      // ∈ [~0.32, ~0.65] tras la composición
+      const v = 110 + (macro - 0.5) * 60 + (micro - 0.5) * 28;
+      img.data[i + 0] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Franjas oscuras = wax depositado = MÁS PULIDO (roughness ~0.30).
+  // Mismo perfil ondulado que el height map para alineamiento exacto
+  // con la geometría aparente de las rayas.
+  const STRIPES = 11;
+  const stripeWidth = W / STRIPES;
+  for (let s = 0; s < STRIPES; s++) {
+    const cx = s * stripeWidth + stripeWidth / 2;
+    ctx.save();
+    ctx.beginPath();
+    const segments = 60;
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const y = t * H;
+      const wob = Math.sin(t * 9 + s * 1.3) * stripeWidth * 0.20;
+      const x = cx + wob - stripeWidth * 0.32;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = segments; i >= 0; i--) {
+      const t = i / segments;
+      const y = t * H;
+      const wob = Math.sin(t * 9 + s * 1.3) * stripeWidth * 0.20;
+      const x = cx + wob + stripeWidth * 0.32;
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(75, 75, 75, 0.85)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Cicatrices/manchas: islas MUY mates (cera ausente, tejido seco).
+  // Empuja el highlight a romper alrededor (forma de "estrella" cuando
+  // hay una luz fuerte), patrón inconfundiblemente real.
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    const r = 1.5 + Math.random() * 3.5;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+    g.addColorStop(0, 'rgba(220, 220, 220, 0.85)');
+    g.addColorStop(1, 'rgba(220, 220, 220, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Halos suaves de "polvo agrícola" (mate distribuido)
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    const r = 4 + Math.random() * 14;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(190, 190, 190, 0.30)');
+    g.addColorStop(1, 'rgba(190, 190, 190, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return toLinearTexture(canvas);
+}
+
+// =====================================================
 // SANDÍA — pulpa interior (foco principal de realismo)
 //
 // La pulpa de la sandía es tejido placentario: miles de células grandes,
@@ -1485,6 +1589,80 @@ export function makePodNormalTexture() {
 }
 
 // =====================================================
+// FRIJOL — Roughness map de la vaina (PBR microfaceta)
+//
+// Anti-patrón fijo: hoy el cuerpo entero usa roughness=0.38 uniforme.
+// La vaina real:
+//   - Sutura dorsal y ventral: tejido fibroso seco (roughness ~0.65)
+//   - Lóbulos seminales: cera fresca, más pulidos (roughness ~0.30)
+//   - Surcos longitudinales entre semillas: ligeramente más mates
+//   - Extremos (cáliz / estilo): secos
+// La integración GGX da highlights "respiradores" — entran y salen al
+// rotar la vaina, justo como en un pod caupí fotografiado en luz natural.
+// =====================================================
+export function makePodRoughnessTexture() {
+  const W = 1024, H = 256;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  // Base pulida (lámina expuesta al sol con wax fresco)
+  ctx.fillStyle = '#7b7b7b';  // ~0.30 roughness con material.roughness=1
+  ctx.fillRect(0, 0, W, H);
+
+  // FBM macro/micro
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const macro = fbm2D(x / W * 4, y / H * 6, 4);
+      const micro = fbm2D(x / W * 22, y / H * 22, 3);
+      const i = (y * W + x) * 4;
+      const v = 100 + (macro - 0.5) * 60 + (micro - 0.5) * 22;
+      img.data[i + 0] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Banda sutura dorsal y ventral (top y bottom de la textura, más mates)
+  const sutTop = ctx.createLinearGradient(0, 0, 0, H * 0.18);
+  sutTop.addColorStop(0, 'rgba(170, 170, 170, 0.55)');
+  sutTop.addColorStop(1, 'rgba(170, 170, 170, 0)');
+  ctx.fillStyle = sutTop;
+  ctx.fillRect(0, 0, W, H * 0.18);
+
+  const sutBot = ctx.createLinearGradient(0, H * 0.82, 0, H);
+  sutBot.addColorStop(0, 'rgba(170, 170, 170, 0)');
+  sutBot.addColorStop(1, 'rgba(170, 170, 170, 0.55)');
+  ctx.fillStyle = sutBot;
+  ctx.fillRect(0, H * 0.82, W, H * 0.18);
+
+  // Surcos entre lóbulos seminales (más oscuros = más mates en su sombra)
+  for (let i = 0; i < 6; i++) {
+    const t = i / 6;
+    const cx = W * (0.1 + t * 0.8);
+    const g = ctx.createRadialGradient(cx, H / 2, 0, cx, H / 2, W * 0.06);
+    g.addColorStop(0, 'rgba(150, 150, 150, 0.28)');
+    g.addColorStop(1, 'rgba(150, 150, 150, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(cx, H / 2, W * 0.06, H * 0.50, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Extremos: cáliz y estilo (más secos, más mates)
+  const endGrad = ctx.createLinearGradient(0, 0, W, 0);
+  endGrad.addColorStop(0, 'rgba(195, 195, 195, 0.55)');
+  endGrad.addColorStop(0.08, 'rgba(195, 195, 195, 0)');
+  endGrad.addColorStop(0.92, 'rgba(195, 195, 195, 0)');
+  endGrad.addColorStop(1, 'rgba(195, 195, 195, 0.55)');
+  ctx.fillStyle = endGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  return toLinearTexture(canvas);
+}
+
+// =====================================================
 // FRIJOL — semilla (caupí / pinto)
 // =====================================================
 
@@ -1600,6 +1778,70 @@ export function makeBeanSeedNormalTexture() {
 }
 
 // =====================================================
+// FRIJOL — Roughness map de la semilla (PBR microfaceta)
+//
+// Anti-patrón: hoy `roughness={0.34}` uniforme. El cuerpo de un caupí
+// seco es brillante (testa cerosa pulida ≈ 0.22) mientras el hilum
+// (mancha negra, tejido cicatrizado) es MUY mate (≈ 0.85). Un anillo
+// de transición intermedio rodea el hilum. Sin este map, el GGX
+// genera un highlight uniforme = look "frijol-de-juguete-plástico".
+//
+// Alineamiento UV: el cylindrical UV del modelo coloca el hilum en
+// u=0.5, v=0.5 (mismo offset que la color/normal texture existentes).
+// =====================================================
+export function makeBeanSeedRoughnessTexture() {
+  const W = 512, H = 256;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  // Cuerpo pulido (testa con cera fresca)
+  ctx.fillStyle = '#3e3e3e';  // ~0.24 roughness
+  ctx.fillRect(0, 0, W, H);
+
+  // FBM micro-variation: imperfecciones de la testa
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const macro = fbm2D(x / W * 5, y / H * 5, 4);
+      const micro = fbm2D(x / W * 30, y / H * 30, 3);
+      const i = (y * W + x) * 4;
+      const v = 70 + (macro - 0.5) * 40 + (micro - 0.5) * 22;
+      img.data[i + 0] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Hilum: parche elíptico MATE (tejido cicatrizado, sin cera)
+  const hCx = W * 0.5;
+  const hCy = H * 0.5;
+  const hilGrad = ctx.createRadialGradient(hCx, hCy, 0, hCx, hCy, W * 0.13);
+  hilGrad.addColorStop(0, 'rgba(220, 220, 220, 0.95)');  // ~0.85 roughness
+  hilGrad.addColorStop(0.6, 'rgba(190, 190, 190, 0.55)');
+  hilGrad.addColorStop(1, 'rgba(180, 180, 180, 0)');
+  ctx.fillStyle = hilGrad;
+  ctx.beginPath();
+  ctx.ellipse(hCx, hCy, W * 0.13, H * 0.10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Manchitas mate dispersas (puntos de polvo / micro-imperfecciones).
+  // Sin estos puntos, el highlight reflejado es demasiado continuo y
+  // delata el ojo CAD.
+  for (let i = 0; i < 80; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    const r = 1 + Math.random() * 4;
+    ctx.fillStyle = `rgba(180, 180, 180, ${0.25 + Math.random() * 0.35})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return toLinearTexture(canvas);
+}
+
+// =====================================================
 // HOJA verde (frijol y sandía)
 // =====================================================
 
@@ -1712,6 +1954,64 @@ export function makeLeafNormalTexture() {
   const canvas = makeCanvas(W, H);
   paintLeafHeight(canvas.getContext('2d'), W, H);
   return normalTextureFromHeightCanvas(canvas, 1.4);
+}
+
+// =====================================================
+// HOJA — Roughness map (PBR microfaceta)
+//
+// Anti-patrón: hoja con roughness uniforme = reflejo plano del entorno
+// = look "papel celofán". La lámina foliar real tiene una capa cuticular
+// cerosa muy pulida (roughness ~0.40 en lámina sana), mientras que las
+// venas son tejido vascular sin cera (más mate, ~0.62). FBM micro añade
+// la ruptura del highlight característica de hoja viva.
+// =====================================================
+export function makeLeafRoughnessTexture() {
+  const W = 512, H = 1024;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  // Lámina pulida (cera epicuticular fresca)
+  ctx.fillStyle = '#6e6e6e';  // ~0.43 roughness
+  ctx.fillRect(0, 0, W, H);
+
+  // FBM macro: parches con más/menos cera
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const macro = fbm2D(x / W * 5, y / H * 7, 4);
+      const i = (y * W + x) * 4;
+      const v = 110 + (macro - 0.5) * 40;
+      img.data[i + 0] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Vena central — claramente más mate
+  ctx.strokeStyle = 'rgba(195, 195, 195, 0.78)';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(W / 2, 0);
+  ctx.lineTo(W / 2, H);
+  ctx.stroke();
+
+  // Venas secundarias
+  ctx.strokeStyle = 'rgba(165, 165, 165, 0.55)';
+  ctx.lineWidth = 2;
+  for (let i = 1; i < 16; i++) {
+    const y = (i / 16) * H;
+    const offsetX = (i % 2 === 0 ? 1 : -1) * 18;
+    ctx.beginPath();
+    ctx.moveTo(W / 2, y);
+    ctx.quadraticCurveTo(W / 2 + offsetX * 4, y + 30, W / 2 + offsetX * 8, y + 80);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(W / 2, y);
+    ctx.quadraticCurveTo(W / 2 - offsetX * 4, y + 30, W / 2 - offsetX * 8, y + 80);
+    ctx.stroke();
+  }
+  return toLinearTexture(canvas);
 }
 
 // =====================================================

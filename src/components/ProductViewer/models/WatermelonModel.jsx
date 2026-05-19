@@ -8,6 +8,7 @@ import {
   makeWatermelonFleshNormalTexture,
   makeWatermelonFleshRoughnessTexture,
   makeWatermelonNormalTexture,
+  makeWatermelonRindRoughnessTexture,
 } from '../textures';
 
 // =====================================================
@@ -238,6 +239,7 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
 
   const rindMap = useMemo(makeWatermelonColorTexture, []);
   const rindNormal = useMemo(makeWatermelonNormalTexture, []);
+  const rindRoughness = useMemo(makeWatermelonRindRoughnessTexture, []);
   const fleshMap = useMemo(makeWatermelonFleshTexture, []);
   const fleshNormal = useMemo(makeWatermelonFleshNormalTexture, []);
   const fleshRoughness = useMemo(makeWatermelonFleshRoughnessTexture, []);
@@ -262,18 +264,72 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
       {showWhole && (
       <group position={wholePosition}>
         <mesh geometry={rindGeo} castShadow receiveShadow>
+          {/* CÁSCARA PBR — Citrullus lanatus cuticula cerosa.
+              Cambios respecto a la versión anterior:
+              - metalness: 0.04 → 0 (dieléctrico puro; el 0.04 anterior
+                inyectaba un sesgo metálico injustificado en Schlick).
+              - ior: 1.42 explícito (cutícula + cera vegetal → F0 ≈ 0.030).
+              - clearcoat: 0.95 → 0.55. La cera natural NO es laca
+                automotriz; clearcoat al 95% producía un espejo perfecto
+                que aplanaba la microvariación.
+              - clearcoatRoughness: 0.22 → 0.30 (la capa cerosa real
+                tiene microestructura: el highlight viene "respirado").
+              - roughness: 0.42 → 1.0 + roughnessMap obligatorio.
+                Anti-patrón "roughness uniforme" fijado. El mapa marca
+                franjas oscuras (pulidas, ~0.30), lámina entre rayas
+                (~0.60), y cicatrices (~0.85). GGX integra un highlight
+                heterogéneo característico.
+              - envMapIntensity: 1.25 → 1.05 (ligera bajada al
+                desactivar el clearcoat extremo; el IBL ya no se reparte
+                entre dos lóbulos especulares casi idénticos). */}
           <meshPhysicalMaterial
             map={rindMap}
             normalMap={rindNormal}
             normalScale={[1.05, 1.05]}
-            roughness={0.42}
-            metalness={0.04}
-            clearcoat={0.95}
-            clearcoatRoughness={0.22}
-            envMapIntensity={1.25}
+            roughnessMap={rindRoughness}
+            roughness={1.0}
+            metalness={0}
+            ior={1.42}
+            clearcoat={0.55}
+            clearcoatRoughness={0.30}
+            envMapIntensity={1.05}
             sheen={0.25}
             sheenColor="#a3e635"
             sheenRoughness={0.5}
+          />
+        </mesh>
+
+        {/* FIELD SPOT — mancha cremosa-amarilla en el lateral inferior
+            donde el fruto reposó sobre el suelo. Marcador botánico de
+            madurez del Charleston Gray (más amarillo = más maduro).
+            Físicamente es tejido descolorido por contacto con el
+            suelo: epidermis sin cloroplastos + cera abrasionada → más
+            mate que el resto del rind.
+            Posición: punto sobre el elipsoide (escalas 1.32/0.93/0.97)
+            en lat=-30° / lon=40°. Rotación calculada para alinear la
+            normal del CircleGeometry (+Z local) con la normal
+            saliente del elipsoide ahí. Offset 0.012 hacia afuera para
+            evitar z-fighting con la cáscara. */}
+        <mesh
+          position={[0.741, -0.472, 0.652]}
+          rotation={[0.591, 0.554, 0]}
+          renderOrder={1}
+        >
+          <circleGeometry args={[0.34, 48]} />
+          <meshPhysicalMaterial
+            color="#e8d995"
+            roughness={0.78}
+            metalness={0}
+            ior={1.42}
+            clearcoat={0.20}
+            clearcoatRoughness={0.55}
+            sheen={0.18}
+            sheenColor="#fff0c0"
+            sheenRoughness={0.55}
+            transparent
+            opacity={0.86}
+            depthWrite={false}
+            side={THREE.DoubleSide}
           />
         </mesh>
 
@@ -282,25 +338,64 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
           <ringGeometry args={[0.012, 0.04, 32]} />
           <meshStandardMaterial color="#3f6212" roughness={0.85} side={THREE.DoubleSide} />
         </mesh>
+
+        {/* STEM NUB — pequeña cicatriz seca en el polo superior
+            (donde estaba el peduncle). Material seco, sin cera,
+            tono marrón-grisáceo. Aporta legibilidad inmediata como
+            "sandía de campo" en lugar de bola verde anónima. */}
+        <group position={[0, RADIUS * 0.93, 0]} rotation={[0, 0, 0.3]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.026, 0.034, 0.045, 18]} />
+            <meshPhysicalMaterial
+              color="#6b5a3a"
+              roughness={0.92}
+              metalness={0}
+              ior={1.38}
+              sheen={0.10}
+              sheenColor="#a89878"
+              sheenRoughness={0.7}
+            />
+          </mesh>
+          {/* Halo verde-oscuro alrededor del peduncle (cicatriz del corte) */}
+          <mesh position={[0, -0.022, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.030, 0.060, 32]} />
+            <meshStandardMaterial
+              color="#3a5b1c"
+              roughness={0.88}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </group>
       </group>
       )}
 
       {/* === Rebanada === */}
       {showCut && (
       <group position={cutPosition} rotation={cutRotation}>
-        {/* Pulpa con SSS realista. Iteración mayo 2026:
-            - clearcoat bajado a 0.32: reflejos del environment estaban
-              levantando la luminosidad media y leyendo "rosa". Menos
-              clearcoat = saturación roja más visible.
-            - normalScale incrementado a 1.25: realza la geometría
-              cellular voronoi del map de normales para que las celdas
-              se vean más definidas (más "carne jugosa", menos "plástico").
-            - attenuationColor empujado un punto más a wine
-              (#b81a30 → más rojo profundo cuando la luz atraviesa).
-            - sheen sostenido en rojo cálido pero sheenColor más rojo
-              que coral para evitar derivar a tono rosado en bordes.
-            - emissive levemente reforzado para sostener la saturación
-              en zonas que reciben menos luz directa. */}
+        {/* Pulpa — refactor PBR (microfaceta + transporte de luz):
+            La iteración anterior usaba `emissive` para falsear la
+            sensación SSS, lo que sube luminosidad en zonas no
+            iluminadas (no es physically based: el SSS auténtico viene
+            del transporte de luz por dentro del medio, modelado en
+            Three.js con transmission + thickness + attenuationColor +
+            ior).
+            Cambios:
+            - transmission: 0.20 → 0.34. La pulpa madura es claramente
+              translúcida bajo backlight; estamos en el rango correcto
+              para Beer-Lambert visible.
+            - emissive: 0.22 → 0.10. Bajada de fudge no-físico; ahora
+              el "glow" interior nace del transmission + attenuation.
+            - attenuationDistance: 0.16 → 0.12. Absorción más cerrada
+              → la luz que atraviesa se enrojece más rápido, sin
+              parecer un colorante translúcido genérico.
+            - clearcoat: 0.32 → 0.18. La pulpa fresca tiene un film
+              de jugo, no laca. Bajar separa el highlight especular
+              del color base.
+            - sheen: 0.50 → 0.32 (Estevez-Kulla). Suficiente para que
+              el borde leído capture el rim sin saturar a coral.
+            - envMapIntensity: 0.85 → 0.65. La pulpa es medio
+              translúcida, no superficie metálica/cerámica — el IBL
+              no debe dominar el aspecto. */}
         <mesh geometry={sliceFleshGeo} castShadow receiveShadow>
           <meshPhysicalMaterial
             attach="material-0"
@@ -310,57 +405,53 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
             roughnessMap={fleshRoughness}
             roughness={0.50}
             metalness={0.0}
-            clearcoat={0.32}
-            clearcoatRoughness={0.38}
-            transmission={0.20}
-            thickness={0.40}
-            attenuationColor="#b81a30"
-            attenuationDistance={0.16}
             ior={1.39}
-            sheen={0.50}
+            clearcoat={0.18}
+            clearcoatRoughness={0.40}
+            transmission={0.34}
+            thickness={0.40}
+            attenuationColor="#b01a2c"
+            attenuationDistance={0.12}
+            sheen={0.32}
             sheenColor="#d63a48"
-            sheenRoughness={0.42}
+            sheenRoughness={0.45}
             emissive="#3e0814"
-            emissiveIntensity={0.22}
-            envMapIntensity={0.85}
+            emissiveIntensity={0.10}
+            envMapIntensity={0.65}
           />
-          {/* Material lateral: cubre los lados extrudidos + el pequeño
-              bevel perimetral. Color coral-rojo más saturado que matchea
-              la nueva franja externa de la pulpa (FLESH_STOPS @ r≈0.88-
-              0.92) para que el bevel mínimo se funda con la transición
-              pulpa → mesocarpio sin leerse como un anillo rosa pastel.
-              Antes #e88896 era demasiado rosado y el canto bajo la
-              cáscara verde se veía pink. */}
+          {/* Pared lateral del corte (bevel del extrude). Material
+              dieléctrico mate-pulido. Antes era un color plano
+              demasiado rosa; ahora wine más profundo + sheen rojo para
+              que la transición pulpa→mesocarpio quede coherente con
+              la nueva paleta del color map. */}
           <meshPhysicalMaterial
             attach="material-1"
-            color="#cf5258"
-            roughness={0.78}
+            color="#b7363c"
+            roughness={0.82}
             metalness={0}
-            sheen={0.22}
-            sheenColor="#d88080"
+            ior={1.39}
+            sheen={0.30}
+            sheenColor="#e25b5b"
             sheenRoughness={0.55}
           />
         </mesh>
 
         {/* Cáscara verde envolviendo el canto curvo de la rebanada.
-            Geometría sweep elipsoidal — se funde con el bevel de la pulpa
-            sin línea visible. polygonOffset empuja la cáscara hacia atrás
-            del bevel para evitar z-fighting en el lateral.
-            NOTA: la banda blanca-verdosa interior (mesocarpio) ya está
-            pintada DENTRO de la textura de la pulpa (pre-corteza fibrosa
-            entre t=0.91 y t=0.96 del radio). El antiguo mesh de mesocarpio
-            duplicaba ese trabajo y se peleaba en Z con la pulpa, dejando
-            la "línea blanca" visible en el corte. */}
+            Mismos parámetros PBR que la sandía entera (dieléctrico
+            cera vegetal con roughnessMap obligatorio) para mantener
+            coherencia material entre las dos piezas. */}
         <mesh geometry={sliceRindGeo} castShadow receiveShadow>
           <meshPhysicalMaterial
             map={rindMap}
             normalMap={rindNormal}
             normalScale={[1.05, 1.05]}
-            roughness={0.42}
-            metalness={0.04}
-            clearcoat={0.85}
-            clearcoatRoughness={0.28}
-            envMapIntensity={1.15}
+            roughnessMap={rindRoughness}
+            roughness={1.0}
+            metalness={0}
+            ior={1.42}
+            clearcoat={0.55}
+            clearcoatRoughness={0.30}
+            envMapIntensity={1.05}
             sheen={0.25}
             sheenColor="#a3e635"
             sheenRoughness={0.55}
@@ -371,7 +462,21 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
           />
         </mesh>
 
-        {/* Semillas — cara frontal */}
+        {/* SEMILLAS — PBR refactor.
+            La testa de semilla negra de sandía es lignificada,
+            dieléctrica, con barniz natural (oxidación de aceites
+            superficiales). La versión anterior usaba metalness=0.22
+            — anti-patrón explícito del prompt ("Metalness intermedio
+            casi siempre incorrecto físicamente"). Las semillas no
+            son metálicas; cualquier intuición de "brillo metálico"
+            viene del IOR alto de la testa, no de la conductividad
+            electrónica.
+            Cambios:
+            - metalness: 0.22 → 0 (dieléctrico puro).
+            - ior: 1.55 explícito (testa lignificada → F0 ≈ 0.046).
+            - clearcoat: 1.0 → 0.85 (barniz natural, no lacquer).
+            - clearcoatRoughness: 0.10 → 0.18 (microestructura del
+              barniz orgánico, no superficie ópticamente perfecta). */}
         {seedPositions.map((s, i) => (
           <mesh
             key={`f-${i}`}
@@ -383,18 +488,18 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
           >
             <meshPhysicalMaterial
               color="#0c0500"
-              roughness={0.22}
-              metalness={0.22}
-              clearcoat={1.0}
-              clearcoatRoughness={0.10}
-              envMapIntensity={1.5}
+              roughness={0.26}
+              metalness={0}
+              ior={1.55}
+              clearcoat={0.85}
+              clearcoatRoughness={0.18}
+              envMapIntensity={1.30}
               sheen={0.4}
               sheenColor="#5c1a10"
               sheenRoughness={0.35}
             />
           </mesh>
         ))}
-        {/* Semillas — cara trasera */}
         {seedPositions.map((s, i) => (
           <mesh
             key={`b-${i}`}
@@ -406,11 +511,12 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
           >
             <meshPhysicalMaterial
               color="#0c0500"
-              roughness={0.22}
-              metalness={0.22}
-              clearcoat={1.0}
-              clearcoatRoughness={0.10}
-              envMapIntensity={1.5}
+              roughness={0.26}
+              metalness={0}
+              ior={1.55}
+              clearcoat={0.85}
+              clearcoatRoughness={0.18}
+              envMapIntensity={1.30}
               sheen={0.4}
               sheenColor="#5c1a10"
               sheenRoughness={0.35}
@@ -418,10 +524,13 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
           </mesh>
         ))}
 
-        {/* Gotitas de jugo sobre la pulpa (look fresco).
-            Tono rojo más saturado y atenuación más cerrada para que
-            las gotas se lean como "jugo de sandía", no como gotas
-            transparentes con tinte rosa. */}
+        {/* Gotitas de jugo — solución agua+azúcar (IOR ≈ 1.36).
+            Añadido `iridescence` para reproducir la película thin-film
+            que produce halos cromáticos en gotas reales bajo luz
+            blanca (interferencia constructiva/destructiva en el film
+            superficial de azúcar disuelto a glancing angles).
+            iridescenceIOR=1.30 está entre el del agua pura y el de la
+            sacarosa cristalina — un buen valor para "syrup film". */}
         {juiceDrops.map((d, i) => (
           <mesh
             key={`drop-${i}`}
@@ -439,7 +548,9 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
               thickness={0.4}
               ior={1.36}
               attenuationColor="#a8182e"
-              attenuationDistance={0.18}
+              attenuationDistance={0.12}
+              iridescence={0.35}
+              iridescenceIOR={1.30}
               envMapIntensity={1.6}
             />
           </mesh>
