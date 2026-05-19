@@ -1,5 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import {
   makeCobCoreNormalTexture,
@@ -273,15 +272,24 @@ function buildKernelInstanceData() {
         baseColor.lerp(paleColor, (edgeFade - 0.55) * 0.45);
       }
 
-      // Roughness multiplier per-grano: rompe el highlight uniforme.
-      // Rango 0.78..1.22 → al multiplicarse con el roughnessMap (0.42..
-      // 0.88) y el roughness base (1.0) genera una distribución de
-      // rugosidad final entre ~0.33 y ~1.0 a lo largo del cob. Sin esta
-      // variación, los 684 granos comparten exactamente el mismo BRDF y
-      // el ojo lee la mazorca como "plástico moldeado".
-      // h1 controla la "edad/madurez" → granos más viejos (h1 alto) son
-      // ligeramente más mates (rough mayor). h2 mete jitter aleatorio.
-      const roughnessMul = 0.82 + h1 * 0.28 + (h2 - 0.5) * 0.10;
+      // Variación per-grano de SATURACIÓN/LUMINOSIDAD del baseColor.
+      // Antes usábamos un `instanceRoughness` inyectado vía onBeforeCompile,
+      // pero esa ruta:
+      //   (a) falla al linkar el programa en algunos drivers iOS Safari /
+      //       Metal (Apple WebKit es estricto con attribute injection)
+      //   (b) no se propaga al transmission pass de MeshPhysicalMaterial,
+      //       produciendo flicker frame-a-frame en granos con SSS
+      // En su lugar simulamos el efecto perceptual de "rugosidad variable"
+      // perturbando el albedo: granos más "viejos" (h1 alto) ligeramente
+      // más oscuros y desaturados; granos más "tiernos" un poco más
+      // brillantes y saturados. El highlight GGX(D·F·G/4(n·l)(n·v)) sigue
+      // siendo el mismo pero el ojo lee mate/brillante por el contraste
+      // entre baseColor y reflejo especular variando per-instancia.
+      const matureness = h1;
+      const albedoShift = (matureness - 0.5) * 0.18 + (h2 - 0.5) * 0.08;
+      baseColor = baseColor.clone().multiplyScalar(
+        Math.max(0.78, Math.min(1.18, 1 + albedoShift)),
+      );
 
       items.push({
         x, y, z,
@@ -291,7 +299,6 @@ function buildKernelInstanceData() {
         scaleY,
         scaleZ,
         color: baseColor,
-        roughnessMul,
       });
     }
   }
@@ -808,46 +815,6 @@ export default function CornModel() {
   const cobCoreRoughnessMap = useMemo(makeCobCoreRoughnessTexture, []);
   const cobCoreNormalMap = useMemo(makeCobCoreNormalTexture, []);
 
-  // onBeforeCompile: inyecta un atributo per-instancia `instanceRoughness`
-  // y lo multiplica con el `roughnessFactor` justo después del lookup del
-  // roughnessMap. Resultado: cada uno de los 684 granos tiene su propio
-  // valor final de rugosidad sin necesitar 684 materiales distintos ni
-  // texturas tile-per-instance. La pasada es 1 sola — Three.js stride el
-  // atributo por instancia automáticamente porque es InstancedBufferAttribute.
-  //
-  // Referencias:
-  //  • GGX D() con α=roughness² — Walter 2007. Multiplicar antes del
-  //    squaring preserva el modelo.
-  //  • #include <roughnessmap_fragment> es el chunk que Three.js emite
-  //    cuando USE_ROUGHNESSMAP está activo; sumamos nuestra multiplicación
-  //    después para que también se aplique cuando no hay map.
-  const kernelOnBeforeCompile = useCallback((shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-attribute float instanceRoughness;
-varying float vInstanceRoughness;`,
-      )
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-vInstanceRoughness = instanceRoughness;`,
-      );
-
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-varying float vInstanceRoughness;`,
-      )
-      .replace(
-        '#include <roughnessmap_fragment>',
-        `#include <roughnessmap_fragment>
-roughnessFactor *= vInstanceRoughness;`,
-      );
-  }, []);
-
   // Aplicamos las matrices y colores de cada instancia tras montar el
   // InstancedMesh. Cada grano se compone como: trasladar a la posición
   // sobre el cob → girar en Y para que +X mire radialmente afuera → tilt
@@ -860,9 +827,6 @@ roughnessFactor *= vInstanceRoughness;`,
     const rY = new THREE.Matrix4();
     const rTilt = new THREE.Matrix4();
     const sM = new THREE.Matrix4();
-    // Buffer per-instancia de roughness multiplier — leído por el shader
-    // vía onBeforeCompile. InstancedBufferAttribute con itemSize=1.
-    const roughArr = new Float32Array(kernelInstances.length);
     for (let i = 0; i < kernelInstances.length; i++) {
       const item = kernelInstances[i];
       // 1) Escala local en el grano (depth, height, tangential width)
@@ -880,21 +844,16 @@ roughnessFactor *= vInstanceRoughness;`,
       m.multiply(sM);
       mesh.setMatrixAt(i, m);
       mesh.setColorAt(i, item.color);
-      roughArr[i] = item.roughnessMul;
     }
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.geometry.setAttribute(
-      'instanceRoughness',
-      new THREE.InstancedBufferAttribute(roughArr, 1),
-    );
     mesh.computeBoundingSphere();
   }, [kernelInstances]);
 
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.6) * 0.02;
-  });
+  // Modelo estático: el "bobbing" anterior (sin·0.02) hacía que el grupo
+  // cruzara repetidamente el plano de ContactShadows cada frame, lo que
+  // forzaba al shadow map a reproyectar con diferencias subpixel y producía
+  // parpadeo perceptible. La rotación viene de OrbitControls.autoRotate.
 
   return (
     <group ref={groupRef} rotation={[0, 0.3, 0]}>
@@ -919,22 +878,27 @@ roughnessFactor *= vInstanceRoughness;`,
         />
       </mesh>
 
-      {/* Granos: cada uno es una malla 3D real (no textura) instanciada.
-          PBR del grano fresco (NO "plástico húmedo"):
+      {/* Granos: cada uno es una malla 3D real instanciada.
+          PBR mobile-safe (Cook-Torrance GGX/Schlick/Smith):
           • IOR=1.42 (tejido vegetal almidonoso) → F0≈0.030 (Schlick)
-          • roughness=1.0 + roughnessMap (0.42..0.88) + per-instance
-            multiplier (0.78..1.22) vía onBeforeCompile → rugosidad
-            final no-uniforme entre ~0.30 y ~1.0
-          • normalScale=0.45 — micro-bumps que rompen el highlight
-          • clearcoat=0.18 sutil (pelícuda cerosa, NO un barniz) con
-            clearcoatRoughness=0.50 → highlight roto, no espejo
-          • transmission=0.18 + thickness=0.34 + attenuationColor amber
-            → Beer-Lambert dorado al pasar la luz por el grano (efecto
-            SSS observable en cualquier foto de elote a contraluz)
-          • sheen=0.32 reducido — sólo aporta rim glow sin opacar el
-            comportamiento principal del BRDF GGX
-          • envMapIntensity=0.95 ligeramente bajo para que la SSS sea
-            quien aporte el cálido y no el environment frío. */}
+          • roughness=0.78 base + roughnessMap (0.42..0.88) → final ~0.33..
+            ~0.70; per-instance variation NO se aplica via shader injection
+            (era inestable en Safari/iOS y rompía el transmission pass) —
+            la rompemos vía instanceColor jitter de luminosidad ±18%, que
+            visualmente equivale al ojo a un cambio de roughness
+          • normalScale=0.45 — micro-papilas que rompen el highlight
+          • clearcoat=0.20 (pelícuda cerosa) con clearcoatRoughness=0.55
+            → segundo highlight tenue, NUNCA un espejo
+          • SIN transmission/thickness/attenuationColor — Beer-Lambert
+            sobre un grano de radio ~0.05m con thickness 0.34 producía
+            atenuación exponencial al amarillo oscuro en silueta
+            ("línea negra alrededor"). El cálido SSS se simula con un
+            sheen amarillo-ámbar de baja rugosidad que aporta rim glow
+            sin requerir el render pass adicional que crashea en iOS.
+          • sheen=0.55 con sheenColor cálido → halo dorado en grazing,
+            equivalente perceptual al SSS sin Beer-Lambert
+          • envMapIntensity=1.0 — el IBL prefiltrado (split-sum Karis vía
+            drei.Environment) aporta el resto del realismo. */}
       <instancedMesh
         ref={kernelMeshRef}
         args={[kernelGeometry, undefined, kernelInstances.length]}
@@ -943,34 +907,34 @@ roughnessFactor *= vInstanceRoughness;`,
       >
         <meshPhysicalMaterial
           color="#ffffff"
-          roughness={1.0}
+          roughness={0.78}
           roughnessMap={kernelRoughnessMap}
           normalMap={kernelNormalMap}
           normalScale={new THREE.Vector2(0.45, 0.45)}
           metalness={0}
           ior={1.42}
-          clearcoat={0.18}
-          clearcoatRoughness={0.50}
-          envMapIntensity={0.95}
-          sheen={0.32}
-          sheenColor="#fff0c0"
-          sheenRoughness={0.45}
-          transmission={0.18}
-          thickness={0.34}
-          attenuationColor="#f59e0b"
-          attenuationDistance={0.28}
-          onBeforeCompile={kernelOnBeforeCompile}
+          clearcoat={0.20}
+          clearcoatRoughness={0.55}
+          envMapIntensity={1.0}
+          sheen={0.55}
+          sheenColor="#ffd98a"
+          sheenRoughness={0.40}
         />
       </instancedMesh>
 
-      {/* Barbas (silk): emergen DESDE DENTRO del domo apical del olote
-          (cobProfileAt en t>0.94) como prolongación natural del tejido.
-          PBR: filamentos hair-like con ANISOTROPÍA=0.82 y rotación 0 →
-          reflejos elongados a lo largo del tubo (TubeGeometry tiene
-          UV.u corriendo a lo largo del eje). El GGX anisotrópico de
-          Heitz colapsa la NDF en una dirección, distinguiendo "pelo"
-          de "spaghetti". IOR=1.36 (fibras vegetales semi-húmedas),
-          transmission=0.55 para que la luz del rim cruce las hebras. */}
+      {/* Barbas (silk): emergen del domo apical como prolongación del olote.
+          PBR mobile-safe:
+          • IOR=1.36 (fibras vegetales semi-húmedas), F0≈0.024 Schlick
+          • ANISOTROPÍA=0.82, rotación 0 → GGX anisotrópico de Heitz
+            colapsa la NDF a lo largo del eje del TubeGeometry. Es lo
+            que distingue "pelo" de "spaghetti".
+          • SIN transmission — el tubo tiene radio 0.0034 (∼3mm escala
+            real); Beer-Lambert sobre algo tan delgado se vuelve casi
+            opaco en grazing y producía vetas oscuras frame-a-frame.
+            El glow translúcido se obtiene con sheen alto + vertexColors
+            que ya van de crema (raíz) a dorado tostado (punta).
+          • sheen=1 + sheenColor cálido → halo de luz lateral, equivale
+            perceptualmente a la translucidez sin offscreen pass. */}
       <mesh geometry={silkGeometry} castShadow={false}>
         <meshPhysicalMaterial
           color="#ffffff"
@@ -982,10 +946,6 @@ roughnessFactor *= vInstanceRoughness;`,
           sheen={1}
           sheenColor="#fff0c8"
           sheenRoughness={0.22}
-          transmission={0.55}
-          thickness={0.04}
-          attenuationColor="#e8c89a"
-          attenuationDistance={0.25}
           clearcoat={0.22}
           clearcoatRoughness={0.42}
           envMapIntensity={1.15}
@@ -1050,36 +1010,43 @@ roughnessFactor *= vInstanceRoughness;`,
             castShadow
             receiveShadow
           >
-            {/* Hojas: ANISOTROPÍA aligned with fiber direction.
-                buildHuskGeometry empuja UVs como (u=width, v=length), por
-                lo que las fibras corren a lo largo de UV.v. En el tangent
-                space que MeshPhysicalMaterial usa, la dirección base
-                (anisotropyRotation=0) es UV.u → rotamos π/2 para alinear
-                con UV.v. Resultado: highlights GGX anisotrópicos elongados
-                a lo largo de la hoja (modelo de Heitz 2014), igual que
-                la reflexión de luz oblicua en una bráctea real.
-                IOR=1.45 (cellulosa lignificada de la bráctea seca). */}
+            {/* Hojas (bráctea): PBR mobile-safe.
+                • IOR=1.45 (cellulosa lignificada) → F0≈0.0337 Schlick
+                • UVs: u=width, v=length → fibras corren a lo largo de v.
+                  anisotropyRotation=π/2 alinea la NDF de Heitz con esa
+                  dirección → highlights GGX elongados como en una bráctea
+                  real cuando la luz roza paralela a las nervaduras.
+                • SIN transmission/thickness/attenuationColor — éste era
+                  el origen DIRECTO de las líneas negras de contorno: en
+                  geometría de espesor cuasi-cero, Beer-Lambert con
+                  attenuationColor olive oscuro y thickness/cos(θ) producía
+                  atenuación >85% en grazing → halo negro alrededor. La
+                  translucidez vegetal se simula con sheen velvet sobre
+                  side=DoubleSide.
+                • normalScale reducido a 1.1 (era 1.6) — el normal map era
+                  tan agresivo que en grazing las normales locales miraban
+                  ALEJÁNDOSE de la luz, dando bandas negras de auto-sombra.
+                • alphaTest=0.5 con un margen fino (era 0.42) — combinado
+                  con alphaToCoverage que el MSAA del canvas usa para
+                  smooth-edge, evita el dithering binario de los bordes
+                  rasgados de bráctea. */}
             <meshPhysicalMaterial
               map={huskColor}
               normalMap={huskNormal}
-              normalScale={[1.6, 1.6]}
+              normalScale={[1.1, 1.1]}
               alphaMap={huskAlpha}
-              alphaTest={0.42}
-              roughness={0.74}
+              alphaTest={0.5}
+              roughness={0.78}
               metalness={0}
               ior={1.45}
               anisotropy={0.55}
               anisotropyRotation={Math.PI / 2}
-              sheen={0.78}
-              sheenColor="#d4dfa8"
-              sheenRoughness={0.55}
-              clearcoat={0.08}
-              clearcoatRoughness={0.75}
-              transmission={0.20}
-              thickness={0.06}
-              attenuationColor="#a8b070"
-              attenuationDistance={0.18}
-              envMapIntensity={0.85}
+              sheen={0.85}
+              sheenColor="#d8e2a8"
+              sheenRoughness={0.50}
+              clearcoat={0.05}
+              clearcoatRoughness={0.85}
+              envMapIntensity={0.90}
               side={THREE.DoubleSide}
             />
           </mesh>
