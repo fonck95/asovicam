@@ -2006,3 +2006,157 @@ export function makePodInteriorTexture() {
 
   return toColorTexture(canvas);
 }
+
+// =====================================================
+// MAÍZ — Texturas PBR para superficie individual del grano
+//
+// Los granos del CornModel se renderizan via InstancedMesh sobre una
+// SphereGeometry deformada; cada instancia comparte la misma malla y
+// las mismas UV (esféricas, u=longitud 0..1 envolviendo el grano,
+// v=latitud 0..1 del germen al ápice). Por eso un solo set de mapas
+// pequeños (256×256) basta — la variación per-grano se obtiene con
+// instanceColor + instanceRoughness (shader injection).
+//
+// Justificación física: un grano de maíz fresco tiene una "pelícuda"
+// (testa/pericarp) cerosa muy fina sobre el endospermo. La microfaceta
+// de esa pelícuda no es uniforme: pequeñas gotas de humedad, polvo
+// agrícola, y la propia rugosidad submilimétrica del tejido producen
+// una distribución de rugosidad que en cualquier fotografía cercana
+// se traduce en highlights ROTOS, no en un highlight especular limpio.
+// Eso es lo que distingue al "render PBR de juguete" del "fresco".
+// =====================================================
+
+export function makeKernelRoughnessTexture() {
+  // Map de roughness sub-grano: FBM de 4 octavas con dos escalas (macro
+  // y micro) sumadas. Salida en rango [0.42, 0.88] — abajo del rango
+  // damos zonas "pulidas" (sueltan highlight), arriba zonas "secas".
+  // Ambos extremos clamped para no producir spots espejo ni puntos
+  // perfectamente lambertianos.
+  const W = 256, H = 256;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      // Macro: variación a escala grano (~3 "ciclos" por kernel)
+      const macro = fbm2D(x / W * 4, y / H * 4, 4);
+      // Micro: polvo/humedad puntiforme (~12 ciclos)
+      const micro = fbm2D(x / W * 18, y / H * 18, 3);
+      // Dent shadow: la zona inferior central tiene tejido más húmedo
+      // (cerca del germen), tiende a ser menos roughness por la humedad
+      // residual. Banda gaussiana centrada en u=0.5, v=0.18.
+      const du = (x / W) - 0.5;
+      const dv = (y / H) - 0.18;
+      const germBand = Math.exp(-(du * du * 18 + dv * dv * 28)) * 0.18;
+      // Combina: base 0.6, modulada por macro ±0.18, micro ±0.10, germ -0.18
+      const r = 0.62 + (macro - 0.5) * 0.36 + (micro - 0.5) * 0.20 - germBand;
+      const clamped = Math.max(0.35, Math.min(0.92, r));
+      const v = (clamped * 255) | 0;
+      const i = (y * W + x) * 4;
+      img.data[i + 0] = v;  // R: ocluido para AO si se usa después
+      img.data[i + 1] = v;  // G: el canal que MeshPhysicalMaterial lee como roughness
+      img.data[i + 2] = v;  // B: el canal que se lee como metalness (mantener constante)
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toLinearTexture(canvas);
+}
+
+export function makeKernelNormalTexture() {
+  // Micro-normal: papilas y poros submilimétricos en la pelícuda del
+  // grano. Strength baja (0.5) — el detalle aquí NO debe competir con
+  // la silueta del kernel; sólo romper el highlight especular para que
+  // el ojo NO perciba la superficie como una bola perfecta de plástico.
+  // Combinamos value-noise multi-octava con voronoi (poros) sumados
+  // como modulación de altura.
+  const W = 256, H = 256;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const fine = fbm2D(x / W * 24, y / H * 24, 4);
+      const pores = voronoi2D(x / W * 20, y / H * 20);
+      // Combina: base 0.5, fine ±0.30, pores invertidos ±0.20
+      const h = 0.50 + (fine - 0.5) * 0.50 + (1 - pores) * 0.18;
+      const v = Math.max(0, Math.min(255, (h * 255) | 0));
+      const i = (y * W + x) * 4;
+      img.data[i + 0] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return normalTextureFromHeightCanvas(canvas, 0.45);
+}
+
+// =====================================================
+// COB CORE (olote desnudo)
+//
+// El olote es tejido lignificado/cellulósico SECO. Es esencialmente
+// fibra paralela al eje longitudinal con huecos donde se anclan los
+// granos. Físicamente: muy rough (microfacetas dispersas), sin cera,
+// sin cuticula reflectiva. Roughness map enfatiza la fibras verticales.
+// =====================================================
+
+export function makeCobCoreRoughnessTexture() {
+  // El olote se mapea con LatheGeometry: UV.u envuelve el cilindro
+  // (0..1 alrededor del eje), UV.v sube por el eje. Las fibras van
+  // a lo largo de v → modulación con cos(u·N) y suave FBM en v.
+  const W = 256, H = 512;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const u = x / W;
+      const v = y / H;
+      // Fibras: ~60 a lo largo del perímetro
+      const fiber = Math.cos(u * Math.PI * 2 * 60 + fbm2D(u * 4, v * 12, 2) * 6);
+      // Variación longitudinal (huecos de granos arrancados)
+      const macro = fbm2D(u * 8, v * 16, 4);
+      // Roughness 0.78..0.96 — siempre alto (olote es muy mate)
+      const r = 0.86 + (macro - 0.5) * 0.16 + fiber * 0.04;
+      const clamped = Math.max(0.74, Math.min(0.98, r));
+      const val = (clamped * 255) | 0;
+      const i = (y * W + x) * 4;
+      img.data[i + 0] = val;
+      img.data[i + 1] = val;
+      img.data[i + 2] = val;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toLinearTexture(canvas);
+}
+
+export function makeCobCoreNormalTexture() {
+  // Normal del olote: fibras paralelas al eje longitudinal + leve
+  // craqueado del tejido. Strength moderada (0.7) — el detalle se ve
+  // sólo entre filas de granos, pero le da carácter de cellulose seco.
+  const W = 256, H = 512;
+  const canvas = makeCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const u = x / W;
+      const v = y / H;
+      // Surcos verticales (entre fibras)
+      const fiber = Math.cos(u * Math.PI * 2 * 70) * 0.5 + 0.5;
+      // Variación pixel-fine: irregularidades del tejido
+      const grain = fbm2D(u * 32, v * 24, 3);
+      const h = 0.50 + fiber * 0.18 + (grain - 0.5) * 0.30;
+      const val = Math.max(0, Math.min(255, (h * 255) | 0));
+      const i = (y * W + x) * 4;
+      img.data[i + 0] = val;
+      img.data[i + 1] = val;
+      img.data[i + 2] = val;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return normalTextureFromHeightCanvas(canvas, 0.85);
+}
