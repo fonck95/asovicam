@@ -3,12 +3,15 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   makeBeanSeedNormalTexture,
+  makeBeanSeedRoughnessTexture,
   makeBeanSeedTexture,
   makeLeafColorTexture,
   makeLeafNormalTexture,
+  makeLeafRoughnessTexture,
   makePodColorTexture,
   makePodInteriorTexture,
   makePodNormalTexture,
+  makePodRoughnessTexture,
 } from '../textures';
 
 // =====================================================
@@ -253,11 +256,14 @@ export default function BeanModel({
 
   const podMap = useMemo(makePodColorTexture, []);
   const podNormal = useMemo(makePodNormalTexture, []);
+  const podRoughness = useMemo(makePodRoughnessTexture, []);
   const podInteriorMap = useMemo(makePodInteriorTexture, []);
   const leafMap = useMemo(makeLeafColorTexture, []);
   const leafNormal = useMemo(makeLeafNormalTexture, []);
+  const leafRoughness = useMemo(makeLeafRoughnessTexture, []);
   const seedMap = useMemo(makeBeanSeedTexture, []);
   const seedNormal = useMemo(makeBeanSeedNormalTexture, []);
+  const seedRoughness = useMemo(makeBeanSeedRoughnessTexture, []);
 
   // Posiciones de las semillas dentro de la vaina abierta (cuando hay
   // vaina) o flotando en arreglo lineal (cuando showPod=false). El
@@ -305,24 +311,39 @@ export default function BeanModel({
   // así no compiten en z por el mismo pixel (antes ambos meshes ocupaban
   // exactamente la misma posición → z-fighting visible como flickering
   // entre verde brillante y crema pálido).
+  // VAINA PBR — Vigna unguiculata. Cera cuticular vegetal + pubescencia.
+  // Cambios sobre la iteración anterior:
+  //   - metalness: 0.04 → 0 (dieléctrico puro; el 0.04 inyectaba un
+  //     F0 metálico sin justificación física).
+  //   - ior: 1.40 → 1.45 (cera de leguminosa, fuente bibliográfica
+  //     coloca ω ∈ 1.42–1.48 según madurez).
+  //   - clearcoat: 0.70 → 0.45. La cera es fresca, no laca.
+  //   - clearcoatRoughness: 0.28 → 0.32 (la microestructura de la cera
+  //     rompe el reflejo perfecto).
+  //   - sheen: 0.40 → 0.55 (Estevez-Kulla). El caupí tiene pubescencia
+  //     visible al fresco; un sheen más fuerte captura ese ribete cálido.
+  //   - roughness: 0.38 → 1.0 + roughnessMap obligatorio. Anti-patrón
+  //     fijado: sutura mate, lóbulos brillantes, surcos longitudinales
+  //     intermedios.
   const podMaterialClosed = (
     <meshPhysicalMaterial
       map={podMap}
       normalMap={podNormal}
       normalScale={[1.2, 1.2]}
-      roughness={0.38}
-      metalness={0.04}
-      clearcoat={0.7}
-      clearcoatRoughness={0.28}
-      sheen={0.4}
+      roughnessMap={podRoughness}
+      roughness={1.0}
+      metalness={0}
+      ior={1.45}
+      clearcoat={0.45}
+      clearcoatRoughness={0.32}
+      sheen={0.55}
       sheenColor="#a3e635"
       sheenRoughness={0.5}
-      envMapIntensity={1.15}
-      transmission={0.12}
-      thickness={0.1}
+      envMapIntensity={1.10}
+      transmission={0.10}
+      thickness={0.10}
       attenuationColor="#84cc16"
-      attenuationDistance={0.4}
-      ior={1.4}
+      attenuationDistance={0.40}
       side={THREE.DoubleSide}
     />
   );
@@ -332,19 +353,20 @@ export default function BeanModel({
       map={podMap}
       normalMap={podNormal}
       normalScale={[1.2, 1.2]}
-      roughness={0.38}
-      metalness={0.04}
-      clearcoat={0.7}
-      clearcoatRoughness={0.28}
-      sheen={0.4}
+      roughnessMap={podRoughness}
+      roughness={1.0}
+      metalness={0}
+      ior={1.45}
+      clearcoat={0.45}
+      clearcoatRoughness={0.32}
+      sheen={0.55}
       sheenColor="#a3e635"
       sheenRoughness={0.5}
-      envMapIntensity={1.15}
+      envMapIntensity={1.10}
       transmission={0.06}
       thickness={0.08}
       attenuationColor="#84cc16"
-      attenuationDistance={0.4}
-      ior={1.4}
+      attenuationDistance={0.40}
       side={THREE.FrontSide}
     />
   );
@@ -460,9 +482,11 @@ export default function BeanModel({
                   map={podMap}
                   normalMap={podNormal}
                   normalScale={[1.0, 1.0]}
-                  roughness={0.45}
-                  metalness={0.04}
-                  clearcoat={0.55}
+                  roughnessMap={podRoughness}
+                  roughness={1.0}
+                  metalness={0}
+                  ior={1.45}
+                  clearcoat={0.40}
                   clearcoatRoughness={0.35}
                   sheen={0.35}
                   sheenColor="#a3e635"
@@ -497,19 +521,40 @@ export default function BeanModel({
             scale={s.scale}
           >
             <mesh geometry={seedGeo} castShadow receiveShadow>
+              {/* SEMILLA CAUPÍ — testa cerosa de Vigna unguiculata.
+                  PBR refactor:
+                  - metalness: 0.06 → 0 (anti-patrón "metalness
+                    intermedio"). La semilla seca es dieléctrica.
+                  - ior: explícito 1.46 (testa de leguminosa).
+                  - clearcoat: 0.95 → 0.65 (el "vidriado" natural es
+                    parcial, no laca).
+                  - clearcoatRoughness: 0.14 → 0.22 (microestructura
+                    del barniz orgánico).
+                  - roughness: 0.34 → 1.0 + roughnessMap. El hilum
+                    (mancha negra) queda en ~0.85 mate, el cuerpo en
+                    ~0.22 pulido — esto produce el highlight roto
+                    característico de la semilla seca.
+                  - iridescence: 0.15 nueva. Las testas legumbres
+                    secas tienen aceites superficiales que producen
+                    interferencia thin-film a glancing angles (vis.
+                    en macro como halo bronceado en los bordes). */}
               <meshPhysicalMaterial
                 map={seedMap}
                 normalMap={seedNormal}
                 normalScale={[0.8, 0.8]}
+                roughnessMap={seedRoughness}
                 color={seedTint}
-                roughness={0.34}
-                metalness={0.06}
-                clearcoat={0.95}
-                clearcoatRoughness={0.14}
+                roughness={1.0}
+                metalness={0}
+                ior={1.46}
+                clearcoat={0.65}
+                clearcoatRoughness={0.22}
+                iridescence={0.15}
+                iridescenceIOR={1.25}
                 sheen={0.25}
                 sheenColor={preset.sheen}
                 sheenRoughness={0.5}
-                envMapIntensity={1.25}
+                envMapIntensity={1.15}
               />
             </mesh>
             {preset.hidesEye && (
@@ -548,17 +593,36 @@ export default function BeanModel({
           castShadow
           receiveShadow
         >
+          {/* HOJA PBR — Vigna unguiculata (trifoliata).
+              Cambios:
+              - metalness: 0.02 → 0 (anti-patrón).
+              - ior: explícito 1.43 (cera cuticular de hoja).
+              - roughness: 0.55 → 1.0 + roughnessMap (venas más mates,
+                lámina entre venas pulida).
+              - sheen: 0.55 → 0.65 (más fuzz visible al borde).
+              - transmission: 0.18 nueva. Las hojas SON translúcidas
+                — la luz que las atraviesa se filtra como verde
+                amarillento (clásico back-lit leaf en fotografía).
+                Esto es lo que físicamente diferencia una "hoja viva
+                bajo el sol" de una "tarjeta de hoja recortada".
+              - thickness: 0.05 (~50 µm escala real de lámina). */}
           <meshPhysicalMaterial
             map={leafMap}
             normalMap={leafNormal}
             normalScale={[0.85, 0.85]}
-            roughness={0.55}
-            metalness={0.02}
-            clearcoat={0.5}
+            roughnessMap={leafRoughness}
+            roughness={1.0}
+            metalness={0}
+            ior={1.43}
+            clearcoat={0.50}
             clearcoatRoughness={0.45}
-            sheen={0.55}
+            sheen={0.65}
             sheenColor="#a3e635"
             sheenRoughness={0.5}
+            transmission={0.18}
+            thickness={0.05}
+            attenuationColor="#a3e635"
+            attenuationDistance={0.15}
             side={THREE.DoubleSide}
           />
         </mesh>
