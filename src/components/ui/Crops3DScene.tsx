@@ -90,7 +90,10 @@ export default function Crops3DScene({ className = '' }: Crops3DSceneProps) {
         <div className={styles.canvasHolder}>
           <Canvas
             shadows
-            dpr={[1, 2]}
+            // dpr capeado a 1.5 — ver Scene.jsx para el racional. Evita
+            // exceder el límite de samplers concurrentes en Safari/iOS
+            // con MeshPhysicalMaterial complejo (clearcoat+sheen+anisotropy).
+            dpr={[1, 1.5]}
             camera={{ position: [3.2, 1.6, 3.6], fov: 35 }}
             gl={{
               antialias: true,

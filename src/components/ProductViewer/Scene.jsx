@@ -28,17 +28,20 @@ export default function Scene({ product }) {
     <div className="relative h-full w-full">
       <Canvas
         shadows
-        dpr={[1, 2]}
+        // dpr capeado a 1.5 (antes 2) — iOS Safari y Macs con pantalla
+        // Retina llegaban a un buffer 4× el viewport con MeshPhysicalMaterial
+        // (clearcoat+sheen+anisotropy = ~7 samplers), excediendo el límite
+        // de samplers concurrentes del driver Metal-backed y produciendo
+        // los bugs visuales reportados.
+        dpr={[1, 1.5]}
         camera={{ position: [3.4, 1.7, 3.8], fov: 32 }}
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          // Exposure ligeramente bajada (1.05 desde 1.12) — al subir la
-          // contribución IBL y agregar SSS/transmission al material de
-          // granos, el rim del modelo se sobrequemaba un poco. 1.05 deja
-          // los highlights del rim sin clipping mientras mantiene la
-          // saturación cálida de los granos vía atenuación amber.
-          toneMappingExposure: 1.05,
+          // Exposure 1.08 — subida ligera tras quitar la SSS por transmission
+          // (que sobre-iluminaba el rim) para mantener la sensación de cob
+          // dorado pero sin clipping de highlights.
+          toneMappingExposure: 1.08,
           outputColorSpace: THREE.SRGBColorSpace,
           powerPreference: 'high-performance',
         }}
@@ -52,7 +55,10 @@ export default function Scene({ product }) {
           <hemisphereLight args={['#fff5e0', '#1a2a3a', 0.32]} />
 
           {/* KEY light: principal, desde arriba-derecha, tonalidad cálida.
-              Sombras suaves con bias afinado para evitar shadow-acne. */}
+              shadow-radius reducido a 4 (era 6) — radios PCF altos requieren
+              demasiados samples del shadow map y en algunos drivers iOS/Mac
+              causan undefined behavior (negro intermitente). 4 mantiene
+              penumbra suave sin pasarse del presupuesto de samples. */}
           <directionalLight
             position={[4.5, 6, 3.2]}
             intensity={2.0}
@@ -60,8 +66,8 @@ export default function Scene({ product }) {
             castShadow
             shadow-mapSize={[2048, 2048]}
             shadow-bias={-0.0002}
-            shadow-normalBias={0.025}
-            shadow-radius={6}
+            shadow-normalBias={0.03}
+            shadow-radius={4}
           >
             <orthographicCamera
               attach="shadow-camera"
@@ -134,10 +140,12 @@ export default function Scene({ product }) {
           />
 
           {/* Disco sutil que da una "base" óptica + leve highlight
-              concéntrico para vender el look studio */}
+              concéntrico para vender el look studio. Separados por
+              0.012 (era 0.002, debajo de la precisión del z-buffer)
+              para eliminar z-fighting que parpadeaba en cada frame. */}
           <mesh
             rotation={[-Math.PI / 2, 0, 0]}
-            position={[0, -1.045, 0]}
+            position={[0, -1.048, 0]}
             receiveShadow
           >
             <circleGeometry args={[3.2, 96]} />
@@ -149,9 +157,18 @@ export default function Scene({ product }) {
               opacity={0.22}
             />
           </mesh>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.043, 0]}>
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, -1.036, 0]}
+            renderOrder={1}
+          >
             <ringGeometry args={[1.4, 1.65, 96]} />
-            <meshBasicMaterial color="#ffffff" transparent opacity={0.06} />
+            <meshBasicMaterial
+              color="#ffffff"
+              transparent
+              opacity={0.06}
+              depthWrite={false}
+            />
           </mesh>
         </Suspense>
 
