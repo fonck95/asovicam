@@ -33,7 +33,12 @@ export default function Scene({ product }) {
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.12,
+          // Exposure ligeramente bajada (1.05 desde 1.12) — al subir la
+          // contribución IBL y agregar SSS/transmission al material de
+          // granos, el rim del modelo se sobrequemaba un poco. 1.05 deja
+          // los highlights del rim sin clipping mientras mantiene la
+          // saturación cálida de los granos vía atenuación amber.
+          toneMappingExposure: 1.05,
           outputColorSpace: THREE.SRGBColorSpace,
           powerPreference: 'high-performance',
         }}
@@ -103,9 +108,15 @@ export default function Scene({ product }) {
           />
 
           {/* Environment 'studio': cubemap procedural HDR estilo softbox
-              alrededor del sujeto. Crítico para clearcoat, sheen y
-              transmission. Sin background visible (no rompe el panel). */}
-          <Environment preset="studio" environmentIntensity={1.0} />
+              alrededor del sujeto. Crítico para clearcoat, sheen,
+              transmission y anisotropy — el GGX anisotrópico de Heitz
+              integra el environment con la NDF colapsada, así que sin
+              un IBL prefiltrado los reflejos elongados se ven planos.
+              drei.Environment usa PMREMGenerator (split-sum de Karis,
+              UE4) internamente. environmentIntensity=1.10 sube la
+              contribución IBL para compensar el envMapIntensity bajado
+              en cob core y husks. */}
+          <Environment preset="studio" environmentIntensity={1.10} />
 
           <group key={product.id} position={[0, 0, 0]}>
             <Model id={product.id} />
