@@ -887,8 +887,13 @@ export default function CornModel() {
             la rompemos vía instanceColor jitter de luminosidad ±18%, que
             visualmente equivale al ojo a un cambio de roughness
           • normalScale=0.45 — micro-papilas que rompen el highlight
-          • clearcoat=0.20 (pelícuda cerosa) con clearcoatRoughness=0.55
+          • clearcoat=0.24 (pelícuda cerosa) con clearcoatRoughness=0.55
             → segundo highlight tenue, NUNCA un espejo
+          • clearcoatNormalMap=kernelNormalMap (clearcoatNormalScale 0.30):
+            la cera del pericarpio sigue el relieve de las papilas del grano,
+            así el sub-highlight ceroso se DEFORMA con la superficie en vez
+            de ser un reflejo perfecto. Reutilizamos el mismo normal map del
+            tejido (alineado por UV) — coste de un sampler, cero textura nueva.
           • SIN transmission/thickness/attenuationColor — Beer-Lambert
             sobre un grano de radio ~0.05m con thickness 0.34 producía
             atenuación exponencial al amarillo oscuro en silueta
@@ -913,8 +918,10 @@ export default function CornModel() {
           normalScale={new THREE.Vector2(0.45, 0.45)}
           metalness={0}
           ior={1.42}
-          clearcoat={0.20}
+          clearcoat={0.24}
           clearcoatRoughness={0.55}
+          clearcoatNormalMap={kernelNormalMap}
+          clearcoatNormalScale={new THREE.Vector2(0.30, 0.30)}
           envMapIntensity={1.0}
           sheen={0.55}
           sheenColor="#ffd98a"

@@ -224,6 +224,42 @@ function generateJuiceDropPositions() {
   return drops;
 }
 
+// Rocío sobre la CÁSCARA de la sandía entera ("fresca de mercado").
+// Distribución determinista en el cuadrante frontal-superior del elipsoide
+// (el que mira a la cámara), con cada gota EXACTAMENTE sobre la superficie:
+// proyectamos una dirección al elipsoide con las MISMAS escalas que
+// buildRindGeometry (1.32, 0.93, 0.97) y empujamos un pelín hacia afuera
+// por la normal radial para que la cuenta de agua repose encima, no
+// embebida. Tamaños pequeños y variados (~1.5–4% del ancho) como beads de
+// condensación reales.
+function generateRindDewDrops() {
+  const drops = [];
+  const N = 9;
+  for (let i = 0; i < N; i++) {
+    const f = (i + 0.5) / N;
+    const azimuth = -0.5 + f * 1.9 + Math.sin(i * 2.7) * 0.25;
+    const polar = 0.35 + ((i * 0.61) % 1) * 0.7;
+    const dx = Math.sin(polar) * Math.cos(azimuth);
+    const dy = Math.cos(polar);
+    const dz = Math.sin(polar) * Math.sin(azimuth);
+    const px = dx * 1.32 * RADIUS;
+    const py = dy * 0.93 * RADIUS;
+    const pz = dz * 0.97 * RADIUS;
+    const len = Math.hypot(px, py, pz) || 1;
+    const out = 0.012;
+    const r = 0.018 + ((i * 0.37) % 1) * 0.022;
+    drops.push({
+      position: [
+        px + (px / len) * out,
+        py + (py / len) * out,
+        pz + (pz / len) * out,
+      ],
+      scale: r,
+    });
+  }
+  return drops;
+}
+
 export default function WatermelonModel({ mode = 'both' } = {}) {
   const groupRef = useRef(null);
 
@@ -236,6 +272,7 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
   const seedGeo = useMemo(buildSeedGeometry, []);
   const seedPositions = useMemo(generateSeedPositions, []);
   const juiceDrops = useMemo(generateJuiceDropPositions, []);
+  const rindDew = useMemo(generateRindDewDrops, []);
 
   const rindMap = useMemo(makeWatermelonColorTexture, []);
   const rindNormal = useMemo(makeWatermelonNormalTexture, []);
@@ -281,7 +318,13 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
                 heterogéneo característico.
               - envMapIntensity: 1.25 → 1.05 (ligera bajada al
                 desactivar el clearcoat extremo; el IBL ya no se reparte
-                entre dos lóbulos especulares casi idénticos). */}
+                entre dos lóbulos especulares casi idénticos).
+              - clearcoatNormalMap=rindNormal (clearcoatNormalScale 0.5):
+                la cera cuticular sigue el moteado/franjas de la cáscara,
+                así el reflejo de la softbox se ROMPE sobre el relieve en
+                vez de ser un espejo limpio — la diferencia entre "sandía
+                real" y "bola de plástico barnizada". Sin transmission en
+                la cáscara: cabe holgado en el presupuesto de samplers. */}
           <meshPhysicalMaterial
             map={rindMap}
             normalMap={rindNormal}
@@ -292,6 +335,8 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
             ior={1.42}
             clearcoat={0.55}
             clearcoatRoughness={0.30}
+            clearcoatNormalMap={rindNormal}
+            clearcoatNormalScale={new THREE.Vector2(0.5, 0.5)}
             envMapIntensity={1.05}
             sheen={0.25}
             sheenColor="#a3e635"
@@ -366,6 +411,32 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
             />
           </mesh>
         </group>
+
+        {/* ROCÍO / DEW — gotas de agua sobre el hemisferio superior-frontal
+            de la sandía entera ("recién lavada del mercado"). Beads de agua:
+            clearcoat local 1.0 + roughness ~0 + ior 1.33, SIN transmission
+            (ahorra el render pass extra; el realismo lo vende el highlight
+            de la softbox sobre cada gota + la cáscara que asoma por la
+            opacidad). depthWrite=false para no recortar entre sí ni con la
+            cáscara. Es el "decal de gota con clearcoat local" que pide el
+            brief, en versión mobile-safe. */}
+        {rindDew.map((d, i) => (
+          <mesh key={`dew-${i}`} position={d.position} scale={d.scale}>
+            <sphereGeometry args={[1, 16, 12]} />
+            <meshPhysicalMaterial
+              color="#ffffff"
+              roughness={0.04}
+              metalness={0}
+              ior={1.33}
+              clearcoat={1.0}
+              clearcoatRoughness={0.03}
+              envMapIntensity={1.8}
+              transparent
+              opacity={0.42}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
       </group>
       )}
 
@@ -451,6 +522,8 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
             ior={1.42}
             clearcoat={0.55}
             clearcoatRoughness={0.30}
+            clearcoatNormalMap={rindNormal}
+            clearcoatNormalScale={new THREE.Vector2(0.5, 0.5)}
             envMapIntensity={1.05}
             sheen={0.25}
             sheenColor="#a3e635"
