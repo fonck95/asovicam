@@ -537,7 +537,13 @@ export default function BeanModel({
                   - iridescence: 0.15 nueva. Las testas legumbres
                     secas tienen aceites superficiales que producen
                     interferencia thin-film a glancing angles (vis.
-                    en macro como halo bronceado en los bordes). */}
+                    en macro como halo bronceado en los bordes).
+                  - clearcoatNormalMap=seedNormal (scale 0.35): el
+                    vidriado natural de la testa sigue el micro-relieve
+                    y el hundimiento del hilum, así el barniz reflejado
+                    se deforma sobre la semilla en lugar de ser un
+                    espejo liso. Sin transmission en la semilla, así que
+                    cabe holgado en el presupuesto de samplers. */}
               <meshPhysicalMaterial
                 map={seedMap}
                 normalMap={seedNormal}
@@ -549,6 +555,8 @@ export default function BeanModel({
                 ior={1.46}
                 clearcoat={0.65}
                 clearcoatRoughness={0.22}
+                clearcoatNormalMap={seedNormal}
+                clearcoatNormalScale={[0.35, 0.35]}
                 iridescence={0.15}
                 iridescenceIOR={1.25}
                 sheen={0.25}

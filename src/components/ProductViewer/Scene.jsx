@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useLayoutEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import {
   ContactShadows,
@@ -6,16 +6,55 @@ import {
   OrbitControls,
 } from '@react-three/drei';
 import * as THREE from 'three';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 import Model from './Model';
 import Loader from './Loader';
+
+// Color management explícito (base del pipeline fotográfico). En r169 ya
+// viene activo por defecto, pero lo fijamos para no depender del default:
+// garantiza que las texturas sRGB se decodifiquen a lineal antes del
+// shading y que el output se recodifique a sRGB tras el tone mapping.
+THREE.ColorManagement.enabled = true;
+
+// RectAreaLight necesita sus LUTs (LTC de Heitz/Hill) inicializadas una
+// sola vez. Son dos DataTextures globales compartidas por TODAS las luces
+// de área — coste fijo de 2 samplers por material físico, no por luz.
+RectAreaLightUniformsLib.init();
+
+// Softbox de estudio: una RectAreaLight orientada al sujeto. Es lo que
+// produce el highlight especular ANCHO y SUAVE (forma de panel) sobre las
+// superficies cerosas/húmedas — la firma inconfundible de la fotografía de
+// producto. Las point/spot dan destellos puntuales; sólo una luz de área
+// da el reflejo rectangular difuso. No proyecta sombra (de eso se encarga
+// la directional key), así que no compite por el shadow map.
+function SoftBox({ position, intensity, width, height, color }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    ref.current?.lookAt(0, 0, 0);
+  }, []);
+  return (
+    <rectAreaLight
+      ref={ref}
+      position={position}
+      intensity={intensity}
+      width={width}
+      height={height}
+      color={color}
+    />
+  );
+}
 
 // =====================================================
 // Escena 3D estilo "fotografía de producto":
 //
-//  - Iluminación de 3 puntos: key (cálida) + fill (fría) + rim
-//    (back light), más hemisphere para color global ambiental.
-//  - Environment 'studio' para reflejos PBR creíbles en clearcoat
-//    y sheen. envMapIntensity controlado por material.
+//  - Esquema de estudio: dos SOFTBOXES (RectAreaLight key cálida +
+//    fill fría) que dibujan el highlight de panel ancho y suave sobre
+//    las superficies cerosas, + una directional que aporta la SOMBRA
+//    proyectada (las RectAreaLight no la generan), + un rim/back para
+//    separar del fondo y activar la translucidez, + hemisphere de
+//    ambiente. Combinado con el IBL del Environment.
+//  - Environment 'studio' para reflejos PBR creíbles en clearcoat,
+//    sheen y transmission. envMapIntensity controlado por material.
 //  - ContactShadows con resolución alta para anclar el modelo.
 //  - OrbitControls con rangos generosos pero limitados para que
 //    el usuario no acabe debajo del piso.
@@ -38,30 +77,31 @@ export default function Scene({ product }) {
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          // Exposure 1.08 — subida ligera tras quitar la SSS por transmission
-          // (que sobre-iluminaba el rim) para mantener la sensación de cob
-          // dorado pero sin clipping de highlights.
-          toneMappingExposure: 1.08,
+          // Exposure 1.05 — bajada leve al introducir las RectAreaLights de
+          // estudio (key + fill), que aportan luz especular adicional. Es el
+          // knob principal a calibrar a ojo en dispositivo si el conjunto
+          // queda algo claro/oscuro tras este pase.
+          toneMappingExposure: 1.05,
           outputColorSpace: THREE.SRGBColorSpace,
           powerPreference: 'high-performance',
         }}
       >
         <Suspense fallback={null}>
-          {/* Ambient muy bajo — dejamos que las luces directas y el
-              environment hagan el trabajo. */}
-          <ambientLight intensity={0.18} color="#ffffff" />
+          {/* Ambient muy bajo — dejamos que las luces directas, las
+              softboxes de área y el environment hagan el trabajo. */}
+          <ambientLight intensity={0.16} color="#ffffff" />
 
           {/* Hemisphere sutil: cielo cálido / piso frío */}
-          <hemisphereLight args={['#fff5e0', '#1a2a3a', 0.32]} />
+          <hemisphereLight args={['#fff5e0', '#1a2a3a', 0.30]} />
 
-          {/* KEY light: principal, desde arriba-derecha, tonalidad cálida.
-              shadow-radius reducido a 4 (era 6) — radios PCF altos requieren
-              demasiados samples del shadow map y en algunos drivers iOS/Mac
-              causan undefined behavior (negro intermitente). 4 mantiene
-              penumbra suave sin pasarse del presupuesto de samples. */}
+          {/* KEY direccional: ahora su rol PRINCIPAL es proyectar la sombra
+              (las RectAreaLights no proyectan sombra). Bajada 2.0->1.5 porque
+              el highlight especular cálido lo aporta ahora la softbox key.
+              shadow-radius 4: penumbra suave sin pasarse del presupuesto de
+              samples del shadow map en drivers iOS/Mac. */}
           <directionalLight
             position={[4.5, 6, 3.2]}
-            intensity={2.0}
+            intensity={1.5}
             color="#fff3d6"
             castShadow
             shadow-mapSize={[2048, 2048]}
@@ -75,15 +115,33 @@ export default function Scene({ product }) {
             />
           </directionalLight>
 
-          {/* FILL light: relleno desde el otro lado, tonalidad fría */}
-          <directionalLight
-            position={[-4, 2, -1.5]}
-            intensity={0.6}
-            color="#cfe2ff"
+          {/* SOFTBOX KEY (luz de área cálida, arriba-derecha-frente). Es la
+              que dibuja el highlight rectangular suave sobre cáscara de
+              sandía, granos de maíz y testa del frijol — el reflejo de panel
+              de un set fotográfico. Reemplaza el destello puntual anterior. */}
+          <SoftBox
+            position={[3.6, 4.2, 3.4]}
+            intensity={4.0}
+            width={3.5}
+            height={4.5}
+            color="#fff1da"
           />
 
-          {/* RIM/back light: separa al sujeto del fondo, vital para
-              el look "marketing". Crea un halo en los bordes. */}
+          {/* SOFTBOX FILL (luz de área fría, izquierda). Rellena las sombras
+              con un panel ancho y frío en lugar de una direccional dura;
+              suaviza el contraste sin matar el modelado. Sustituye al
+              directional fill frío anterior. */}
+          <SoftBox
+            position={[-4.2, 1.8, 1.2]}
+            intensity={1.9}
+            width={5.0}
+            height={4.0}
+            color="#dbe8ff"
+          />
+
+          {/* RIM/back light: separa al sujeto del fondo y ACTIVA la
+              translucidez (transmission) de pulpa de sandía y hojas de
+              frijol al iluminarlas por detrás. Vital para el look macro. */}
           <spotLight
             position={[-2, 4.5, -4.5]}
             angle={0.6}
@@ -94,10 +152,12 @@ export default function Scene({ product }) {
             decay={1.2}
           />
 
-          {/* Eye light: pequeña frontal para gotas/highlights especulares */}
+          {/* Eye light: pequeña frontal para chispazos en gotas de rocío y
+              micro-highlights. Bajada 0.5->0.3: la softbox key ya cubre el
+              grueso del especular frontal. */}
           <pointLight
             position={[1.5, 1.2, 4.5]}
-            intensity={0.5}
+            intensity={0.3}
             color="#fff8e7"
             distance={9}
             decay={1.5}
