@@ -300,31 +300,6 @@
   color: var(--color-primary-dark);
 }
 
-/* ============ 3D Diorama ============ */
-.diorama {
-  position: relative;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(22, 101, 52, 0.08), transparent 55%),
-    var(--color-surface-warm);
-  overflow: hidden;
-}
-
-.dioramaFallback {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  max-height: 620px;
-  border-radius: var(--radius-2xl);
-  background: linear-gradient(160deg, #0b2818 0%, #0a1d12 55%, #1a0f06 100%);
-  box-shadow: var(--shadow-xl);
-}
-
-@media (max-width: 720px) {
-  .dioramaFallback {
-    aspect-ratio: 4 / 5;
-    max-height: 560px;
-  }
-}
-
 /* ============ Product Showcase ============ */
 .showcase {
   position: relative;

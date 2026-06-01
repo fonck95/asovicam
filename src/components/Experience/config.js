@@ -84,8 +84,8 @@ export const CONFIG = {
   // ---------- POSTPROCESADO (opcional) ----------
   POST: {
     enabled: true,
-    // ⚠ Bloom OFF por defecto: en este repo se documentó Context Lost al
-    // combinar bloom + shadow-maps en algunas GPUs (ver ProductViewer/Scene.jsx).
+    // ⚠ Bloom OFF por defecto: se documentó Context Lost al combinar
+    // bloom + shadow-maps en algunas GPUs.
     // Aquí NO usamos shadow-maps (solo ContactShadows), así que puedes activarlo
     // con cuidado. Se desactiva siempre en móvil.
     bloom: false,

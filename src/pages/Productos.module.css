@@ -1,0 +1,105 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-xl);
+  margin-top: var(--spacing-2xl);
+  text-align: left;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  background: var(--color-gray-100);
+  font-size: 1.875rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.name {
+  font-family: var(--font-family-heading);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--color-gray-900);
+  margin-bottom: 0.125rem;
+}
+
+.scientific {
+  font-family: var(--font-family-heading);
+  font-size: 0.8125rem;
+  font-style: italic;
+  color: var(--color-gray-400);
+  margin-bottom: var(--spacing-sm);
+}
+
+.tagline {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+}
+
+.description {
+  font-size: 0.9375rem;
+  color: var(--color-gray-600);
+  line-height: 1.7;
+  margin-bottom: var(--spacing-lg);
+}
+
+.facts {
+  margin: 0;
+  margin-top: auto;
+  display: grid;
+  gap: 0.625rem;
+  border-top: 1px solid var(--color-gray-200);
+  padding-top: var(--spacing-lg);
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.factLabel {
+  font-size: 0.8125rem;
+  color: var(--color-gray-500);
+}
+
+.factValue {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-gray-800);
+  text-align: right;
+}
+
+.cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-3xl);
+}
+
+.ctaText {
+  font-size: 1.0625rem;
+  color: var(--color-gray-600);
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+    max-width: 28rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}

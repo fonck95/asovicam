@@ -9,8 +9,8 @@ import Overlay from './Overlay';
 import ProgressLoader from './ProgressLoader';
 import styles from './Experience.module.css';
 
-// Color management explícito (igual que ProductViewer/Scene): texturas sRGB
-// → lineal antes del shading, output recodificado tras el tone mapping.
+// Color management explícito: texturas sRGB → lineal antes del shading,
+// output recodificado tras el tone mapping.
 THREE.ColorManagement.enabled = true;
 
 // ---------- Flags responsive + accesibilidad ----------
