@@ -1,5 +1,4 @@
 import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   generateWatermelonSeedLayout,
@@ -281,10 +280,13 @@ export default function WatermelonModel({ mode = 'both' } = {}) {
   const fleshNormal = useMemo(makeWatermelonFleshNormalTexture, []);
   const fleshRoughness = useMemo(makeWatermelonFleshRoughnessTexture, []);
 
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.5) * 0.015;
-  });
+  // Modelo estático (igual que CornModel): se eliminó el "bobbing" vertical
+  // por useFrame. El Canvas corre con frameloop="never" y el reloj lo conduce
+  // el ticker unificado vía advance(time*1000); bajo ese esquema
+  // clock.elapsedTime queda inflado (~1000×), así que Math.sin(elapsedTime*0.5)
+  // avanzaba >1 ciclo por frame y la sandía "vibraba" como bugeada. Oscilar
+  // en Y además cruzaba el plano de ContactShadows cada frame (parpadeo).
+  // La rotación viene del grupo exterior (scroll + idle + autoRotate).
 
   // En modo 'both' separamos la sandía entera (izda) y la rebanada (dcha)
   // con espacio suficiente para que la rodaja no se superponga con el

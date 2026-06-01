@@ -47,7 +47,7 @@ export function createInitialStage(sections) {
   };
 }
 
-export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags, sections }) {
+export function useUnifiedScroll({ rootRef, advanceRef, lenisRef, stageRef, flags, sections }) {
   useEffect(() => {
     const root = rootRef.current;
     const stage = stageRef.current;
@@ -101,6 +101,9 @@ export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags, section
       touchMultiplier: CONFIG.LENIS.touchMultiplier,
       smoothWheel: CONFIG.LENIS.smoothWheel,
     });
+    // Exponer la instancia para el salto del switcher (scroll suave a un
+    // cultivo dentro del recorrido, sin recargar).
+    if (lenisRef) lenisRef.current = lenis;
 
     // (1) Cada scroll de Lenis sincroniza ScrollTrigger en el acto.
     lenis.on('scroll', ScrollTrigger.update);
@@ -165,8 +168,9 @@ export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags, section
     return () => {
       gsap.ticker.remove(tick);
       gsap.ticker.lagSmoothing(prevLagSmoothing ?? 500, 33);
+      if (lenisRef) lenisRef.current = null;
       lenis.destroy();
       ctx.revert();
     };
-  }, [rootRef, advanceRef, stageRef, flags.reducedMotion, sections]);
+  }, [rootRef, advanceRef, lenisRef, stageRef, flags.reducedMotion, sections]);
 }

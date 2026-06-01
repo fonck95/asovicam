@@ -88,3 +88,41 @@ export const DEFAULT_PRODUCT_ID = 'maiz';
 export function getProduct(id) {
   return PRODUCT_MAP[id] ?? PRODUCT_MAP[DEFAULT_PRODUCT_ID];
 }
+
+// ¿La ruta es el RECORRIDO COMPLETO (los tres cultivos encadenados)?
+// /experiencia (sin slug) o un slug inválido → recorrido. Un slug de cultivo
+// válido → experiencia individual de ese cultivo.
+export function isTourRoute(id) {
+  return !id || !PRODUCT_MAP[id];
+}
+
+// Normaliza las secciones de un cultivo para el Stage/Overlay UNIFICADOS:
+//   • prefija el id con el cultivo (`maiz-hero`…) → único en todo el recorrido
+//     y deja que el CSS apunte a `[id$="-interactiva"]`.
+//   • adjunta productId/modelId/groundY/yOffset/accent para que el Stage sepa
+//     qué modelo mostrar y a qué altura apoyar la sombra en cada tramo.
+//   • PLIEGA baseScale dentro de model.scale: así el timeline usa un único
+//     keyframe de escala continuo y el Stage trabaja siempre con baseScale = 1
+//     (cada cultivo tiene tamaños muy distintos: maíz 1.0, frijol 0.82,
+//     sandía 0.47).
+function decorateSections(product) {
+  return product.sections.map((s) => ({
+    ...s,
+    id: `${product.id}-${s.id}`,
+    productId: product.id,
+    modelId: product.modelId,
+    groundY: product.groundY,
+    yOffset: product.yOffset,
+    accent: product.accent,
+    model: { ...s.model, scale: s.model.scale * product.baseScale },
+  }));
+}
+
+// Guion para la ruta /experiencia[/...]:
+//   • cultivo válido → SOLO ese cultivo (deep-link individual).
+//   • sin slug        → RECORRIDO COMPLETO: maíz → frijol → sandía encadenados
+//     en una sola presentación scroll-driven (sin clics entre cultivos).
+export function getExperienceSections(id) {
+  if (id && PRODUCT_MAP[id]) return decorateSections(PRODUCT_MAP[id]);
+  return PRODUCTS.flatMap(decorateSections);
+}

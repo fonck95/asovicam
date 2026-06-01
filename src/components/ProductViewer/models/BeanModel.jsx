@@ -1,5 +1,4 @@
 import { useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   makeBeanSeedNormalTexture,
@@ -300,10 +299,14 @@ export default function BeanModel({
     return arr;
   }, [count, showPod]);
 
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    groupRef.current.position.y = Math.sin(clock.elapsedTime * 0.6) * 0.015;
-  });
+  // Modelo estático (igual que CornModel): el "bobbing" vertical por
+  // useFrame se eliminó. En esta experiencia el Canvas corre con
+  // frameloop="never" y el reloj lo conduce el ticker unificado vía
+  // advance(time*1000); bajo ese esquema clock.elapsedTime queda inflado
+  // (~1000×), así que Math.sin(elapsedTime*0.6) avanzaba >1 ciclo por frame
+  // y la vaina "vibraba" como bugeada. Además, oscilar en Y hacía cruzar el
+  // plano de ContactShadows cada frame (parpadeo del shadow). La rotación
+  // viene del grupo exterior (scroll + idle + OrbitControls.autoRotate).
 
   // Material exterior de la vaina cerrada: DoubleSide está bien porque
   // la vaina cerrada es un tubo completo. Para la vaina abierta usamos

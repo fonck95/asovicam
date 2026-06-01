@@ -73,15 +73,7 @@ function SoftBox({ lightRef, position, intensity, width, height, color }) {
   );
 }
 
-export default function Stage({
-  stageRef,
-  flags,
-  sections,
-  modelId,
-  baseScale = CONFIG.MODEL_BASE_SCALE,
-  groundY = -1.05,
-  yOffset = CONFIG.MODEL_Y_OFFSET,
-}) {
+export default function Stage({ stageRef, flags, sections }) {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
@@ -109,6 +101,26 @@ export default function Stage({
   // Sección activa → qué hotspots mostrar. Solo se actualiza al cambiar de
   // sección (re-render puntual, no por frame).
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // Modelos presentes en el guion (uno por cultivo). En el RECORRIDO COMPLETO
+  // son los tres (maíz/frijol/sandía); en un deep-link, uno solo. Montamos
+  // TODOS una vez y mostramos solo el del cultivo activo vía `visible` — así
+  // no reconstruimos geometría a mitad de scroll (lo que daría un tirón) y el
+  // ContactShadows solo recibe la pieza visible.
+  const distinctModels = useMemo(() => {
+    const ids = [];
+    for (const sec of sections) {
+      if (sec.modelId && !ids.includes(sec.modelId)) ids.push(sec.modelId);
+    }
+    return ids.length ? ids : [CONFIG.MODEL_ID];
+  }, [sections]);
+
+  // Encuadre del cultivo activo: qué modelo mostrar y a qué altura apoyar la
+  // sombra. Como el cambio ocurre en el límite entre cultivos (junto al swap
+  // del modelo), un salto discreto de groundY es coherente con la escena.
+  const activeSection = sections[activeIndex] ?? sections[0];
+  const activeModelId = activeSection.modelId ?? distinctModels[0];
+  const activeGroundY = activeSection.groundY ?? -1.05;
 
   // Fondo de la escena como Color lineal (lo tiñe el scroll cada frame).
   useEffect(() => {
@@ -172,11 +184,14 @@ export default function Stage({
       // SCROLL → rotación Y del modelo (+ giro idle + parallax).
       g.rotation.y = damp(g.rotation.y, s.rotY + idle.current + tilt, 10, dt);
       g.rotation.x = damp(g.rotation.x, -pointer.current.y * 0.05 * cine, 5, dt);
-      // SCROLL → escala del modelo (zoom-in/out del producto). `baseScale`
-      // depende del producto activo: normaliza tamaños muy distintos.
-      const sc = baseScale * s.mscale;
+      // SCROLL → escala del modelo (zoom-in/out del producto). El `baseScale`
+      // de cada cultivo ya viene PLEGADO en el keyframe (products.js), así que
+      // aquí basta con la escala interpolada del scroll.
+      const sc = s.mscale;
       g.scale.setScalar(damp(g.scale.x, sc, CONFIG.DAMP, dt));
-      g.position.y = yOffset;
+      // yOffset del cultivo activo (hoy 0 en los tres; se respeta por si algún
+      // cultivo necesita subir/bajar en el mundo).
+      g.position.y = (sections[s.activeIndex] ?? sections[0]).yOffset ?? 0;
     }
 
     // ---- LUCES + EXPOSICIÓN + FONDO (SCROLL → iluminación / mood) ----
@@ -229,20 +244,28 @@ export default function Stage({
         <Lightformer form="ring" intensity={0.5} color="#ffffff" position={[0, 3, -4]} scale={4} />
       </Environment>
 
-      {/* MODELO PROTAGONISTA — el <group> es lo que el scroll rota/escala. */}
-      <group ref={modelGroupRef} position={[0, yOffset, 0]}>
-        <ProtagonistModel modelId={modelId} />
+      {/* MODELO PROTAGONISTA — el <group> es lo que el scroll rota/escala.
+          En el recorrido completo viven aquí los tres cultivos; solo el activo
+          es `visible`, y el swap ocurre al entrar el hero del siguiente. */}
+      <group ref={modelGroupRef} position={[0, activeSection.yOffset ?? 0, 0]}>
+        {distinctModels.map((mid) => (
+          <group key={mid} visible={mid === activeModelId}>
+            <ProtagonistModel modelId={mid} />
+          </group>
+        ))}
 
         {/* Hotspots de la sección activa (anclados al modelo, rotan con él). */}
-        {sections[activeIndex]?.hotspots?.map((h) => (
+        {activeSection?.hotspots?.map((h) => (
           <Hotspot key={h.id} position={h.position} label={h.label} text={h.text} />
         ))}
       </group>
 
       {/* Sombra de contacto: ancla el modelo sin shadow-maps (evita el
           Context Lost documentado al mezclar shadow-maps + bloom). La altura
-          `groundY` depende del producto (cada modelo "apoya" a distinta cota). */}
-      <ContactShadows position={[0, groundY, 0]} opacity={0.55} scale={7} blur={2.6}
+          `activeGroundY` depende del cultivo activo (cada modelo "apoya" a
+          distinta cota). `key` re-hornea la sombra al cambiar de cultivo —
+          imprescindible en móvil, donde se bakea una sola vez (frames=1). */}
+      <ContactShadows key={activeModelId} position={[0, activeGroundY, 0]} opacity={0.55} scale={7} blur={2.6}
         far={2.6} resolution={shadowRes} color="#000000" frames={flags.mobile ? 1 : undefined} />
 
       {/* OrbitControls: solo se ACTIVAN (enabled) en la sección interactiva;
@@ -251,7 +274,7 @@ export default function Stage({
         ref={controlsRef}
         // El prop sigue a la sección activa para que un re-render no resetee
         // el estado; además lo ajustamos imperativamente por frame en useFrame.
-        enabled={!!sections[activeIndex]?.orbit}
+        enabled={!!activeSection?.orbit}
         enablePan={false}
         enableDamping
         dampingFactor={CONFIG.ORBIT.dampingFactor}

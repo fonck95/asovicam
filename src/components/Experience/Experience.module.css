@@ -128,8 +128,10 @@
 .section[data-align='right'] { justify-content: flex-end; }
 .section[data-align='center'] { justify-content: center; text-align: center; }
 
-/* La sección interactiva necesita más recorrido para orbitar a gusto. */
-#exp-interactiva { min-height: 135vh; }
+/* La sección interactiva necesita más recorrido para orbitar a gusto.
+   Los ids van prefijados por cultivo (exp-maiz-interactiva, …), así que
+   apuntamos por sufijo para cubrir los tres del recorrido. */
+[id$='-interactiva'] { min-height: 135vh; }
 
 .copy {
   pointer-events: auto;
