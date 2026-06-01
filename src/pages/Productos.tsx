@@ -126,6 +126,14 @@ export default function Productos() {
                     </div>
                   ))}
                 </dl>
+
+                <Button
+                  to={`/experiencia/${product.id}`}
+                  variant="outline"
+                  className={styles.card3dLink}
+                >
+                  Ver en 3D <ArrowRight size={16} />
+                </Button>
               </Card>
             ))}
           </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { SECTIONS } from './sections';
+import { PRODUCTS } from './products';
 import styles from './Experience.module.css';
 
 // =====================================================
@@ -10,10 +10,13 @@ import styles from './Experience.module.css';
 // que el scroll anima al entrar.
 //
 // El canvas 3D vive detrás (position: fixed); aquí solo va tipografía,
-// mucho espacio negativo y el CTA final. Estética premium oscura.
+// mucho espacio negativo, el SELECTOR DE PRODUCTO y el CTA final.
+//
+// `sections` y `activeId` dependen del producto activo: la experiencia ya
+// no es solo maíz, así que el guion y el cultivo resaltado son dinámicos.
 // =====================================================
 
-export default function Overlay() {
+export default function Overlay({ sections, activeId }) {
   // Punto activo del indicador lateral (decoupled del 3D, vía IntersectionObserver).
   const [active, setActive] = useState(0);
   const sectionsRef = useRef([]);
@@ -33,17 +36,36 @@ export default function Overlay() {
     );
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
-  }, []);
+  }, [sections]);
 
   return (
     <div className={styles.overlay}>
       {/* Barra superior minimal (sustituye al header global en modo inmersivo). */}
       <header className={styles.topbar}>
         <Link to="/" className={styles.brand}>ASOVICAM</Link>
+
+        {/* Selector de producto: salta entre las experiencias 3D de cada
+            cultivo de la milpa. El cultivo activo queda resaltado. */}
+        <nav className={styles.switcher} aria-label="Elegir cultivo">
+          {PRODUCTS.map((p) => (
+            <Link
+              key={p.id}
+              to={`/experiencia/${p.id}`}
+              className={styles.switchBtn}
+              data-active={p.id === activeId}
+              aria-current={p.id === activeId ? 'page' : undefined}
+              title={p.label}
+            >
+              <span className={styles.switchIcon} aria-hidden="true">{p.icon}</span>
+              <span className={styles.switchLabel}>{p.label}</span>
+            </Link>
+          ))}
+        </nav>
+
         <Link to="/productos" className={styles.topLink}>Catálogo&nbsp;→</Link>
       </header>
 
-      {SECTIONS.map((s, i) => (
+      {sections.map((s, i) => (
         <section
           key={s.id}
           id={`exp-${s.id}`}
@@ -80,7 +102,7 @@ export default function Overlay() {
 
       {/* Indicador de progreso por secciones. */}
       <nav className={styles.dots} aria-hidden>
-        {SECTIONS.map((s, i) => (
+        {sections.map((s, i) => (
           <span key={s.id} className={styles.dot} data-active={i === active} />
         ))}
       </nav>

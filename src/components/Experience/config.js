@@ -10,8 +10,9 @@ import * as THREE from 'three';
 export const CONFIG = {
   // ---------- MODELO PROTAGONISTA ----------
   // Los modelos de ASOVICAM son PROCEDURALES (se construyen con
-  // primitivas Three.js, no son .glb). Elige cuál protagoniza la
-  // experiencia: 'maiz' | 'frijol' | 'sandia'.
+  // primitivas Three.js, no son .glb). El cultivo a mostrar lo decide
+  // ahora el PRODUCTO activo (ver products.js + ruta /experiencia/:producto):
+  // 'maiz' | 'frijol' | 'sandia'. Este valor solo se usa como fallback.
   MODEL_ID: 'maiz',
 
   // ¿Tienes un .glb propio? Pon aquí su ruta y reemplazará al modelo

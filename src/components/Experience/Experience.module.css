@@ -66,6 +66,54 @@
   color: #34d399;
 }
 
+/* ---- Selector de producto (switcher entre cultivos) ---- */
+.switcher {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 242, 234, 0.14);
+  background: rgba(10, 16, 14, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.switchBtn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgba(244, 242, 234, 0.66);
+  transition: color 0.3s ease, background 0.3s ease;
+}
+
+.switchBtn:hover {
+  color: #f4f2ea;
+  background: rgba(244, 242, 234, 0.08);
+}
+
+.switchBtn[data-active='true'] {
+  color: #06281d;
+  background: #34d399;
+}
+
+.switchIcon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  /* En móvil solo iconos: la barra superior no tiene ancho para etiquetas. */
+  .switchLabel { display: none; }
+  .switchBtn { padding: 0.42rem 0.55rem; }
+}
+
 /* ---- Secciones ---- */
 .section {
   position: relative;

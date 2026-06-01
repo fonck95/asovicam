@@ -37,8 +37,10 @@ export default function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Experiencia inmersiva: ruta full-bleed FUERA del Layout
-                (sin header/footer global) para máxima inmersión. */}
+                (sin header/footer global) para máxima inmersión. El slug
+                opcional elige el cultivo (maíz / frijol / sandía). */}
             <Route path="experiencia" element={<Experiencia />} />
+            <Route path="experiencia/:producto" element={<Experiencia />} />
             <Route element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="nosotros" element={<About />} />

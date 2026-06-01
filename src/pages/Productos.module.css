@@ -82,6 +82,12 @@
   text-align: right;
 }
 
+.card3dLink {
+  margin-top: var(--spacing-lg);
+  width: 100%;
+  justify-content: center;
+}
+
 .cta {
   display: flex;
   flex-direction: column;
