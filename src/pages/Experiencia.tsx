@@ -1,12 +1,21 @@
 import { useParams } from 'react-router-dom';
 import SEO from '../components/SEO';
 import Experience from '../components/Experience/Experience';
-import { getProduct } from '../components/Experience/products';
+import {
+  getProduct,
+  getExperienceSections,
+  isTourRoute,
+} from '../components/Experience/products';
 
 // =====================================================
 // Ruta /experiencia y /experiencia/:producto — experiencia inmersiva
-// scroll-driven. Funciona para TODOS los cultivos de la milpa (maíz,
-// frijol caupí y sandía); el slug de la URL elige cuál protagoniza.
+// scroll-driven.
+//
+//   • /experiencia            → RECORRIDO COMPLETO: los tres cultivos de la
+//     milpa (maíz → frijol caupí → sandía) encadenados en UNA sola
+//     presentación. Se desplaza de uno al siguiente sin hacer clic.
+//   • /experiencia/:producto  → experiencia individual de ese cultivo
+//     (deep-link directo).
 //
 // Se renderiza FUERA del Layout global (sin header/footer) para lograr
 // la inmersión full-bleed estilo página de producto.
@@ -14,17 +23,24 @@ import { getProduct } from '../components/Experience/products';
 
 export default function Experiencia() {
   const { producto } = useParams();
+  const tour = isTourRoute(producto);
+  const sections = getExperienceSections(producto);
+
+  // SEO: el recorrido completo describe la milpa entera; el deep-link de un
+  // cultivo usa su propio título y descripción.
   const product = getProduct(producto);
+  const title = tour ? 'Experiencia 3D · La Milpa' : `Experiencia 3D · ${product.label}`;
+  const description = tour
+    ? 'Recorre en 3D la milpa de ASOVICAM en una sola presentación inmersiva: maíz criollo, frijol caupí y sandía encadenados, con cámara, luz y detalle sincronizados con tu desplazamiento.'
+    : product.seoDescription;
 
   return (
     <>
-      <SEO
-        title={`Experiencia 3D · ${product.label}`}
-        description={product.seoDescription}
-      />
-      {/* key=product.id remonta la experiencia al cambiar de cultivo:
-          reinicia canvas, scroll y timeline de forma limpia. */}
-      <Experience key={product.id} productId={product.id} />
+      <SEO title={title} description={description} />
+      {/* key remonta la experiencia de forma limpia al alternar entre el
+          recorrido completo y un cultivo individual (reinicia canvas, scroll
+          y timeline). */}
+      <Experience key={tour ? 'tour' : producto} sections={sections} tour={tour} />
     </>
   );
 }

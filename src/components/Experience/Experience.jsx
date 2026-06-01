@@ -1,8 +1,7 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CONFIG } from './config';
-import { getProduct } from './products';
 import { createInitialStage, useUnifiedScroll } from './useUnifiedScroll';
 import Stage from './Stage';
 import Overlay from './Overlay';
@@ -47,22 +46,33 @@ function useFlags() {
   return flags;
 }
 
-export default function Experience({ productId }) {
+export default function Experience({ sections, tour = false }) {
   const flags = useFlags();
 
-  // Producto activo (maíz / frijol / sandía). De él salen el guion, el modelo
-  // y el "tuning" de encuadre. Experience se remonta (key=productId en la
-  // página) al cambiar de producto, así que basta resolverlo una vez.
-  const product = getProduct(productId);
-  const { sections, modelId, baseScale, groundY, yOffset } = product;
+  // `sections` ya viene NORMALIZADO desde products.js: cada sección lleva su
+  // cultivo (productId/modelId), su altura de sombra (groundY) y la escala con
+  // baseScale ya plegado. En el recorrido completo son los tres cultivos
+  // encadenados; en un deep-link, las de un solo cultivo. Stage y Overlay
+  // leen todo lo demás de aquí.
 
   const rootRef = useRef(null);      // contenedor scrolleable (define la altura/timeline)
   const advanceRef = useRef(null);   // R3F advance(): renderiza UN frame bajo demanda
+  const lenisRef = useRef(null);     // instancia Lenis (para el salto del switcher)
   const stageRef = useRef(null);     // objeto compartido scroll → 3D
   if (!stageRef.current) stageRef.current = createInitialStage(sections);
 
   // Engancha Lenis + gsap.ticker + advance en UN solo RAF y construye el timeline.
-  useUnifiedScroll({ rootRef, advanceRef, stageRef, flags, sections });
+  useUnifiedScroll({ rootRef, advanceRef, lenisRef, stageRef, flags, sections });
+
+  // Salto suave a un cultivo DENTRO del recorrido (sin recargar la página):
+  // el switcher en modo recorrido lo usa para llevar el scroll al hero de ese
+  // cultivo. Usa Lenis si está activo; si no (reduced-motion), scroll nativo.
+  const handleJump = useCallback((sectionId) => {
+    if (!sectionId) return;
+    const target = `#exp-${sectionId}`;
+    if (lenisRef.current) lenisRef.current.scrollTo(target, { duration: 1.1 });
+    else document.querySelector(target)?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   return (
     <div className={styles.root}>
@@ -90,15 +100,7 @@ export default function Experience({ productId }) {
           }}
         >
           <Suspense fallback={null}>
-            <Stage
-              stageRef={stageRef}
-              flags={flags}
-              sections={sections}
-              modelId={modelId}
-              baseScale={baseScale}
-              groundY={groundY}
-              yOffset={yOffset}
-            />
+            <Stage stageRef={stageRef} flags={flags} sections={sections} />
           </Suspense>
         </Canvas>
       </div>
@@ -108,7 +110,7 @@ export default function Experience({ productId }) {
 
       {/* Secciones de texto que definen la longitud del scroll. */}
       <div ref={rootRef} className={styles.scroll}>
-        <Overlay sections={sections} activeId={product.id} />
+        <Overlay sections={sections} tour={tour} onJump={handleJump} />
       </div>
     </div>
   );
