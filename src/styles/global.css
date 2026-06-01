@@ -356,3 +356,30 @@ p {
     padding: var(--spacing-3xl) 0;
   }
 }
+
+/* ========================================
+   Lenis smooth scroll
+   Reglas recomendadas. Solo aplican cuando Lenis añade la clase
+   `lenis` al <html> (ruta /experiencia); el resto del sitio no se ve
+   afectado.
+   ======================================== */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}

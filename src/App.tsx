@@ -8,6 +8,7 @@ const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
 const Milpa = lazy(() => import('./pages/Milpa'));
 const Productos = lazy(() => import('./pages/Productos'));
+const Experiencia = lazy(() => import('./pages/Experiencia'));
 const Gallery = lazy(() => import('./pages/Gallery'));
 const Contact = lazy(() => import('./pages/Contact'));
 const FAQ = lazy(() => import('./pages/FAQ'));
@@ -35,6 +36,9 @@ export default function App() {
         <ScrollToTop />
         <Suspense fallback={<PageLoader />}>
           <Routes>
+            {/* Experiencia inmersiva: ruta full-bleed FUERA del Layout
+                (sin header/footer global) para máxima inmersión. */}
+            <Route path="experiencia" element={<Experiencia />} />
             <Route element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="nosotros" element={<About />} />
