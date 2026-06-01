@@ -1,4 +1,3 @@
-import { lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -19,8 +18,6 @@ import Product3DGallery, {
 } from '../components/ui/Product3DGallery';
 import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
 import SEO from '../components/SEO';
-
-const Crops3DScene = lazy(() => import('../components/ui/Crops3DScene'));
 
 import { crops } from '../data/crops';
 import { testimonials } from '../data/testimonials';
@@ -198,27 +195,6 @@ export default function Home() {
               </Card>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* 3D Diorama — Real Three.js procedural models of the milpa */}
-      <section className={`section ${styles.diorama}`}>
-        <div className="container">
-          <div className={styles.sectionHeader}>
-            <span className={styles.eyebrow}>
-              <Sparkles size={12} /> Milpa interactiva
-            </span>
-            <h2 className="section__title">La milpa en 3D</h2>
-            <p className="section__subtitle">
-              Maíz, frijol caupí y sandía modelados en 3D. Selecciona un
-              cultivo, arrastra para rotarlo y haz scroll para acercarte —
-              los mismos modelos que viven en nuestro catálogo de productos.
-            </p>
-          </div>
-
-          <Suspense fallback={<div className={styles.dioramaFallback} />}>
-            <Crops3DScene />
-          </Suspense>
         </div>
       </section>
 
