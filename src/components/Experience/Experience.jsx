@@ -2,7 +2,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CONFIG } from './config';
-import { SECTIONS } from './sections';
+import { getProduct } from './products';
 import { createInitialStage, useUnifiedScroll } from './useUnifiedScroll';
 import Stage from './Stage';
 import Overlay from './Overlay';
@@ -47,16 +47,22 @@ function useFlags() {
   return flags;
 }
 
-export default function Experience() {
+export default function Experience({ productId }) {
   const flags = useFlags();
+
+  // Producto activo (maíz / frijol / sandía). De él salen el guion, el modelo
+  // y el "tuning" de encuadre. Experience se remonta (key=productId en la
+  // página) al cambiar de producto, así que basta resolverlo una vez.
+  const product = getProduct(productId);
+  const { sections, modelId, baseScale, groundY, yOffset } = product;
 
   const rootRef = useRef(null);      // contenedor scrolleable (define la altura/timeline)
   const advanceRef = useRef(null);   // R3F advance(): renderiza UN frame bajo demanda
   const stageRef = useRef(null);     // objeto compartido scroll → 3D
-  if (!stageRef.current) stageRef.current = createInitialStage();
+  if (!stageRef.current) stageRef.current = createInitialStage(sections);
 
   // Engancha Lenis + gsap.ticker + advance en UN solo RAF y construye el timeline.
-  useUnifiedScroll({ rootRef, advanceRef, stageRef, flags });
+  useUnifiedScroll({ rootRef, advanceRef, stageRef, flags, sections });
 
   return (
     <div className={styles.root}>
@@ -72,19 +78,27 @@ export default function Experience() {
             antialias: true,
             powerPreference: 'high-performance',
             toneMapping: THREE.ACESFilmicToneMapping,
-            toneMappingExposure: SECTIONS[0].mood.exposure,
+            toneMappingExposure: sections[0].mood.exposure,
             outputColorSpace: THREE.SRGBColorSpace,
           }}
-          camera={{ position: SECTIONS[0].cam.pos, fov: 35, near: 0.1, far: 100 }}
+          camera={{ position: sections[0].cam.pos, fov: 35, near: 0.1, far: 100 }}
           onCreated={(state) => {
             // Exporta advance() para el loop unificado del hook.
             advanceRef.current = state.advance;
-            const [tx, ty, tz] = SECTIONS[0].cam.target;
+            const [tx, ty, tz] = sections[0].cam.target;
             state.camera.lookAt(tx, ty, tz);
           }}
         >
           <Suspense fallback={null}>
-            <Stage stageRef={stageRef} flags={flags} />
+            <Stage
+              stageRef={stageRef}
+              flags={flags}
+              sections={sections}
+              modelId={modelId}
+              baseScale={baseScale}
+              groundY={groundY}
+              yOffset={yOffset}
+            />
           </Suspense>
         </Canvas>
       </div>
@@ -94,7 +108,7 @@ export default function Experience() {
 
       {/* Secciones de texto que definen la longitud del scroll. */}
       <div ref={rootRef} className={styles.scroll}>
-        <Overlay />
+        <Overlay sections={sections} activeId={product.id} />
       </div>
     </div>
   );

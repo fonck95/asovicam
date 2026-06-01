@@ -11,6 +11,9 @@ import WatermelonModel from '../ProductViewer/models/WatermelonModel';
 //   • Si es null → usa el modelo PROCEDURAL de ASOVICAM (maíz/frijol/sandía).
 // El <group> exterior (rotación/escala/posición vía scroll) lo controla
 // Stage.jsx; aquí solo decidimos QUÉ se renderiza dentro de él.
+//
+// `modelId` lo decide el producto activo (ver products.js): la experiencia
+// ya no está cableada al maíz, sino que recibe el modelo a mostrar.
 // =====================================================
 
 const PROCEDURAL = {
@@ -26,7 +29,7 @@ function GLBModel({ url }) {
   return <primitive object={scene} />;
 }
 
-export default function ProtagonistModel() {
+export default function ProtagonistModel({ modelId = CONFIG.MODEL_ID }) {
   if (CONFIG.MODEL_URL) {
     return (
       <Suspense fallback={null}>
@@ -34,7 +37,7 @@ export default function ProtagonistModel() {
       </Suspense>
     );
   }
-  const Procedural = PROCEDURAL[CONFIG.MODEL_ID] ?? CornModel;
+  const Procedural = PROCEDURAL[modelId] ?? CornModel;
   return <Procedural />;
 }
 

@@ -1,5 +1,7 @@
 // =====================================================
-// SECTIONS — Guion de la experiencia (contenido + keyframes 3D).
+// SECTIONS — Guion de la experiencia del MAÍZ (contenido + keyframes 3D).
+// Es el guion por defecto; los demás cultivos viven en sectionsFrijol.js
+// y sectionsSandia.js, y products.js los ensambla todos.
 //
 // Cada sección define:
 //   • Texto del overlay (eyebrow, title, body, align).

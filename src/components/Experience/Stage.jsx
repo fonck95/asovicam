@@ -11,7 +11,6 @@ import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 import { CONFIG } from './config';
-import { SECTIONS } from './sections';
 import ProtagonistModel from './ProtagonistModel';
 
 // LUTs de las RectAreaLight (softboxes). Coste fijo global, una sola vez.
@@ -74,7 +73,15 @@ function SoftBox({ lightRef, position, intensity, width, height, color }) {
   );
 }
 
-export default function Stage({ stageRef, flags }) {
+export default function Stage({
+  stageRef,
+  flags,
+  sections,
+  modelId,
+  baseScale = CONFIG.MODEL_BASE_SCALE,
+  groundY = -1.05,
+  yOffset = CONFIG.MODEL_Y_OFFSET,
+}) {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
@@ -95,8 +102,8 @@ export default function Stage({ stageRef, flags }) {
   // Vectores temporales reutilizados (cero allocaciones por frame).
   const tmpPos = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(
-    () => new THREE.Vector3(SECTIONS[0].cam.target[0], SECTIONS[0].cam.target[1], SECTIONS[0].cam.target[2]),
-    [],
+    () => new THREE.Vector3(sections[0].cam.target[0], sections[0].cam.target[1], sections[0].cam.target[2]),
+    [sections],
   );
 
   // Sección activa → qué hotspots mostrar. Solo se actualiza al cambiar de
@@ -105,8 +112,8 @@ export default function Stage({ stageRef, flags }) {
 
   // Fondo de la escena como Color lineal (lo tiñe el scroll cada frame).
   useEffect(() => {
-    scene.background = new THREE.Color(SECTIONS[0].mood.bg);
-  }, [scene]);
+    scene.background = new THREE.Color(sections[0].mood.bg);
+  }, [scene, sections]);
 
   // Parallax de puntero (solo desktop sin reduced-motion).
   useEffect(() => {
@@ -165,10 +172,11 @@ export default function Stage({ stageRef, flags }) {
       // SCROLL → rotación Y del modelo (+ giro idle + parallax).
       g.rotation.y = damp(g.rotation.y, s.rotY + idle.current + tilt, 10, dt);
       g.rotation.x = damp(g.rotation.x, -pointer.current.y * 0.05 * cine, 5, dt);
-      // SCROLL → escala del modelo (zoom-in/out del producto).
-      const sc = CONFIG.MODEL_BASE_SCALE * s.mscale;
+      // SCROLL → escala del modelo (zoom-in/out del producto). `baseScale`
+      // depende del producto activo: normaliza tamaños muy distintos.
+      const sc = baseScale * s.mscale;
       g.scale.setScalar(damp(g.scale.x, sc, CONFIG.DAMP, dt));
-      g.position.y = CONFIG.MODEL_Y_OFFSET;
+      g.position.y = yOffset;
     }
 
     // ---- LUCES + EXPOSICIÓN + FONDO (SCROLL → iluminación / mood) ----
@@ -198,7 +206,7 @@ export default function Stage({ stageRef, flags }) {
 
       {/* SOFTBOX KEY (cálida, arriba-derecha-frente): highlight ancho.
           La intensidad real la fija el scroll cada frame (stage.key). */}
-      <SoftBox lightRef={keyRef} position={[3.6, 4.0, 3.4]} intensity={SECTIONS[0].mood.key}
+      <SoftBox lightRef={keyRef} position={[3.6, 4.0, 3.4]} intensity={sections[0].mood.key}
         width={3.5} height={4.5} color={CONFIG.LIGHTS.keyColor} />
       {/* SOFTBOX FILL (fría, izquierda): rellena sombras sin matar el modelado. */}
       <SoftBox lightRef={fillRef} position={[-4.2, 1.8, 1.4]} intensity={1.4}
@@ -222,18 +230,19 @@ export default function Stage({ stageRef, flags }) {
       </Environment>
 
       {/* MODELO PROTAGONISTA — el <group> es lo que el scroll rota/escala. */}
-      <group ref={modelGroupRef} position={[0, CONFIG.MODEL_Y_OFFSET, 0]}>
-        <ProtagonistModel />
+      <group ref={modelGroupRef} position={[0, yOffset, 0]}>
+        <ProtagonistModel modelId={modelId} />
 
         {/* Hotspots de la sección activa (anclados al modelo, rotan con él). */}
-        {SECTIONS[activeIndex]?.hotspots?.map((h) => (
+        {sections[activeIndex]?.hotspots?.map((h) => (
           <Hotspot key={h.id} position={h.position} label={h.label} text={h.text} />
         ))}
       </group>
 
       {/* Sombra de contacto: ancla el modelo sin shadow-maps (evita el
-          Context Lost documentado al mezclar shadow-maps + bloom). */}
-      <ContactShadows position={[0, -1.05, 0]} opacity={0.55} scale={7} blur={2.6}
+          Context Lost documentado al mezclar shadow-maps + bloom). La altura
+          `groundY` depende del producto (cada modelo "apoya" a distinta cota). */}
+      <ContactShadows position={[0, groundY, 0]} opacity={0.55} scale={7} blur={2.6}
         far={2.6} resolution={shadowRes} color="#000000" frames={flags.mobile ? 1 : undefined} />
 
       {/* OrbitControls: solo se ACTIVAN (enabled) en la sección interactiva;
@@ -242,7 +251,7 @@ export default function Stage({ stageRef, flags }) {
         ref={controlsRef}
         // El prop sigue a la sección activa para que un re-render no resetee
         // el estado; además lo ajustamos imperativamente por frame en useFrame.
-        enabled={!!SECTIONS[activeIndex]?.orbit}
+        enabled={!!sections[activeIndex]?.orbit}
         enablePan={false}
         enableDamping
         dampingFactor={CONFIG.ORBIT.dampingFactor}

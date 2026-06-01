@@ -3,7 +3,6 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Lenis from 'lenis';
 import { CONFIG, hexToLinearRGB } from './config';
-import { SECTIONS } from './sections';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -39,16 +38,16 @@ function sectionVars(section) {
 
 // Estado 3D inicial (sección 0). El componente lo usa para que R3F tenga
 // valores válidos desde el primer frame, antes de que el scroll los mueva.
-export function createInitialStage() {
+export function createInitialStage(sections) {
   return {
-    ...sectionVars(SECTIONS[0]),
+    ...sectionVars(sections[0]),
     orbit: false, // ¿OrbitControls al mando? (sección interactiva)
     orbitBlend: 0, // 0 = cámara por scroll · 1 = usuario orbitando (lerp)
     activeIndex: 0, // sección activa (para mostrar sus hotspots)
   };
 }
 
-export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags }) {
+export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags, sections }) {
   useEffect(() => {
     const root = rootRef.current;
     const stage = stageRef.current;
@@ -67,7 +66,7 @@ export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags }) {
       gsap.ticker.add(tickReduced);
 
       const ctx = gsap.context(() => {
-        SECTIONS.forEach((section, i) => {
+        sections.forEach((section, i) => {
           const el = root.querySelector(`#exp-${section.id}`);
           if (!el) return;
           ScrollTrigger.create({
@@ -129,20 +128,20 @@ export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags }) {
       });
 
       // Estado inicial = sección 0.
-      Object.assign(stage, sectionVars(SECTIONS[0]));
+      Object.assign(stage, sectionVars(sections[0]));
 
       // ↓↓↓ CADA .to() ES UNA TRANSICIÓN DE SCROLL → 3D (editable) ↓↓↓
       // La transición (i-1 → i) ocupa 1 "unidad" del timeline = ~1 pantallazo.
-      for (let i = 1; i < SECTIONS.length; i++) {
+      for (let i = 1; i < sections.length; i++) {
         tl.to(stage, {
-          ...sectionVars(SECTIONS[i]),
+          ...sectionVars(sections[i]),
           ease: i === 1 ? CONFIG.EASE_HERO : CONFIG.EASE, // "settle" del hero
         }, i - 1);
       }
 
       // (4) Triggers por sección: índice activo (hotspots), handoff a
       //     OrbitControls y reveal del texto sincronizado.
-      SECTIONS.forEach((section, i) => {
+      sections.forEach((section, i) => {
         const el = root.querySelector(`#exp-${section.id}`);
         if (!el) return;
         ScrollTrigger.create({
@@ -169,5 +168,5 @@ export function useUnifiedScroll({ rootRef, advanceRef, stageRef, flags }) {
       lenis.destroy();
       ctx.revert();
     };
-  }, [rootRef, advanceRef, stageRef, flags.reducedMotion]);
+  }, [rootRef, advanceRef, stageRef, flags.reducedMotion, sections]);
 }
