@@ -15,6 +15,7 @@ export default function Button({
   children,
   to,
   className = '',
+  type = 'button',
   ...props
 }: ButtonProps) {
   const classes = `${styles.button} ${styles[variant]} ${styles[size]} ${className}`;
@@ -28,7 +29,7 @@ export default function Button({
   }
 
   return (
-    <button className={classes} {...props}>
+    <button type={type} className={classes} {...props}>
       {children}
     </button>
   );

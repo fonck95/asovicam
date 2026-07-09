@@ -52,7 +52,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Teléfono</strong>
-                    <p>+57 316 557 0682</p>
+                    <p><a href="tel:+573165570682">+57 316 557 0682</a></p>
                   </div>
                 </div>
 
@@ -62,8 +62,8 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Correo electrónico</strong>
-                    <p>asovicam2023@gmail.com</p>
-                    <p>biojulian20@gmail.com</p>
+                    <p><a href="mailto:asovicam2023@gmail.com">asovicam2023@gmail.com</a></p>
+                    <p><a href="mailto:biojulian20@gmail.com">biojulian20@gmail.com</a></p>
                   </div>
                 </div>
 
@@ -84,10 +84,13 @@ export default function Contact() {
               {submitted ? (
                 <div className={styles.success}>
                   <span className={styles.successIcon} role="img" aria-label="Enviado">&#9989;</span>
-                  <h3>Mensaje enviado</h3>
+                  <h3>Mensaje listo para enviar</h3>
                   <p>
-                    Gracias por comunicarte con ASOVICAM. Te responderemos lo
-                    antes posible.
+                    Abrimos tu aplicación de correo con el mensaje redactado;
+                    solo falta que lo envíes. Si no se abrió, escríbenos
+                    directamente a{' '}
+                    <a href="mailto:asovicam2023@gmail.com">asovicam2023@gmail.com</a>.
+                    Gracias por comunicarte con ASOVICAM.
                   </p>
                   <Button onClick={reset}>
                     Enviar otro mensaje

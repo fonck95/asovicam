@@ -8,6 +8,7 @@ export default function NotFound() {
       <SEO
         title="Página no encontrada"
         description="La página que buscas no existe. Vuelve al inicio de ASOVICAM."
+        noindex
       />
       <section className={styles.notFound}>
         <div className="container" style={{ textAlign: 'center' }}>

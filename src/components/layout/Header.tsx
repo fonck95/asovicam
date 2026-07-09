@@ -19,6 +19,29 @@ export default function Header() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Cierra el menú al navegar (incluye back/forward del navegador):
+  // ajuste de estado durante el render, sin efecto.
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname);
+    setIsMenuOpen(false);
+  }
+
+  // Con el menú móvil abierto: cerrar con Escape y bloquear el scroll de fondo.
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isMenuOpen]);
+
   const mainLinks = navLinks.filter((link) => link.path !== '/contacto');
   const contactLink = navLinks.find((link) => link.path === '/contacto');
 
@@ -38,6 +61,7 @@ export default function Header() {
         </Link>
 
         <nav
+          id="main-nav"
           className={`${styles.nav} ${isMenuOpen ? styles.navOpen : ''}`}
           aria-label="Navegación principal"
         >
@@ -49,6 +73,7 @@ export default function Header() {
                   className={`${styles.navLink} ${
                     location.pathname === link.path ? styles.navLinkActive : ''
                   }`}
+                  aria-current={location.pathname === link.path ? 'page' : undefined}
                   onClick={closeMenu}
                 >
                   {link.label}
@@ -60,6 +85,7 @@ export default function Header() {
                 <Link
                   to={contactLink.path}
                   className={styles.navCta}
+                  aria-current={location.pathname === contactLink.path ? 'page' : undefined}
                   onClick={closeMenu}
                 >
                   {contactLink.label}
@@ -73,6 +99,7 @@ export default function Header() {
           className={styles.menuToggle}
           onClick={toggleMenu}
           aria-expanded={isMenuOpen}
+          aria-controls="main-nav"
           aria-label={isMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
         >
           {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
