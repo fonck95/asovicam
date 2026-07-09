@@ -42,20 +42,36 @@ export default class ErrorBoundary extends Component<Props, State> {
           <p style={{ color: '#6b7280', marginBottom: '1.5rem', maxWidth: '480px' }}>
             Ha ocurrido un error inesperado. Por favor, recarga la pagina o vuelve al inicio.
           </p>
-          <button
-            onClick={() => window.location.assign('/')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              backgroundColor: '#15803d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '0.5rem',
-              fontSize: '1rem',
-              cursor: 'pointer',
-            }}
-          >
-            Volver al inicio
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#166534',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.5rem',
+                fontSize: '1rem',
+                cursor: 'pointer',
+              }}
+            >
+              Recargar página
+            </button>
+            <button
+              onClick={() => window.location.assign('/')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: 'transparent',
+                color: '#166534',
+                border: '1px solid #166534',
+                borderRadius: '0.5rem',
+                fontSize: '1rem',
+                cursor: 'pointer',
+              }}
+            >
+              Volver al inicio
+            </button>
+          </div>
         </div>
       );
     }

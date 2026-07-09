@@ -64,11 +64,11 @@ export default function Footer() {
               </li>
               <li className={styles.contactItem}>
                 <Phone size={16} />
-                <span>+57 316 557 0682</span>
+                <a href="tel:+573165570682">+57 316 557 0682</a>
               </li>
               <li className={styles.contactItem}>
                 <Mail size={16} />
-                <span>asovicam2023@gmail.com</span>
+                <a href="mailto:asovicam2023@gmail.com">asovicam2023@gmail.com</a>
               </li>
             </ul>
           </div>

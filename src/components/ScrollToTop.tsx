@@ -1,12 +1,26 @@
 import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigationType } from 'react-router-dom';
 
 export default function ScrollToTop() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
+  const navigationType = useNavigationType();
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
+    // Atrás/adelante del navegador: dejar que restaure la posición previa.
+    if (navigationType === 'POP') return;
+
+    if (hash) {
+      const target = document.getElementById(hash.slice(1));
+      if (target) {
+        target.scrollIntoView();
+        return;
+      }
+    }
+
+    // 'instant' evita que el scroll-behavior:smooth global anime cada
+    // cambio de página.
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [pathname, hash, navigationType]);
 
   return null;
 }
