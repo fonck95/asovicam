@@ -65,6 +65,29 @@ El proyecto ya es compatible con Vercel sin configuración extra:
 > El HDRI ambiental usa el preset `apartment` que `@react-three/drei`
 > sirve desde su CDN. No requiere configuración manual.
 
+## Sorteo de parcelas (`/sorteo`)
+
+La ruta **`/sorteo`** permite sortear en vivo los 48 lotes del predio
+LA FARAONA entre personas o agrupaciones:
+
+1. El organizador pega (o sube en .csv/.txt) la lista de participantes —
+   debe coincidir con la cantidad de lotes, o marcar la opción de lotes
+   libres si son menos.
+2. Al iniciar se genera un **enlace compartible**: la lista, la semilla
+   aleatoria y la hora de inicio viajan en el hash de la URL.
+3. Cada persona que abra el enlace ve el mismo sorteo revelarse **en
+   tiempo real y sincronizado** en su propio dispositivo (sin backend:
+   el resultado se calcula de forma determinista con la semilla pública
+   y se revela según el reloj).
+4. Al finalizar se puede descargar el acta en CSV.
+
+Los polígonos de los lotes provienen del Google My Maps oficial. Si el
+mapa cambia, regenera los datos con:
+
+```bash
+node scripts/sync-parcelas.mjs   # descarga el KML y reescribe src/data/parcelas.ts
+```
+
 ## Scripts
 
 ```bash

@@ -7,6 +7,7 @@ export const navLinks: NavLink[] = [
   { label: 'Productos', path: '/productos' },
   { label: 'Experiencia 3D', path: '/experiencia' },
   { label: 'Galería', path: '/galeria' },
+  { label: 'Sorteo', path: '/sorteo' },
   { label: 'Preguntas', path: '/preguntas' },
   { label: 'Contacto', path: '/contacto' },
 ];

@@ -27,6 +27,17 @@ export interface NavLink {
   path: string;
 }
 
+export interface Parcela {
+  id: number;
+  nombre: string;
+  /** Área en hectáreas según el mapa oficial (null si el KML no la trae). */
+  areaHa: number | null;
+  /** Vértices [lat, lng] del polígono del lote. */
+  coords: [number, number][];
+  /** Punto [lat, lng] donde el mapa oficial ubica la etiqueta del lote. */
+  centro: [number, number];
+}
+
 export interface ContactFormData {
   name: string;
   email: string;
