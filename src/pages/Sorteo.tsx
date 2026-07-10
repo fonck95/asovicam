@@ -3,10 +3,13 @@ import type { ChangeEvent } from 'react';
 import SEO from '../components/SEO';
 import Button from '../components/ui/Button';
 import MapaParcelas from '../components/sorteo/MapaParcelas';
-import { parcelas } from '../data/parcelas';
+import { mapaPredeterminado } from '../data/mapaPredeterminado';
+import { cargarMapaDeArchivo } from '../utils/kml';
 import {
+  HASH_MAXIMO,
   calcularAsignaciones,
   codificarSorteo,
+  codificarSorteoConMapa,
   colorDeParcela,
   decodificarSorteo,
   estadoSorteo,
@@ -14,9 +17,15 @@ import {
   parsearParticipantes,
 } from '../utils/sorteo';
 import type { SorteoConfig } from '../utils/sorteo';
+import type { MapaSorteo } from '../types';
 import styles from './Sorteo.module.css';
 
-const TOTAL_LOTES = parcelas.length;
+const SIN_ASIGNACIONES: ReadonlyMap<number, string> = new Map();
+
+/** Cantidad de lotes contra la que se valida y sortea una configuración. */
+function totalSegunConfig(c: SorteoConfig): number {
+  return c.mapa?.lotes.length ?? mapaPredeterminado.lotes.length;
+}
 
 function formatearCuenta(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -40,16 +49,32 @@ function Ruleta({ nombres }: { nombres: string[] }) {
 }
 
 interface ConfiguradorProps {
+  mapa: MapaSorteo;
+  esMapaPersonalizado: boolean;
+  errorMapa: string | null;
+  cargandoMapa: boolean;
+  onCargarMapa: (archivo: File) => void;
+  onRestaurarMapa: () => void;
   onIniciar: (config: SorteoConfig) => void;
 }
 
-function Configurador({ onIniciar }: ConfiguradorProps) {
+function Configurador({
+  mapa,
+  esMapaPersonalizado,
+  errorMapa,
+  cargandoMapa,
+  onCargarMapa,
+  onRestaurarMapa,
+  onIniciar,
+}: ConfiguradorProps) {
   const [texto, setTexto] = useState('');
   const [intervaloS, setIntervaloS] = useState(6);
   const [esperaS, setEsperaS] = useState(60);
   const [permitirLibres, setPermitirLibres] = useState(false);
   const archivoRef = useRef<HTMLInputElement>(null);
+  const archivoMapaRef = useRef<HTMLInputElement>(null);
 
+  const totalLotes = mapa.lotes.length;
   const participantes = useMemo(() => parsearParticipantes(texto), [texto]);
   const duplicados = useMemo(() => {
     const vistos = new Set<string>();
@@ -62,9 +87,14 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
   }, [participantes]);
 
   const n = participantes.length;
-  const excedente = n > TOTAL_LOTES;
-  const completo = n === TOTAL_LOTES;
+  const excedente = n > totalLotes;
+  const completo = n === totalLotes;
   const puedeIniciar = n > 0 && !excedente && (completo || permitirLibres);
+
+  const areaTotal = useMemo(() => {
+    const suma = mapa.lotes.reduce((s, l) => s + (l.areaHa ?? 0), 0);
+    return suma > 0 ? Math.round(suma * 10) / 10 : null;
+  }, [mapa]);
 
   const cargarArchivo = (e: ChangeEvent<HTMLInputElement>) => {
     const archivo = e.target.files?.[0];
@@ -73,10 +103,16 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
     e.target.value = '';
   };
 
+  const cargarArchivoMapa = (e: ChangeEvent<HTMLInputElement>) => {
+    const archivo = e.target.files?.[0];
+    if (archivo) onCargarMapa(archivo);
+    e.target.value = '';
+  };
+
   const iniciar = () => {
     if (!puedeIniciar) return;
     onIniciar({
-      v: 1,
+      v: 2,
       participantes,
       seed: nuevaSemilla(),
       inicio: Date.now() + esperaS * 1000,
@@ -86,13 +122,58 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
 
   return (
     <div className={styles.configurador}>
+      <div className={`${styles.panel} ${styles.panelMapa}`}>
+        <h2 className={styles.panelTitulo}>1. Mapa de lotes</h2>
+        <p className={styles.ayuda}>
+          Mapa actual: <strong>{mapa.nombre}</strong> — {totalLotes} lote(s)
+          {areaTotal != null && <> · {areaTotal} ha en total</>}. Puedes usar
+          otro mapa cargando un archivo <strong>KML o KMZ</strong> (por
+          ejemplo, exportado desde Google My Maps o Google Earth): cada
+          polígono del archivo se toma como un lote, y el polígono que
+          envuelve a los demás se usa como lindero.
+        </p>
+        <div className={styles.filaAcciones}>
+          <input
+            ref={archivoMapaRef}
+            type="file"
+            accept=".kml,.kmz"
+            onChange={cargarArchivoMapa}
+            hidden
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => archivoMapaRef.current?.click()}
+            disabled={cargandoMapa}
+          >
+            {cargandoMapa ? 'Cargando mapa…' : 'Cargar mapa KML/KMZ'}
+          </Button>
+          {esMapaPersonalizado && (
+            <Button variant="outline" size="sm" onClick={onRestaurarMapa}>
+              Volver al mapa precargado
+            </Button>
+          )}
+        </div>
+        {errorMapa && <p className={styles.error}>{errorMapa}</p>}
+        <div className={styles.previewMapa}>
+          <MapaParcelas
+            lotes={mapa.lotes}
+            limite={mapa.limite}
+            asignaciones={SIN_ASIGNACIONES}
+            enJuego={null}
+            ultima={null}
+            seguir={false}
+          />
+        </div>
+      </div>
+
       <div className={styles.panel}>
-        <h2 className={styles.panelTitulo}>1. Lista de participantes</h2>
+        <h2 className={styles.panelTitulo}>2. Lista de participantes</h2>
         <p className={styles.ayuda}>
           Escribe una persona o agrupación por línea (por ejemplo, «Familia
           Pérez»), o carga un archivo .csv / .txt con los nombres en la
           primera columna. Debe haber la misma cantidad de participantes que
-          de lotes: <strong>{TOTAL_LOTES}</strong>.
+          de lotes: <strong>{totalLotes}</strong>.
         </p>
         <textarea
           className={styles.lista}
@@ -108,7 +189,7 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
               completo ? styles.contadorOk : excedente ? styles.contadorError : ''
             }`}
           >
-            {n} / {TOTAL_LOTES} participantes
+            {n} / {totalLotes} participantes
           </span>
           <input
             ref={archivoRef}
@@ -128,8 +209,8 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
         </div>
         {excedente && (
           <p className={styles.error}>
-            Hay {n - TOTAL_LOTES} participante(s) de más: solo existen{' '}
-            {TOTAL_LOTES} lotes. Elimina los sobrantes para continuar.
+            Hay {n - totalLotes} participante(s) de más: solo existen{' '}
+            {totalLotes} lotes. Elimina los sobrantes para continuar.
           </p>
         )}
         {duplicados.length > 0 && (
@@ -138,21 +219,21 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
             {duplicados.join(', ')}
           </p>
         )}
-        {n > 0 && n < TOTAL_LOTES && (
+        {n > 0 && n < totalLotes && (
           <label className={styles.opcionLibres}>
             <input
               type="checkbox"
               checked={permitirLibres}
               onChange={(e) => setPermitirLibres(e.target.checked)}
             />
-            Sortear con {n} participante(s): quedarán {TOTAL_LOTES - n} lote(s)
+            Sortear con {n} participante(s): quedarán {totalLotes - n} lote(s)
             libres, elegidos también al azar.
           </label>
         )}
       </div>
 
       <div className={styles.panel}>
-        <h2 className={styles.panelTitulo}>2. Ritmo del sorteo</h2>
+        <h2 className={styles.panelTitulo}>3. Ritmo del sorteo</h2>
         <div className={styles.campo}>
           <label htmlFor="espera">Espera antes de empezar</label>
           <select
@@ -190,6 +271,9 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
           Al iniciar se genera un enlace único: compártelo por WhatsApp o
           redes y cada persona verá el sorteo avanzar en vivo en su propio
           teléfono, todos sincronizados a la misma hora.
+          {esMapaPersonalizado && (
+            <> El mapa cargado viaja dentro del mismo enlace.</>
+          )}
         </p>
         <Button onClick={iniciar} disabled={!puedeIniciar} size="lg">
           Iniciar sorteo
@@ -200,16 +284,30 @@ function Configurador({ onIniciar }: ConfiguradorProps) {
 }
 
 export default function Sorteo() {
-  const [config, setConfig] = useState<SorteoConfig | null>(() =>
+  const [configCruda, setConfigCruda] = useState<SorteoConfig | null>(() =>
     decodificarSorteo(window.location.hash),
   );
+  const [mapaCargado, setMapaCargado] = useState<MapaSorteo | null>(null);
+  const [errorMapa, setErrorMapa] = useState<string | null>(null);
+  const [cargandoMapa, setCargandoMapa] = useState(false);
   const [ahora, setAhora] = useState(() => Date.now());
   const [seguir, setSeguir] = useState(true);
   const [copiado, setCopiado] = useState(false);
 
+  // Un enlace solo es utilizable si sus participantes caben en su mapa.
+  const config =
+    configCruda && configCruda.participantes.length <= totalSegunConfig(configCruda)
+      ? configCruda
+      : null;
+  const enlaceInvalido = configCruda !== null && config === null;
+
+  // El mapa activo: el del enlace, el subido por el organizador o el fijo.
+  const mapaActivo: MapaSorteo = config?.mapa ?? mapaCargado ?? mapaPredeterminado;
+  const totalLotes = mapaActivo.lotes.length;
+
   // Soporta pegar otro enlace o navegar atrás/adelante.
   useEffect(() => {
-    const onHash = () => setConfig(decodificarSorteo(window.location.hash));
+    const onHash = () => setConfigCruda(decodificarSorteo(window.location.hash));
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -222,7 +320,7 @@ export default function Sorteo() {
   }, [config]);
 
   const asignaciones = useMemo(
-    () => (config ? calcularAsignaciones(config, TOTAL_LOTES) : []),
+    () => (config ? calcularAsignaciones(config, totalSegunConfig(config)) : []),
     [config],
   );
   const estado = config ? estadoSorteo(config, ahora) : null;
@@ -233,16 +331,46 @@ export default function Sorteo() {
   );
   const nombresRestantes = asignaciones.slice(reveladas).map((a) => a.participante);
 
-  const iniciar = (nueva: SorteoConfig) => {
-    window.location.hash = codificarSorteo(nueva);
-    setConfig(nueva);
+  const cargarMapa = (archivo: File) => {
+    setCargandoMapa(true);
+    setErrorMapa(null);
+    cargarMapaDeArchivo(archivo)
+      .then((mapa) => {
+        if (mapa.lotes.length < 2) {
+          throw new Error('El mapa debe tener al menos 2 lotes (polígonos).');
+        }
+        setMapaCargado(mapa);
+      })
+      .catch((e: unknown) => {
+        setErrorMapa(e instanceof Error ? e.message : 'No se pudo leer el archivo.');
+      })
+      .finally(() => setCargandoMapa(false));
+  };
+
+  const iniciar = (base: SorteoConfig) => {
+    let hash: string;
+    let cfg = base;
+    if (mapaCargado) {
+      ({ hash, config: cfg } = codificarSorteoConMapa(base, mapaCargado));
+      if (hash.length > HASH_MAXIMO) {
+        window.alert(
+          'El mapa cargado es muy detallado y el enlace del sorteo quedó ' +
+            'muy largo. Funciona, pero algunos servicios de mensajería ' +
+            'podrían recortarlo: verifica que el enlace llegue completo.',
+        );
+      }
+    } else {
+      hash = codificarSorteo(base);
+    }
+    window.location.hash = hash;
+    setConfigCruda(cfg);
     setCopiado(false);
   };
 
   const nuevoSorteo = () => {
     if (!window.confirm('¿Salir de este sorteo y preparar uno nuevo?')) return;
     window.history.replaceState(null, '', window.location.pathname);
-    setConfig(null);
+    setConfigCruda(null);
   };
 
   const copiarEnlace = () => {
@@ -253,9 +381,13 @@ export default function Sorteo() {
   };
 
   const descargarCSV = () => {
-    const filas = [['Parcela', 'Área (ha)', 'Asignado a']];
-    parcelas.forEach((p, idx) => {
-      filas.push([p.nombre, p.areaHa != null ? String(p.areaHa) : '', mapaAsignaciones.get(idx) ?? 'Libre']);
+    const filas = [['Lote', 'Área (ha)', 'Asignado a']];
+    mapaActivo.lotes.forEach((l, idx) => {
+      filas.push([
+        l.nombre,
+        l.areaHa != null ? String(l.areaHa) : '',
+        mapaAsignaciones.get(idx) ?? 'Libre',
+      ]);
     });
     const csv = filas
       .map((f) => f.map((c) => `"${c.replace(/"/g, '""')}"`).join(','))
@@ -264,7 +396,7 @@ export default function Sorteo() {
     const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'sorteo-parcelas-asovicam.csv';
+    a.download = 'sorteo-lotes-asovicam.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -274,22 +406,22 @@ export default function Sorteo() {
       ? asignaciones[reveladas].parcelaIdx
       : null;
   const ultima = reveladas > 0 ? asignaciones[reveladas - 1].parcelaIdx : null;
-  const parcelaEnJuego = enJuego != null ? parcelas[enJuego] : null;
+  const loteEnJuego = enJuego != null ? mapaActivo.lotes[enJuego] : null;
   const ultimaAsignacion = reveladas > 0 ? asignaciones[reveladas - 1] : null;
 
   return (
     <>
       <SEO
-        title="Sorteo de parcelas"
-        description="Sorteo público y en vivo de las parcelas del predio La Faraona entre las familias y agrupaciones de ASOVICAM."
+        title="Sorteo de lotes"
+        description="Sorteo público y en vivo de lotes sobre el mapa: carga tu lista de personas o agrupaciones y comparte el enlace para que todos vean el resultado en tiempo real."
       />
 
       <section className={styles.hero}>
         <div className="container">
-          <h1 className={styles.heroTitle}>Sorteo de parcelas</h1>
+          <h1 className={styles.heroTitle}>Sorteo de lotes</h1>
           <p className={styles.heroSubtitle}>
-            Asignación transparente y en vivo de los {TOTAL_LOTES} lotes del
-            predio LA FARAONA. Todos los asistentes ven el mismo sorteo, al
+            Asignación transparente y en vivo de los {totalLotes} lotes de{' '}
+            {mapaActivo.nombre}. Todos los asistentes ven el mismo sorteo, al
             mismo tiempo, desde cualquier dispositivo.
           </p>
         </div>
@@ -297,12 +429,34 @@ export default function Sorteo() {
 
       <section className="section">
         <div className="container">
-          {!config && <Configurador onIniciar={iniciar} />}
+          {enlaceInvalido && (
+            <p className={styles.error}>
+              El enlace del sorteo no es válido: trae más participantes que
+              lotes. Pide al organizador que lo genere de nuevo.
+            </p>
+          )}
+
+          {!config && (
+            <Configurador
+              mapa={mapaActivo}
+              esMapaPersonalizado={mapaCargado !== null}
+              errorMapa={errorMapa}
+              cargandoMapa={cargandoMapa}
+              onCargarMapa={cargarMapa}
+              onRestaurarMapa={() => {
+                setMapaCargado(null);
+                setErrorMapa(null);
+              }}
+              onIniciar={iniciar}
+            />
+          )}
 
           {config && estado && (
             <div className={styles.envivo}>
               <div className={styles.mapaCaja}>
                 <MapaParcelas
+                  lotes={mapaActivo.lotes}
+                  limite={mapaActivo.limite}
                   asignaciones={mapaAsignaciones}
                   enJuego={enJuego}
                   ultima={ultima}
@@ -320,18 +474,18 @@ export default function Sorteo() {
                     <p className={styles.ayuda}>
                       Inicio: {new Date(config.inicio).toLocaleTimeString()} ·{' '}
                       {config.participantes.length} participante(s) ·{' '}
-                      {TOTAL_LOTES} lotes
+                      {totalLotes} lotes
                     </p>
                   </div>
                 )}
 
-                {estado.fase === 'en_curso' && parcelaEnJuego && (
+                {estado.fase === 'en_curso' && loteEnJuego && (
                   <div className={`${styles.panel} ${styles.panelCentrado}`}>
                     <p className={styles.etiquetaFase}>Sorteando ahora</p>
                     <p className={styles.loteEnJuego}>
-                      {parcelaEnJuego.nombre}
-                      {parcelaEnJuego.areaHa != null && (
-                        <span className={styles.area}> · {parcelaEnJuego.areaHa} ha</span>
+                      {loteEnJuego.nombre}
+                      {loteEnJuego.areaHa != null && (
+                        <span className={styles.area}> · {loteEnJuego.areaHa} ha</span>
                       )}
                     </p>
                     <Ruleta nombres={nombresRestantes} />
@@ -380,7 +534,7 @@ export default function Sorteo() {
                   {ultimaAsignacion && estado.fase !== 'finalizado' && (
                     <p className={styles.ultimaRevelada} aria-live="polite">
                       Último:{' '}
-                      <strong>{parcelas[ultimaAsignacion.parcelaIdx].nombre}</strong>{' '}
+                      <strong>{mapaActivo.lotes[ultimaAsignacion.parcelaIdx].nombre}</strong>{' '}
                       → {ultimaAsignacion.participante}
                     </p>
                   )}
@@ -398,7 +552,7 @@ export default function Sorteo() {
                             aria-hidden="true"
                           />
                           <span className={styles.feedLote}>
-                            {parcelas[a.parcelaIdx].nombre}
+                            {mapaActivo.lotes[a.parcelaIdx].nombre}
                           </span>
                           <span className={styles.feedNombre}>{a.participante}</span>
                         </li>
@@ -437,14 +591,14 @@ export default function Sorteo() {
                 <table className={styles.tabla}>
                   <thead>
                     <tr>
-                      <th>Parcela</th>
+                      <th>Lote</th>
                       <th>Área</th>
                       <th>Asignado a</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {parcelas.map((p, idx) => (
-                      <tr key={p.id}>
+                    {mapaActivo.lotes.map((l, idx) => (
+                      <tr key={idx}>
                         <td>
                           <span
                             className={styles.feedColor}
@@ -455,9 +609,9 @@ export default function Sorteo() {
                             }}
                             aria-hidden="true"
                           />
-                          {p.nombre}
+                          {l.nombre}
                         </td>
-                        <td>{p.areaHa != null ? `${p.areaHa} ha` : '—'}</td>
+                        <td>{l.areaHa != null ? `${l.areaHa} ha` : '—'}</td>
                         <td>{mapaAsignaciones.get(idx) ?? <em>Libre</em>}</td>
                       </tr>
                     ))}

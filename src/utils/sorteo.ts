@@ -1,15 +1,18 @@
-// Lógica determinista del sorteo de parcelas.
+// Lógica determinista del sorteo de lotes.
 //
-// El sorteo completo queda definido por una configuración pequeña
-// (participantes + semilla + hora de inicio + intervalo) que viaja en el
-// hash de la URL. Cualquier dispositivo que abra el enlace reconstruye
-// EXACTAMENTE el mismo sorteo y revela cada asignación a la misma hora de
-// reloj, sin necesidad de servidor: eso da la vista "en tiempo real"
-// sincronizada entre todos los asistentes.
+// El sorteo completo queda definido por una configuración
+// (participantes + semilla + hora de inicio + intervalo + mapa opcional)
+// que viaja en el hash de la URL. Cualquier dispositivo que abra el enlace
+// reconstruye EXACTAMENTE el mismo sorteo y revela cada asignación a la
+// misma hora de reloj, sin necesidad de servidor: eso da la vista "en
+// tiempo real" sincronizada entre todos los asistentes.
+import { deflateSync, inflateSync, strToU8, strFromU8 } from 'fflate';
+import type { Lote, MapaSorteo } from '../types';
+import { simplificarAnillo, centroide } from './kml';
 
 export interface SorteoConfig {
   /** Versión del formato del enlace, por compatibilidad futura. */
-  v: 1;
+  v: 1 | 2;
   /** Nombre de cada persona o agrupación participante. */
   participantes: string[];
   /** Semilla del generador pseudoaleatorio (entera, 32 bits). */
@@ -18,6 +21,12 @@ export interface SorteoConfig {
   inicio: number;
   /** Milisegundos entre una revelación y la siguiente. */
   intervaloMs: number;
+  /**
+   * Mapa personalizado (KML/KMZ subido) embebido en el enlace para que
+   * todos los asistentes vean los mismos lotes. Ausente = mapa
+   * predeterminado del sitio.
+   */
+  mapa?: MapaSorteo;
 }
 
 export interface Asignacion {
@@ -107,35 +116,44 @@ export function estadoSorteo(config: SorteoConfig, ahora: number): EstadoSorteo 
   };
 }
 
-// --- Codificación del enlace compartible (base64url en el hash) ---------
+// --- Codificación del enlace compartible (deflate + base64url) ----------
 
-function aBase64Url(texto: string): string {
-  const bytes = new TextEncoder().encode(texto);
+// Los enlaces nuevos llevan el prefijo "2!" y el JSON comprimido con
+// deflate; los enlaces v1 (sin prefijo, base64 plano) se siguen aceptando.
+const PREFIJO_V2 = '2!';
+
+function bytesABase64Url(bytes: Uint8Array): string {
   let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
+  const BLOQUE = 0x8000;
+  for (let i = 0; i < bytes.length; i += BLOQUE) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + BLOQUE));
+  }
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function deBase64Url(b64url: string): string {
+function base64UrlABytes(b64url: string): Uint8Array {
   const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
   const bin = atob(b64);
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
 export function codificarSorteo(config: SorteoConfig): string {
-  return aBase64Url(JSON.stringify(config));
+  const bytes = deflateSync(strToU8(JSON.stringify(config)), { level: 9 });
+  return PREFIJO_V2 + bytesABase64Url(bytes);
 }
 
 export function decodificarSorteo(hash: string): SorteoConfig | null {
   try {
-    const limpio = hash.replace(/^#/, '');
+    const limpio = decodeURIComponent(hash.replace(/^#/, ''));
     if (!limpio) return null;
-    const data: unknown = JSON.parse(deBase64Url(limpio));
+    const json = limpio.startsWith(PREFIJO_V2)
+      ? strFromU8(inflateSync(base64UrlABytes(limpio.slice(PREFIJO_V2.length))))
+      : strFromU8(base64UrlABytes(limpio));
+    const data: unknown = JSON.parse(json);
     if (typeof data !== 'object' || data === null) return null;
     const c = data as Partial<SorteoConfig>;
     if (
-      c.v !== 1 ||
+      (c.v !== 1 && c.v !== 2) ||
       !Array.isArray(c.participantes) ||
       c.participantes.length === 0 ||
       !c.participantes.every((p) => typeof p === 'string') ||
@@ -146,10 +164,76 @@ export function decodificarSorteo(hash: string): SorteoConfig | null {
     ) {
       return null;
     }
+    if (c.mapa !== undefined && !esMapaValido(c.mapa)) return null;
     return c as SorteoConfig;
   } catch {
     return null;
   }
+}
+
+function esMapaValido(mapa: unknown): mapa is MapaSorteo {
+  if (typeof mapa !== 'object' || mapa === null) return false;
+  const m = mapa as Partial<MapaSorteo>;
+  const esCoord = (c: unknown): boolean =>
+    Array.isArray(c) && c.length === 2 && c.every((n) => typeof n === 'number');
+  return (
+    typeof m.nombre === 'string' &&
+    Array.isArray(m.lotes) &&
+    m.lotes.length > 0 &&
+    m.lotes.every(
+      (l) =>
+        typeof l === 'object' &&
+        l !== null &&
+        typeof l.nombre === 'string' &&
+        (l.areaHa === null || typeof l.areaHa === 'number') &&
+        Array.isArray(l.coords) &&
+        l.coords.length >= 3 &&
+        l.coords.every(esCoord) &&
+        esCoord(l.centro),
+    ) &&
+    (m.limite === null || (Array.isArray(m.limite) && m.limite.every(esCoord)))
+  );
+}
+
+// --- Empaquetado de mapas personalizados para el enlace ------------------
+
+/** Presupuesto máximo del hash: URLs mayores se vuelven difíciles de compartir. */
+export const HASH_MAXIMO = 24000;
+
+function redondearRing(ring: [number, number][]): [number, number][] {
+  return ring.map(([lat, lng]) => [Math.round(lat * 1e5) / 1e5, Math.round(lng * 1e5) / 1e5]);
+}
+
+function compactarMapa(mapa: MapaSorteo, tolerancia: number): MapaSorteo {
+  const lote = (l: Lote): Lote => {
+    const coords = redondearRing(simplificarAnillo(l.coords, tolerancia));
+    return { nombre: l.nombre, areaHa: l.areaHa, coords, centro: centroide(coords) };
+  };
+  return {
+    nombre: mapa.nombre,
+    lotes: mapa.lotes.map(lote),
+    limite: mapa.limite ? redondearRing(simplificarAnillo(mapa.limite, tolerancia * 2)) : null,
+  };
+}
+
+/**
+ * Codifica el sorteo con el mapa embebido, simplificando progresivamente
+ * los polígonos (≈1 m → ≈30 m) hasta que el enlace quepa en el hash.
+ * Devuelve el hash y la configuración final (con el mapa que realmente
+ * viaja en el enlace, para que el organizador vea lo mismo que el resto).
+ */
+export function codificarSorteoConMapa(
+  config: SorteoConfig,
+  mapa: MapaSorteo,
+): { hash: string; config: SorteoConfig } {
+  const tolerancias = [0, 0.00001, 0.00003, 0.0001, 0.0003];
+  let resultado = { hash: '', config };
+  for (const tol of tolerancias) {
+    const empaquetado: SorteoConfig = { ...config, mapa: compactarMapa(mapa, tol) };
+    resultado = { hash: codificarSorteo(empaquetado), config: empaquetado };
+    if (resultado.hash.length <= HASH_MAXIMO) break;
+  }
+  return resultado;
 }
 
 /** Semilla aleatoria de 32 bits con la entropía del navegador. */

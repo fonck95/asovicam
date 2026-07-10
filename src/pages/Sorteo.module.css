@@ -53,6 +53,22 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Panel del mapa: ocupa todo el ancho del configurador. */
+.panelMapa {
+  grid-column: 1 / -1;
+}
+
+/* 420px coincide con el min-height propio del mapa Leaflet. */
+.previewMapa {
+  margin-top: var(--spacing-md);
+  height: 420px;
+  display: flex;
+}
+
+.previewMapa > * {
+  flex: 1;
+}
+
 .panelTitulo {
   font-family: var(--font-family-heading);
   font-size: var(--text-xl);

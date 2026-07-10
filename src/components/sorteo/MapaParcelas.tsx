@@ -1,16 +1,20 @@
 import { useEffect, useRef } from 'react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { parcelas, limitePredio } from '../../data/parcelas';
+import type { Lote } from '../../types';
 import { colorDeParcela } from '../../utils/sorteo';
 import styles from './MapaParcelas.module.css';
 
 interface MapaParcelasProps {
-  /** Participante ya revelado por índice de parcela. */
+  /** Lotes a dibujar (del mapa predeterminado o de un KML/KMZ subido). */
+  lotes: Lote[];
+  /** Lindero del predio, si el mapa lo trae. */
+  limite: [number, number][] | null;
+  /** Participante ya revelado por índice de lote. */
   asignaciones: ReadonlyMap<number, string>;
-  /** Índice de la parcela que se está sorteando en este momento. */
+  /** Índice del lote que se está sorteando en este momento. */
   enJuego: number | null;
-  /** Índice de la última parcela revelada (el mapa vuela hacia ella). */
+  /** Índice del último lote revelado (el mapa vuela hacia él). */
   ultima: number | null;
   /** Si el mapa debe seguir automáticamente cada revelación. */
   seguir: boolean;
@@ -34,24 +38,45 @@ function estiloAsignada(idx: number): L.PathOptions {
   };
 }
 
-function contenidoPopup(idx: number, participante: string | undefined): string {
-  const p = parcelas[idx];
-  const area = p.areaHa != null ? ` · ${p.areaHa} ha` : '';
-  const estado = participante
-    ? `Asignada a: <strong>${participante.replace(/</g, '&lt;')}</strong>`
-    : 'Aún sin asignar';
-  return `<strong>${p.nombre}</strong>${area}<br/>${estado}`;
+/** Texto corto del chip sobre el lote: su número si lo tiene, o su orden. */
+function etiquetaCorta(lote: Lote, idx: number): string {
+  const numero = lote.nombre.match(/\d+/);
+  return numero ? numero[0] : String(idx + 1);
 }
 
-export default function MapaParcelas({ asignaciones, enJuego, ultima, seguir }: MapaParcelasProps) {
+function contenidoPopup(lote: Lote, participante: string | undefined): string {
+  const area = lote.areaHa != null ? ` · ${lote.areaHa} ha` : '';
+  const estado = participante
+    ? `Asignado a: <strong>${escaparHtml(participante)}</strong>`
+    : 'Aún sin asignar';
+  return `<strong>${escaparHtml(lote.nombre)}</strong>${area}<br/>${estado}`;
+}
+
+function escaparHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function limitesDelMapa(lotes: Lote[], limite: [number, number][] | null): L.LatLngBounds {
+  if (limite && limite.length >= 2) return L.latLngBounds(limite);
+  return L.latLngBounds(lotes.flatMap((l) => l.coords));
+}
+
+export default function MapaParcelas({
+  lotes,
+  limite,
+  asignaciones,
+  enJuego,
+  ultima,
+  seguir,
+}: MapaParcelasProps) {
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const capasRef = useRef<L.Polygon[]>([]);
   const pintadasRef = useRef(new Map<number, string | undefined>());
 
-  // Creación del mapa: una sola vez.
+  // Creación del mapa; se reconstruye si cambian los lotes (otro KML).
   useEffect(() => {
-    if (!divRef.current || mapRef.current) return;
+    if (!divRef.current) return;
     const map = L.map(divRef.current, { zoomSnap: 0.5 });
     L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -62,23 +87,25 @@ export default function MapaParcelas({ asignaciones, enJuego, ultima, seguir }: 
       },
     ).addTo(map);
 
-    L.polygon(limitePredio, {
-      color: '#ffffff',
-      weight: 2,
-      dashArray: '6 6',
-      fill: false,
-      opacity: 0.85,
-      interactive: false,
-    }).addTo(map);
+    if (limite && limite.length >= 2) {
+      L.polygon(limite, {
+        color: '#ffffff',
+        weight: 2,
+        dashArray: '6 6',
+        fill: false,
+        opacity: 0.85,
+        interactive: false,
+      }).addTo(map);
+    }
 
-    capasRef.current = parcelas.map((p, idx) => {
-      const capa = L.polygon(p.coords, ESTILO_LIBRE).addTo(map);
-      capa.bindTooltip(String(p.id), {
+    capasRef.current = lotes.map((lote, idx) => {
+      const capa = L.polygon(lote.coords, ESTILO_LIBRE).addTo(map);
+      capa.bindTooltip(etiquetaCorta(lote, idx), {
         permanent: true,
         direction: 'center',
         className: styles.numeroLote,
       });
-      capa.bindPopup(contenidoPopup(idx, undefined));
+      capa.bindPopup(contenidoPopup(lote, undefined));
       return capa;
     });
 
@@ -87,16 +114,16 @@ export default function MapaParcelas({ asignaciones, enJuego, ultima, seguir }: 
     // (p. ej. StrictMode) con asignaciones ya reveladas.
     pintadasRef.current.clear();
 
-    map.fitBounds(L.latLngBounds(limitePredio), { padding: [16, 16] });
+    map.fitBounds(limitesDelMapa(lotes, limite), { padding: [16, 16] });
     mapRef.current = map;
     return () => {
       map.remove();
       mapRef.current = null;
       capasRef.current = [];
     };
-  }, []);
+  }, [lotes, limite]);
 
-  // Pinta las parcelas ya asignadas. El efecto corre en cada tick del
+  // Pinta los lotes ya asignados. El efecto corre en cada tick del
   // reloj, así que solo toca las capas cuyo estado realmente cambió.
   useEffect(() => {
     capasRef.current.forEach((capa, idx) => {
@@ -104,11 +131,11 @@ export default function MapaParcelas({ asignaciones, enJuego, ultima, seguir }: 
       if (pintadasRef.current.get(idx) === participante) return;
       pintadasRef.current.set(idx, participante);
       capa.setStyle(participante ? estiloAsignada(idx) : ESTILO_LIBRE);
-      capa.setPopupContent(contenidoPopup(idx, participante));
+      capa.setPopupContent(contenidoPopup(lotes[idx], participante));
     });
-  }, [asignaciones]);
+  }, [asignaciones, lotes]);
 
-  // Pulso sobre la parcela que está en juego.
+  // Pulso sobre el lote que está en juego.
   useEffect(() => {
     const capa = enJuego != null ? capasRef.current[enJuego] : null;
     const el = capa?.getElement();
@@ -116,17 +143,24 @@ export default function MapaParcelas({ asignaciones, enJuego, ultima, seguir }: 
     return () => el?.classList.remove(styles.pulso);
   }, [enJuego]);
 
-  // Vuela hacia la última parcela revelada.
+  // Vuela hacia el último lote revelado.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !seguir) return;
     if (ultima == null) {
-      map.flyToBounds(L.latLngBounds(limitePredio), { padding: [16, 16], duration: 1 });
+      map.flyToBounds(limitesDelMapa(lotes, limite), { padding: [16, 16], duration: 1 });
       return;
     }
     const capa = capasRef.current[ultima];
     if (capa) map.flyToBounds(capa.getBounds(), { maxZoom: 16, duration: 1.1, padding: [40, 40] });
-  }, [ultima, seguir]);
+  }, [ultima, seguir, lotes, limite]);
 
-  return <div ref={divRef} className={styles.mapa} role="application" aria-label="Mapa de parcelas del predio La Faraona" />;
+  return (
+    <div
+      ref={divRef}
+      className={styles.mapa}
+      role="application"
+      aria-label="Mapa de lotes del sorteo"
+    />
+  );
 }
