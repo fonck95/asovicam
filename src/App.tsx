@@ -11,6 +11,7 @@ const Productos = lazy(() => import('./pages/Productos'));
 const Experiencia = lazy(() => import('./pages/Experiencia'));
 const Gallery = lazy(() => import('./pages/Gallery'));
 const Contact = lazy(() => import('./pages/Contact'));
+const Sorteo = lazy(() => import('./pages/Sorteo'));
 const FAQ = lazy(() => import('./pages/FAQ'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="milpa" element={<Milpa />} />
               <Route path="productos" element={<Productos />} />
               <Route path="galeria" element={<Gallery />} />
+              <Route path="sorteo" element={<Sorteo />} />
               <Route path="contacto" element={<Contact />} />
               <Route path="preguntas" element={<FAQ />} />
               <Route path="*" element={<NotFound />} />

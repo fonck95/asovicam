@@ -27,6 +27,29 @@ export interface NavLink {
   path: string;
 }
 
+/** Un lote sorteable de cualquier mapa (predeterminado o KML/KMZ subido). */
+export interface Lote {
+  nombre: string;
+  /** Área en hectáreas (null si no se conoce). */
+  areaHa: number | null;
+  /** Vértices [lat, lng] del polígono del lote. */
+  coords: [number, number][];
+  /** Punto [lat, lng] donde ubicar la etiqueta del lote. */
+  centro: [number, number];
+}
+
+/** Conjunto de lotes listos para sortear, con su lindero opcional. */
+export interface MapaSorteo {
+  nombre: string;
+  lotes: Lote[];
+  /** Vértices [lat, lng] del lindero del predio, si el mapa lo trae. */
+  limite: [number, number][] | null;
+}
+
+export interface Parcela extends Lote {
+  id: number;
+}
+
 export interface ContactFormData {
   name: string;
   email: string;
