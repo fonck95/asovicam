@@ -7,6 +7,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg';
   children: ReactNode;
   to?: string;
+  /** URL externa: renderiza un anchor real (navegación de página completa). */
+  href?: string;
 }
 
 export default function Button({
@@ -14,11 +16,20 @@ export default function Button({
   size = 'md',
   children,
   to,
+  href,
   className = '',
   type = 'button',
   ...props
 }: ButtonProps) {
   const classes = `${styles.button} ${styles[variant]} ${styles[size]} ${className}`;
+
+  if (href) {
+    return (
+      <a href={href} rel="noopener" className={classes}>
+        {children}
+      </a>
+    );
+  }
 
   if (to) {
     return (

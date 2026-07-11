@@ -139,6 +139,19 @@
   font-style: italic;
 }
 
+.adminLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: inherit;
+  transition: color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.adminLink:hover {
+  color: #86efac;
+}
+
 @media (max-width: 900px) {
   .footerGrid {
     grid-template-columns: 1fr 1fr;

@@ -65,10 +65,37 @@ El proyecto ya es compatible con Vercel sin configuración extra:
 > El HDRI ambiental usa el preset `apartment` que `@react-three/drei`
 > sirve desde su CDN. No requiere configuración manual.
 
-## Sorteo de lotes (`/sorteo`)
+## Backend y acceso de administradores
 
-La ruta **`/sorteo`** permite sortear en vivo los lotes de un mapa entre
-personas o agrupaciones:
+El backend (Express + MongoDB, repo `fonck95/asovicam-backend`) vive en
+**`https://api.asovicam.org`** y ya incluye un dashboard de administración
+completo en `https://api.asovicam.org/admin` con login por Google.
+
+- La URL del backend se configura con la variable **`VITE_API_BASE_URL`**
+  (ver `.env`; en Vercel debe valer `https://api.asovicam.org`, sin `www.`
+  y sin barra final, y todo cambio requiere redeploy porque las variables
+  `VITE_*` se inyectan en build time).
+- El enlace **«Acceso administradores»** del footer y la ruta local
+  **`/admin`** navegan (página completa, nunca `fetch`) al dashboard del
+  backend, que muestra su propia pantalla de login. Las rutas `/auth/*` y
+  `/api/admin/*` del backend no tienen CORS a propósito: desde este origen
+  solo funcionan por navegación.
+
+## Sorteo de lotes (`/admin/sorteo`)
+
+El sorteo es una **herramienta de administración**: no aparece en la
+navegación del sitio y la ruta pública `/sorteo` solo sirve para **seguir
+en vivo** un sorteo recibido por enlace (sin enlace muestra un aviso de
+acceso restringido). La organización se hace desde **`/admin/sorteo`**
+(URL sin enlaces públicos; al copiar el enlace del sorteo se comparte
+siempre la URL pública `/sorteo#…`).
+
+> Nota: el sorteo corre 100 % en el cliente y el frontend no puede validar
+> la sesión del dashboard (cookie de `api.asovicam.org`, sin CORS), así que
+> `/admin/sorteo` está oculta pero no autenticada. Autenticarla de verdad
+> requeriría cambios en el backend.
+
+Cómo funciona el sorteo entre personas o agrupaciones:
 
 1. **Mapa**: por defecto usa los 48 lotes del predio LA FARAONA, pero se
    puede cargar cualquier archivo **KML o KMZ** (exportado de Google My
