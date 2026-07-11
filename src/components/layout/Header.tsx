@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Sprout, LogIn } from 'lucide-react';
+import { Menu, X, Sprout } from 'lucide-react';
 import { navLinks } from '../../data/navigation';
-import { ADMIN_DASHBOARD_URL } from '../../lib/api';
 import styles from './Header.module.css';
 
 export default function Header() {
@@ -93,19 +92,6 @@ export default function Header() {
                 </Link>
               </li>
             )}
-            <li>
-              {/* Anchor real (no Link): el login y el dashboard viven en el
-                  backend y solo funcionan por navegación de página completa. */}
-              <a
-                href={ADMIN_DASHBOARD_URL}
-                rel="noopener"
-                className={styles.navLogin}
-                onClick={closeMenu}
-              >
-                <LogIn size={16} aria-hidden="true" />
-                Iniciar sesión
-              </a>
-            </li>
           </ul>
         </nav>
 

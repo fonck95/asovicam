@@ -7,15 +7,12 @@ import type {
 } from '../types/content';
 
 // Único punto donde el frontend conoce la URL del backend. El valor viene
-// de VITE_API_BASE_URL (inyectada en build time); nunca hardcodear el
+// de VITE_API_URL (VITE_API_BASE_URL se conserva como compatibilidad); nunca hardcodear el
 // dominio en otros archivos ni anteponerle "www.".
 export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') ?? '';
-
-// El dashboard de administración vive en el backend y solo se alcanza por
-// navegación de página completa: sus rutas /auth/* y /api/admin/* no tienen
-// CORS (a propósito), así que jamás hacerle fetch desde este origen.
-export const ADMIN_DASHBOARD_URL = `${API_BASE_URL}/admin`;
+  import.meta.env.VITE_API_URL?.replace(/\/+$/, '') ??
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') ??
+  '';
 
 // El CORS público del backend no admite credenciales: los fetch van siempre
 // sin cookies (omit) y con timeout defensivo para no colgar el primer render.

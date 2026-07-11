@@ -4,7 +4,6 @@ import {
   MapPin,
   Phone,
   Mail,
-  Lock,
   Facebook,
   Instagram,
   Youtube,
@@ -13,7 +12,6 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { navLinks } from '../../data/navigation';
-import { ADMIN_DASHBOARD_URL } from '../../lib/api';
 import { useContent } from '../../content/ContentContext';
 import styles from './Footer.module.css';
 
@@ -131,12 +129,6 @@ export default function Footer() {
           <p>
             &copy; {currentYear} ASOVICAM. Todos los derechos reservados.
           </p>
-          {/* Anchor real (no fetch): el login y el dashboard viven en el
-              backend y solo funcionan por navegación de página completa. */}
-          <a href={ADMIN_DASHBOARD_URL} rel="noopener" className={styles.adminLink}>
-            <Lock size={13} aria-hidden="true" />
-            Acceso administradores
-          </a>
           <p className={styles.footerCredits}>
             Hecho con amor por el campo colombiano
           </p>
