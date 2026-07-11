@@ -14,7 +14,7 @@ const Gallery = lazy(() => import('./pages/Gallery'));
 const Contact = lazy(() => import('./pages/Contact'));
 const Sorteo = lazy(() => import('./pages/Sorteo'));
 const FAQ = lazy(() => import('./pages/FAQ'));
-const Admin = lazy(() => import('./pages/Admin'));
+const AdminApp = lazy(() => import('./admin/AdminApp'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 function PageLoader() {
@@ -40,9 +40,8 @@ export default function App() {
                   opcional elige el cultivo (maíz / frijol / sandía). */}
               <Route path="experiencia" element={<Experiencia />} />
               <Route path="experiencia/:producto" element={<Experiencia />} />
-              {/* Atajo al dashboard del backend: redirige de inmediato, por
-                  eso vive fuera del Layout (sin header/footer). */}
-              <Route path="admin" element={<Admin />} />
+              {/* Panel privado, separado del layout público. */}
+              <Route path="admin/*" element={<AdminApp />} />
               <Route element={<Layout />}>
                 <Route index element={<Home />} />
                 <Route path="nosotros" element={<About />} />
@@ -53,7 +52,6 @@ export default function App() {
                     los enlaces compartidos; la organización de sorteos vive en
                     la ruta de administración (sin enlaces en el sitio). */}
                 <Route path="sorteo" element={<Sorteo modo="publico" />} />
-                <Route path="admin/sorteo" element={<Sorteo modo="admin" />} />
                 <Route path="contacto" element={<Contact />} />
                 <Route path="preguntas" element={<FAQ />} />
                 <Route path="*" element={<NotFound />} />

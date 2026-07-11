@@ -65,21 +65,19 @@ El proyecto ya es compatible con Vercel sin configuración extra:
 > El HDRI ambiental usa el preset `apartment` que `@react-three/drei`
 > sirve desde su CDN. No requiere configuración manual.
 
-## Backend y acceso de administradores
+## Backend y panel de administración
 
 El backend (Express + MongoDB, repo `fonck95/asovicam-backend`) vive en
-**`https://api.asovicam.org`** y ya incluye un dashboard de administración
-completo en `https://api.asovicam.org/admin` con login por Google.
+**`https://api.asovicam.org`**. El panel de administración se sirve desde
+**`https://asovicam.org/admin`** y usa el login por Google del backend.
 
-- La URL del backend se configura con la variable **`VITE_API_BASE_URL`**
+- La URL del backend se configura con la variable **`VITE_API_URL`**
   (ver `.env`; en Vercel debe valer `https://api.asovicam.org`, sin `www.`
   y sin barra final, y todo cambio requiere redeploy porque las variables
   `VITE_*` se inyectan en build time).
-- El enlace **«Acceso administradores»** del footer y la ruta local
-  **`/admin`** navegan (página completa, nunca `fetch`) al dashboard del
-  backend, que muestra su propia pantalla de login. Las rutas `/auth/*` y
-  `/api/admin/*` del backend no tienen CORS a propósito: desde este origen
-  solo funcionan por navegación.
+- `/admin` no se enlaza desde el sitio público y lleva `noindex`. El panel
+  llama al backend con cookies (`credentials: 'include'`); el botón de login
+  es la única navegación de página completa, hacia `/auth/google`.
 
 ### Contenido del sitio desde la API pública
 
@@ -112,10 +110,8 @@ acceso restringido). La organización se hace desde **`/admin/sorteo`**
 (URL sin enlaces públicos; al copiar el enlace del sorteo se comparte
 siempre la URL pública `/sorteo#…`).
 
-> Nota: el sorteo corre 100 % en el cliente y el frontend no puede validar
-> la sesión del dashboard (cookie de `api.asovicam.org`, sin CORS), así que
-> `/admin/sorteo` está oculta pero no autenticada. Autenticarla de verdad
-> requeriría cambios en el backend.
+> El sorteo sigue corriendo 100 % en el cliente, pero `/admin/sorteo` ahora
+> está bajo el mismo guard de sesión del panel.
 
 Cómo funciona el sorteo entre personas o agrupaciones:
 

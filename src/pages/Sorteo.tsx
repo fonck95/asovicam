@@ -4,7 +4,6 @@ import { Lock } from 'lucide-react';
 import SEO from '../components/SEO';
 import Button from '../components/ui/Button';
 import MapaParcelas from '../components/sorteo/MapaParcelas';
-import { ADMIN_DASHBOARD_URL } from '../lib/api';
 import { mapaPredeterminado } from '../data/mapaPredeterminado';
 import { cargarMapaDeArchivo } from '../utils/kml';
 import {
@@ -489,9 +488,6 @@ export default function Sorteo({ modo }: SorteoProps) {
                 un sorteo, ábrelo completo (incluye un código después del
                 símbolo «#») para seguirlo en vivo desde aquí.
               </p>
-              <Button href={ADMIN_DASHBOARD_URL}>
-                Acceso administradores
-              </Button>
             </div>
           )}
 
