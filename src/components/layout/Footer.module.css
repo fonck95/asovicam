@@ -73,6 +73,31 @@
   opacity: 0.78;
 }
 
+/* Redes sociales del CMS: solo se pinta cuando hay URLs configuradas. */
+.socialRow {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: var(--spacing-md);
+}
+
+.socialLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.85);
+  transition: background var(--transition-base), color var(--transition-base);
+}
+
+.socialLink:hover {
+  background: rgba(255, 255, 255, 0.20);
+  color: var(--color-white);
+}
+
 .footerTitle {
   font-family: var(--font-family);
   font-size: 0.75rem;

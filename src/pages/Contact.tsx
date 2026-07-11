@@ -1,11 +1,23 @@
-import { MapPin, Phone, Mail, Clock, Send } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, Send, AlertCircle } from 'lucide-react';
 import Button from '../components/ui/Button';
 import SEO from '../components/SEO';
 import { useContactForm } from '../hooks/useContactForm';
+import { useContent } from '../content/ContentContext';
 import styles from './Contact.module.css';
 
 export default function Contact() {
-  const { formData, submitted, handleChange, handleSubmit, reset } = useContactForm();
+  const {
+    formData,
+    status,
+    formError,
+    fieldErrors,
+    rateLimited,
+    sentViaMailto,
+    handleChange,
+    handleSubmit,
+    reset,
+  } = useContactForm();
+  const { contact } = useContent().settings;
 
   return (
     <>
@@ -42,7 +54,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Ubicación</strong>
-                    <p>Ciénaga de Barbacoas, Yondó, Antioquia — Magdalena Medio, Colombia</p>
+                    <p>{contact.address}</p>
                   </div>
                 </div>
 
@@ -52,7 +64,9 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Teléfono</strong>
-                    <p><a href="tel:+573165570682">+57 316 557 0682</a></p>
+                    <p>
+                      <a href={`tel:${contact.phone.replace(/[^+\d]/g, '')}`}>{contact.phone}</a>
+                    </p>
                   </div>
                 </div>
 
@@ -62,7 +76,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <strong>Correo electrónico</strong>
-                    <p><a href="mailto:asovicam2023@gmail.com">asovicam2023@gmail.com</a></p>
+                    <p><a href={`mailto:${contact.email}`}>{contact.email}</a></p>
                     <p><a href="mailto:biojulian20@gmail.com">biojulian20@gmail.com</a></p>
                   </div>
                 </div>
@@ -81,17 +95,29 @@ export default function Contact() {
 
             {/* Form */}
             <div className={styles.formWrapper}>
-              {submitted ? (
+              {status === 'success' ? (
                 <div className={styles.success}>
                   <span className={styles.successIcon} role="img" aria-label="Enviado">&#9989;</span>
-                  <h3>Mensaje listo para enviar</h3>
-                  <p>
-                    Abrimos tu aplicación de correo con el mensaje redactado;
-                    solo falta que lo envíes. Si no se abrió, escríbenos
-                    directamente a{' '}
-                    <a href="mailto:asovicam2023@gmail.com">asovicam2023@gmail.com</a>.
-                    Gracias por comunicarte con ASOVICAM.
-                  </p>
+                  {sentViaMailto ? (
+                    <>
+                      <h3>Mensaje listo para enviar</h3>
+                      <p>
+                        Abrimos tu aplicación de correo con el mensaje redactado;
+                        solo falta que lo envíes. Si no se abrió, escríbenos
+                        directamente a{' '}
+                        <a href={`mailto:${contact.email}`}>{contact.email}</a>.
+                        Gracias por comunicarte con ASOVICAM.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3>¡Mensaje enviado!</h3>
+                      <p>
+                        Recibimos tu mensaje y te responderemos pronto al correo
+                        que nos dejaste. Gracias por comunicarte con ASOVICAM.
+                      </p>
+                    </>
+                  )}
                   <Button onClick={reset}>
                     Enviar otro mensaje
                   </Button>
@@ -111,9 +137,14 @@ export default function Contact() {
                       value={formData.name}
                       onChange={handleChange}
                       required
-                      className={styles.input}
+                      maxLength={160}
+                      className={`${styles.input} ${fieldErrors.name ? styles.inputInvalid : ''}`}
                       placeholder="Tu nombre"
+                      aria-invalid={Boolean(fieldErrors.name)}
                     />
+                    {fieldErrors.name && (
+                      <p className={styles.fieldError} role="alert">{fieldErrors.name}</p>
+                    )}
                   </div>
 
                   <div className={styles.formGroup}>
@@ -127,9 +158,14 @@ export default function Contact() {
                       value={formData.email}
                       onChange={handleChange}
                       required
-                      className={styles.input}
+                      maxLength={200}
+                      className={`${styles.input} ${fieldErrors.email ? styles.inputInvalid : ''}`}
                       placeholder="tu@correo.com"
+                      aria-invalid={Boolean(fieldErrors.email)}
                     />
+                    {fieldErrors.email && (
+                      <p className={styles.fieldError} role="alert">{fieldErrors.email}</p>
+                    )}
                   </div>
 
                   <div className={styles.formGroup}>
@@ -152,6 +188,9 @@ export default function Contact() {
                       <option value="asociarse">Asociarse a ASOVICAM</option>
                       <option value="otro">Otro</option>
                     </select>
+                    {fieldErrors.subject && (
+                      <p className={styles.fieldError} role="alert">{fieldErrors.subject}</p>
+                    )}
                   </div>
 
                   <div className={styles.formGroup}>
@@ -165,13 +204,34 @@ export default function Contact() {
                       onChange={handleChange}
                       required
                       rows={5}
-                      className={styles.textarea}
+                      maxLength={4000}
+                      className={`${styles.textarea} ${fieldErrors.message ? styles.inputInvalid : ''}`}
                       placeholder="Cuéntanos en qué podemos ayudarte..."
+                      aria-invalid={Boolean(fieldErrors.message)}
                     />
+                    {fieldErrors.message && (
+                      <p className={styles.fieldError} role="alert">{fieldErrors.message}</p>
+                    )}
                   </div>
 
-                  <Button type="submit" size="lg">
-                    <Send size={16} /> Enviar mensaje
+                  {formError && (
+                    <div className={styles.formError} role="alert">
+                      <AlertCircle size={16} aria-hidden="true" />
+                      <span>
+                        {formError.replace(/\.$/, '')}.{' '}
+                        {!rateLimited && (
+                          <>
+                            Si el problema persiste, escríbenos a{' '}
+                            <a href={`mailto:${contact.email}`}>{contact.email}</a>.
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  <Button type="submit" size="lg" disabled={status === 'sending' || rateLimited}>
+                    <Send size={16} />{' '}
+                    {status === 'sending' ? 'Enviando…' : 'Enviar mensaje'}
                   </Button>
                 </form>
               )}

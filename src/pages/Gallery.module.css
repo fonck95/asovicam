@@ -89,6 +89,31 @@
   pointer-events: none;
 }
 
+/* Medios reales del CMS: la imagen o el video llenan la caja 4/3. */
+.cardMedia {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-slow);
+}
+
+.card:hover .cardMedia {
+  transform: scale(1.04);
+}
+
+.cardDocument {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
 .cardEmoji {
   font-size: 4.5rem;
   filter: drop-shadow(0 6px 12px rgba(20, 20, 10, 0.10));

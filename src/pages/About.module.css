@@ -271,6 +271,14 @@
   color: var(--color-primary);
   margin-bottom: var(--spacing-md);
   box-shadow: inset 0 0 0 1px rgba(22, 101, 52, 0.06);
+  overflow: hidden;
+}
+
+.teamPhoto {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-full);
 }
 
 .teamName {

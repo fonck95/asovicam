@@ -16,6 +16,13 @@
   isolation: isolate;
 }
 
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  pointer-events: none;
+}
+
 .sm {
   padding: 0.5rem 1rem;
   font-size: 0.8125rem;

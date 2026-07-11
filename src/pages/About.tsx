@@ -1,9 +1,11 @@
 import { Heart, Target, Eye, Users, TreePine, Handshake, Award, UserCircle } from 'lucide-react';
 import SEO from '../components/SEO';
-import { teamMembers } from '../data/team';
+import { useContent } from '../content/ContentContext';
 import styles from './About.module.css';
 
 export default function About() {
+  const { teamMembers } = useContent();
+
   return (
     <>
       <SEO
@@ -159,7 +161,16 @@ export default function About() {
             {teamMembers.map((member) => (
               <div key={member.id} className={styles.teamCard}>
                 <div className={styles.teamAvatar}>
-                  <UserCircle size={48} />
+                  {member.photo ? (
+                    <img
+                      src={member.photo.url}
+                      alt={member.photo.alt || member.name}
+                      className={styles.teamPhoto}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <UserCircle size={48} />
+                  )}
                 </div>
                 <h3 className={styles.teamName}>{member.name}</h3>
                 <span className={styles.teamRole}>{member.role}</span>
