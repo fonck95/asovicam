@@ -2,10 +2,12 @@ import { CheckCircle, Layers, Droplets, Bug, Recycle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import GpuImage from '../components/ui/GpuImage';
 import SEO from '../components/SEO';
-import { crops } from '../data/crops';
+import { useContent } from '../content/ContentContext';
 import styles from './Milpa.module.css';
 
 export default function Milpa() {
+  const { crops } = useContent();
+
   return (
     <>
       <SEO

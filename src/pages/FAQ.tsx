@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import SEO from '../components/SEO';
-import { faqItems } from '../data/faq';
+import { useContent } from '../content/ContentContext';
 import styles from './FAQ.module.css';
 
 const categories = [
@@ -12,6 +12,7 @@ const categories = [
 ] as const;
 
 export default function FAQ() {
+  const { faqs: faqItems } = useContent();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('all');
 

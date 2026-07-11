@@ -19,13 +19,12 @@ import Product3DGallery, {
 import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
 import SEO from '../components/SEO';
 
-import { crops } from '../data/crops';
-import { testimonials } from '../data/testimonials';
-import { programs } from '../data/programs';
-import { impactStats } from '../data/impact';
+import { useContent } from '../content/ContentContext';
 import styles from './Home.module.css';
 
-const productSlides: ProductSlide[] = [
+// Slides locales de respaldo: se muestran mientras el CMS no tenga slides
+// de portada publicados (colección homeSlides vacía).
+const localSlides: ProductSlide[] = [
   {
     id: 'milpa',
     title: 'Milpa viva',
@@ -56,6 +55,22 @@ const programIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Home() {
+  const { settings, crops, testimonials, programs, impactStats, homeSlides } =
+    useContent();
+  const { hero } = settings;
+
+  const productSlides: ProductSlide[] = homeSlides.length
+    ? homeSlides.map((slide) => ({
+        id: slide.id,
+        title: slide.title,
+        subtitle: slide.subtitle,
+        description: slide.description,
+        image: slide.image.url,
+        badge: slide.badge,
+        accent: slide.accent,
+      }))
+    : localSlides;
+
   return (
     <>
       <SEO
@@ -72,19 +87,14 @@ export default function Home() {
             <span className={styles.heroBadgeDot}>
               <Leaf size={12} strokeWidth={2.5} />
             </span>
-            Ciénaga de Barbacoas, Yondó · Magdalena Medio
+            {hero.badge}
           </span>
           <h1 className={styles.heroTitle}>
-            Cultivando tradición,
+            {hero.title}
             <br />
-            <span className={styles.heroHighlight}>sembrando futuro.</span>
+            <span className={styles.heroHighlight}>{hero.highlight}</span>
           </h1>
-          <p className={styles.heroText}>
-            Somos ASOVICAM, la Asociación Campesina Vida en el Campo.
-            Rescatamos el sistema ancestral de la milpa &mdash; maíz, frijol caupí
-            y sandía &mdash; con técnica de mulch para una agricultura sostenible en
-            el corazón del Magdalena Medio colombiano.
-          </p>
+          <p className={styles.heroText}>{hero.subtitle}</p>
           <div className={styles.heroCta}>
             <Button to="/milpa" size="lg">
               Conoce la Milpa <ArrowRight size={18} />
@@ -261,7 +271,7 @@ export default function Home() {
             {programs.map((program) => (
               <div key={program.id} className={styles.programCard}>
                 <div className={styles.programIcon}>
-                  {programIcons[program.icon]}
+                  {programIcons[program.icon] ?? <Leaf size={24} />}
                 </div>
                 <div className={styles.programBody}>
                   <h3 className={styles.programTitle}>{program.title}</h3>

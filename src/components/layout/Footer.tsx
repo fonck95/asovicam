@@ -1,11 +1,35 @@
 import { Link } from 'react-router-dom';
-import { Sprout, MapPin, Phone, Mail, Lock } from 'lucide-react';
+import {
+  Sprout,
+  MapPin,
+  Phone,
+  Mail,
+  Lock,
+  Facebook,
+  Instagram,
+  Youtube,
+  Twitter,
+  Music2,
+  MessageCircle,
+} from 'lucide-react';
 import { navLinks } from '../../data/navigation';
 import { ADMIN_DASHBOARD_URL } from '../../lib/api';
+import { useContent } from '../../content/ContentContext';
 import styles from './Footer.module.css';
+
+const socialIcons = [
+  { key: 'facebook', label: 'Facebook', icon: <Facebook size={16} /> },
+  { key: 'instagram', label: 'Instagram', icon: <Instagram size={16} /> },
+  { key: 'youtube', label: 'YouTube', icon: <Youtube size={16} /> },
+  { key: 'tiktok', label: 'TikTok', icon: <Music2 size={16} /> },
+  { key: 'x', label: 'X (Twitter)', icon: <Twitter size={16} /> },
+] as const;
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const { settings } = useContent();
+  const { contact, social } = settings;
+  const socialLinks = socialIcons.filter(({ key }) => social[key]);
 
   return (
     <footer className={styles.footer}>
@@ -28,6 +52,22 @@ export default function Footer() {
               Cultivando tradición, sembrando futuro. Sistema milpa con técnica
               de mulch en el corazón del Magdalena Medio colombiano.
             </p>
+            {socialLinks.length > 0 && (
+              <div className={styles.socialRow}>
+                {socialLinks.map(({ key, label, icon }) => (
+                  <a
+                    key={key}
+                    href={social[key]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={label}
+                    className={styles.socialLink}
+                  >
+                    {icon}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Navigation */}
@@ -61,16 +101,28 @@ export default function Footer() {
             <ul className={styles.contactList}>
               <li className={styles.contactItem}>
                 <MapPin size={16} />
-                <span>Ciénaga de Barbacoas, Yondó, Antioquia</span>
+                <span>{contact.address}</span>
               </li>
               <li className={styles.contactItem}>
                 <Phone size={16} />
-                <a href="tel:+573165570682">+57 316 557 0682</a>
+                <a href={`tel:${contact.phone.replace(/[^+\d]/g, '')}`}>{contact.phone}</a>
               </li>
               <li className={styles.contactItem}>
                 <Mail size={16} />
-                <a href="mailto:asovicam2023@gmail.com">asovicam2023@gmail.com</a>
+                <a href={`mailto:${contact.email}`}>{contact.email}</a>
               </li>
+              {contact.whatsapp && (
+                <li className={styles.contactItem}>
+                  <MessageCircle size={16} />
+                  <a
+                    href={`https://wa.me/${contact.whatsapp.replace(/[^\d]/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    WhatsApp
+                  </a>
+                </li>
+              )}
             </ul>
           </div>
         </div>

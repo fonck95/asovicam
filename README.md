@@ -81,6 +81,28 @@ completo en `https://api.asovicam.org/admin` con login por Google.
   `/api/admin/*` del backend no tienen CORS a propósito: desde este origen
   solo funcionan por navegación.
 
+### Contenido del sitio desde la API pública
+
+Al cargar, la SPA pide **`GET /api/public/content`** (CORS habilitado para
+`https://www.asovicam.org`, sin credenciales) y con la respuesta pinta
+programas, estadísticas, equipo, testimonios, FAQs, cultivos, slides de
+portada, galería y los ajustes de contacto/redes/hero editados en el
+dashboard.
+
+- **Fallback silencioso**: si la petición falla (red, previews `*.vercel.app`
+  sin CORS, 5xx, timeout de 8 s) o una colección llega vacía porque aún no
+  hay elementos publicados, se usa el contenido estático de `src/data/*.ts`
+  — el sitio nunca se ve roto. La última respuesta buena se cachea en
+  `localStorage` para el primer render de visitas repetidas.
+- **Formulario de contacto**: envía a **`POST /api/public/contact`** y los
+  mensajes llegan al dashboard (`/admin` → Mensajes). Maneja los errores de
+  validación por campo (400), el rate limit de 5 envíos / 15 min (429) y las
+  caídas de red con mensajes en pantalla; solo si el build no tiene
+  `VITE_API_BASE_URL` cae al viejo `mailto:`.
+- Todo el contenido del CMS se renderiza como **texto plano** (nunca HTML) y
+  el frontend no guarda nada de autenticación: la sesión vive en la cookie
+  httpOnly de `api.asovicam.org`.
+
 ## Sorteo de lotes (`/admin/sorteo`)
 
 El sorteo es una **herramienta de administración**: no aparece en la
