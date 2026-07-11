@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { Lock } from 'lucide-react';
 import SEO from '../components/SEO';
 import Button from '../components/ui/Button';
 import MapaParcelas from '../components/sorteo/MapaParcelas';
+import { ADMIN_DASHBOARD_URL } from '../lib/api';
 import { mapaPredeterminado } from '../data/mapaPredeterminado';
 import { cargarMapaDeArchivo } from '../utils/kml';
 import {
@@ -283,7 +285,16 @@ function Configurador({
   );
 }
 
-export default function Sorteo() {
+interface SorteoProps {
+  /**
+   * 'admin' (/admin/sorteo): herramienta completa para configurar y lanzar
+   * sorteos. 'publico' (/sorteo): solo permite seguir en vivo un sorteo
+   * recibido por enlace; sin enlace muestra el aviso de acceso restringido.
+   */
+  modo: 'admin' | 'publico';
+}
+
+export default function Sorteo({ modo }: SorteoProps) {
   const [configCruda, setConfigCruda] = useState<SorteoConfig | null>(() =>
     decodificarSorteo(window.location.hash),
   );
@@ -374,7 +385,10 @@ export default function Sorteo() {
   };
 
   const copiarEnlace = () => {
-    void navigator.clipboard.writeText(window.location.href).then(() => {
+    // Siempre se comparte la URL pública del visor (/sorteo#…), aunque el
+    // organizador esté viendo el sorteo desde la ruta de administración.
+    const enlacePublico = `${window.location.origin}/sorteo${window.location.hash}`;
+    void navigator.clipboard.writeText(enlacePublico).then(() => {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2500);
     });
@@ -412,17 +426,27 @@ export default function Sorteo() {
   return (
     <>
       <SEO
-        title="Sorteo de lotes"
-        description="Sorteo público y en vivo de lotes sobre el mapa: carga tu lista de personas o agrupaciones y comparte el enlace para que todos vean el resultado en tiempo real."
+        title={modo === 'admin' ? 'Sorteo de lotes — Administración' : 'Sorteo de lotes'}
+        description="Sorteo en vivo de lotes sobre el mapa: los asistentes siguen cada asignación en tiempo real desde el enlace compartido por la organización."
+        noindex
       />
 
       <section className={styles.hero}>
         <div className="container">
           <h1 className={styles.heroTitle}>Sorteo de lotes</h1>
           <p className={styles.heroSubtitle}>
-            Asignación transparente y en vivo de los {totalLotes} lotes de{' '}
-            {mapaActivo.nombre}. Todos los asistentes ven el mismo sorteo, al
-            mismo tiempo, desde cualquier dispositivo.
+            {!config && modo === 'publico' ? (
+              <>
+                Sigue en vivo la asignación de lotes desde el enlace que te
+                comparta la organización.
+              </>
+            ) : (
+              <>
+                Asignación transparente y en vivo de los {totalLotes} lotes de{' '}
+                {mapaActivo.nombre}. Todos los asistentes ven el mismo sorteo,
+                al mismo tiempo, desde cualquier dispositivo.
+              </>
+            )}
           </p>
         </div>
       </section>
@@ -436,7 +460,7 @@ export default function Sorteo() {
             </p>
           )}
 
-          {!config && (
+          {!config && modo === 'admin' && (
             <Configurador
               mapa={mapaActivo}
               esMapaPersonalizado={mapaCargado !== null}
@@ -449,6 +473,26 @@ export default function Sorteo() {
               }}
               onIniciar={iniciar}
             />
+          )}
+
+          {!config && modo === 'publico' && (
+            <div className={styles.restringido}>
+              <span className={styles.restringidoIcono} aria-hidden="true">
+                <Lock size={26} />
+              </span>
+              <h2 className={styles.panelTitulo}>
+                Herramienta de administración
+              </h2>
+              <p className={styles.ayuda}>
+                La organización de sorteos se gestiona desde el panel de
+                administración y ya no es pública. Si recibiste un enlace de
+                un sorteo, ábrelo completo (incluye un código después del
+                símbolo «#») para seguirlo en vivo desde aquí.
+              </p>
+              <Button href={ADMIN_DASHBOARD_URL}>
+                Acceso administradores
+              </Button>
+            </div>
           )}
 
           {config && estado && (
@@ -570,9 +614,11 @@ export default function Sorteo() {
                         Descargar resultados (CSV)
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={nuevoSorteo}>
-                      Nuevo sorteo
-                    </Button>
+                    {modo === 'admin' && (
+                      <Button variant="outline" size="sm" onClick={nuevoSorteo}>
+                        Nuevo sorteo
+                      </Button>
+                    )}
                   </div>
                   <p className={styles.notaTecnica}>
                     Sorteo verificable: semilla pública {config.seed}. El
