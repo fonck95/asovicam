@@ -59,5 +59,98 @@ export const imageManifest: Record<string, ImageManifestEntry> = {
         "src": "/img/steps-milpa-1920.webp"
       }
     ]
+  },
+  "/IMG_1093.jpeg": {
+    "slug": "hero-cultivo",
+    "aspectRatio": 1.3333333333333333,
+    "naturalWidth": 5712,
+    "naturalHeight": 4284,
+    "lqip": "data:image/webp;base64,UklGRpQAAABXRUJQVlA4IIgAAAAwBQCdASoYACAAPu1iqE6ppaQiN/qoATAdiWNg61XYAgBRKJuXMZOtZKNIu/RJeG4JQAD8i3t1DyaFtPr+wbSpJDj5Jr3rEnPqZOF9b+F+WSS+7IiRpKSEPgvdFJ0X/eQYgnqR1YcIdU0YeAqpqwU+6KgREb50S2XnolAXel9OdzrL8579iAAA",
+    "variants": [
+      {
+        "width": 480,
+        "src": "/img/hero-cultivo-480.webp"
+      },
+      {
+        "width": 960,
+        "src": "/img/hero-cultivo-960.webp"
+      }
+    ]
+  },
+  "/IMG_1111.jpeg": {
+    "slug": "hero-recorrido",
+    "aspectRatio": 1.3333333333333333,
+    "naturalWidth": 5712,
+    "naturalHeight": 4284,
+    "lqip": "data:image/webp;base64,UklGRq4AAABXRUJQVlA4IKIAAABQBQCdASoYACAAPvFYp06ppKOiN/qoATAeCWQAsOwbZgiCUUcjeAo5DoYCALFF66nqBUAA/e9lvCh36JtRFu03wlMIOmaGvqgjEidUe8jtWjfVoygmZfb1GH8IheA8wLtfk5Ee5ubpsgFVv9fBSdPmphu+E9htNGWrH4TU73oMLvcTNZkewTBcpfSn9z4IyfxC89q5+4S7CSj9IsFcGjgAAAA=",
+    "variants": [
+      {
+        "width": 480,
+        "src": "/img/hero-recorrido-480.webp"
+      },
+      {
+        "width": 960,
+        "src": "/img/hero-recorrido-960.webp"
+      }
+    ]
+  },
+  "/IMG_1122.jpeg": {
+    "slug": "hero-siembra",
+    "aspectRatio": 1.3333333333333333,
+    "naturalWidth": 5712,
+    "naturalHeight": 4284,
+    "lqip": "data:image/webp;base64,UklGRpYAAABXRUJQVlA4IIoAAADQBACdASoYACAAPwFqsFIrJSSisBgIAWAgCWMAwoAKSz4FcA9LBpwD2dE5VyBWYAD8j5YjYsjcCHt8d8eGNaeGC2dCtjxK5U6qrK+9Xln2IVzEbUWJICm3b6iZhB4Nx6oX9pJOgchvnzWkYDLrjZzXdhaamg0UDBjrSLGPHkunsLn8sxQSuwqYAAA=",
+    "variants": [
+      {
+        "width": 480,
+        "src": "/img/hero-siembra-480.webp"
+      },
+      {
+        "width": 960,
+        "src": "/img/hero-siembra-960.webp"
+      }
+    ]
+  },
+  "/IMG_1137.jpeg": {
+    "slug": "hero-camino",
+    "aspectRatio": 1.3333333333333333,
+    "naturalWidth": 5712,
+    "naturalHeight": 4284,
+    "lqip": "data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAACwBACdASoYACAAPwFysFCrJySisBgIAWAgCUAYnxsQlTpPa3LQ9qpeomyWHBMAAP6YV7G3sNu2Xejooi/Y+yCEkdnX363tAaiZvg85m7M4AnoKw4mkt7nZNS0SGT3m83gEFNKZMXdhmK3Xxme9EduyYK2UQDfoLbXZus4c8YLu45Qq6Df1DgCqEXxjeKk83YAAAA==",
+    "variants": [
+      {
+        "width": 480,
+        "src": "/img/hero-camino-480.webp"
+      },
+      {
+        "width": 960,
+        "src": "/img/hero-camino-960.webp"
+      }
+    ]
+  },
+  "/IMG_1158.jpeg": {
+    "slug": "hero-territorio",
+    "aspectRatio": 1.3333333333333333,
+    "naturalWidth": 5712,
+    "naturalHeight": 4284,
+    "lqip": "data:image/webp;base64,UklGRnwAAABXRUJQVlA4IHAAAACwBACdASoYABIAPwFurU6rJqQiMAgBYCAJQBmDhDwmXpsTnzPLpPuWrpagws5AAPsgu3+u+5dzC+B97bzgvoO9bZ6/28ePSVtH+LEHdX4OnJ3dRHASAx/dt9IsEhdV0ekv7EteLsRw8E/PYkpQBgAA",
+    "variants": [
+      {
+        "width": 480,
+        "src": "/img/hero-territorio-480.webp"
+      },
+      {
+        "width": 960,
+        "src": "/img/hero-territorio-960.webp"
+      },
+      {
+        "width": 1440,
+        "src": "/img/hero-territorio-1440.webp"
+      },
+      {
+        "width": 1920,
+        "src": "/img/hero-territorio-1920.webp"
+      }
+    ]
   }
 };

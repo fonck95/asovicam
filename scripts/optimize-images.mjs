@@ -17,14 +17,23 @@ const WIDTHS = [480, 960, 1440, 1920];
 const QUALITY = 78;
 const LQIP_WIDTH = 24;
 
-const SOURCES = ['milpa.jpg', 'steps-milpa.jpg'];
+const SOURCES = [
+  { file: 'milpa.jpg', directory: SOURCE_DIR },
+  { file: 'steps-milpa.jpg', directory: SOURCE_DIR },
+  { file: 'IMG_1093.jpeg', directory: ROOT, slug: 'hero-cultivo', widths: [480, 960] },
+  { file: 'IMG_1111.jpeg', directory: ROOT, slug: 'hero-recorrido', widths: [480, 960] },
+  { file: 'IMG_1122.jpeg', directory: ROOT, slug: 'hero-siembra', widths: [480, 960] },
+  { file: 'IMG_1137.jpeg', directory: ROOT, slug: 'hero-camino', widths: [480, 960] },
+  { file: 'IMG_1158.jpeg', directory: ROOT, slug: 'hero-territorio' },
+];
 
 await mkdir(OUT_DIR, { recursive: true });
 
 const entries = {};
 
-for (const file of SOURCES) {
-  const srcPath = join(SOURCE_DIR, file);
+for (const source of SOURCES) {
+  const { file, directory } = source;
+  const srcPath = join(directory, file);
   try {
     await stat(srcPath);
   } catch {
@@ -32,18 +41,19 @@ for (const file of SOURCES) {
     continue;
   }
 
-  const slug = basename(file, extname(file));
+  const slug = source.slug ?? basename(file, extname(file));
   const meta = await sharp(srcPath).metadata();
   const naturalW = meta.width ?? 0;
   const naturalH = meta.height ?? 0;
   const aspect = naturalW && naturalH ? naturalW / naturalH : 16 / 9;
 
   const variants = [];
-  for (const w of WIDTHS) {
+  for (const w of source.widths ?? WIDTHS) {
     if (w > naturalW) continue;
     const outName = `${slug}-${w}.webp`;
     const outPath = join(OUT_DIR, outName);
     await sharp(srcPath)
+      .autoOrient()
       .resize({ width: w, withoutEnlargement: true })
       .webp({ quality: QUALITY, effort: 5 })
       .toFile(outPath);
@@ -51,6 +61,7 @@ for (const file of SOURCES) {
   }
 
   const lqipBuffer = await sharp(srcPath)
+    .autoOrient()
     .resize({ width: LQIP_WIDTH })
     .blur(0.6)
     .webp({ quality: 35 })

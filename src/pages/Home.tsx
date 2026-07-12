@@ -82,8 +82,30 @@ export default function Home() {
 
       {/* Hero */}
       <section className={styles.hero}>
-        <HeroGpuCanvas />
+        <picture className={styles.heroBackdrop} aria-hidden="true">
+          <source
+            type="image/webp"
+            srcSet="/img/hero-territorio-480.webp 480w, /img/hero-territorio-960.webp 960w, /img/hero-territorio-1440.webp 1440w, /img/hero-territorio-1920.webp 1920w"
+            sizes="100vw"
+          />
+          <img src="/img/hero-territorio-1920.webp" alt="" fetchPriority="high" />
+        </picture>
+        <HeroGpuCanvas className={styles.heroGpu} intensity={0.35} />
         <div className={styles.heroOverlay} />
+        <div className={styles.heroFilmstrip} aria-hidden="true">
+          <figure className={`${styles.heroFrame} ${styles.heroFrameOne}`}>
+            <img src="/img/hero-recorrido-960.webp" alt="" />
+          </figure>
+          <figure className={`${styles.heroFrame} ${styles.heroFrameTwo}`}>
+            <img src="/img/hero-camino-960.webp" alt="" />
+          </figure>
+          <figure className={`${styles.heroFrame} ${styles.heroFrameThree}`}>
+            <img src="/img/hero-siembra-960.webp" alt="" />
+          </figure>
+          <figure className={`${styles.heroFrame} ${styles.heroFrameFour}`}>
+            <img src="/img/hero-cultivo-960.webp" alt="" />
+          </figure>
+        </div>
         <div className={`container ${styles.heroContent}`}>
           <span className={styles.heroBadge}>
             <span className={styles.heroBadgeDot}>
