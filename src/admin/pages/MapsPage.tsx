@@ -67,16 +67,49 @@ export function MapsPage() {
 
 export function MapDetailPage() {
   const { mapId } = useParams(); const navigate = useNavigate(); const toast = useToast(); const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
   const query = useQuery({ queryKey: ['mapa', mapId], queryFn: () => api.get<Mapa>(`/api/admin/mapas/${mapId}`), enabled: !!mapId })
-  const finalize = useMutation({ mutationFn: () => api.post<{ mapa: Mapa; sorteo: SorteoAdmin }>(`/api/admin/mapas/${mapId}/finalizar`, {}), onSuccess: ({ sorteo }) => { toast('success', 'Mapa finalizado; el sorteo está listo'); void qc.invalidateQueries({ queryKey: ['mapas'] }); navigate(`/admin/sorteos/${sorteo.id}`) }, onError: (e) => toast('error', message(e)) })
+  const finalize = useMutation({
+    mutationFn: () => api.post<{ mapa: Mapa; sorteo: SorteoAdmin }>(`/api/admin/mapas/${mapId}/finalizar`, {}),
+    onSuccess: ({ sorteo }) => { toast('success', 'Mapa finalizado; el sorteo está listo'); void qc.invalidateQueries({ queryKey: ['mapas'] }); void qc.invalidateQueries({ queryKey: ['mapa', mapId] }); navigate(`/admin/sorteos/${sorteo.id}`) },
+    onError: (e) => {
+      toast('error', message(e))
+      // "Ya finalizado" / "ya tiene un sorteo" incluyen sorteoId: navegar directo.
+      const sorteoId = e instanceof ApiError && e.status === 409 ? e.body?.sorteoId : undefined
+      if (typeof sorteoId === 'string') {
+        void qc.invalidateQueries({ queryKey: ['mapas'] })
+        navigate(`/admin/sorteos/${sorteoId}`)
+      }
+    },
+  })
+  const update = useMutation({
+    mutationFn: (form: { nombre: string; descripcion: string }) => api.put<Mapa>(`/api/admin/mapas/${mapId}`, form),
+    onSuccess: () => { toast('success', 'Mapa actualizado'); setEditing(false); void qc.invalidateQueries({ queryKey: ['mapa', mapId] }); void qc.invalidateQueries({ queryKey: ['mapas'] }) },
+    onError: (e) => toast('error', message(e)),
+  })
   if (query.isLoading) return <p className="py-12 text-center">Cargando…</p>
   if (!query.data) return <ErrorText error={query.error} />
   const map = query.data
   const numbers = map.poligonos.map((p) => p.numero.trim()); const missing = numbers.filter((n) => !n).length; const duplicate = [...new Set(numbers.filter((n, i) => n && numbers.indexOf(n) !== i))]
-  return <div><Link to="/admin/mapas" className="text-sm text-emerald-800 hover:underline">← Mapas y sorteos</Link><div className="my-4 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">{map.nombre}</h1><p className="text-sm text-stone-500">{map.descripcion}</p></div>{map.estado === 'borrador' ? <button className={primary} disabled={finalize.isPending} onClick={() => confirm('Finalizar es irreversible: se bloqueará la geometría y se creará el sorteo. ¿Continuar?') && finalize.mutate()}>{finalize.isPending ? 'Finalizando…' : 'Finalizar mapa'}</button> : map.sorteoId && <Link className={primary} to={`/admin/sorteos/${map.sorteoId}`}>Abrir sorteo</Link>}</div>
-    {map.estado === 'borrador' && <div className={`mb-4 rounded-lg border p-3 text-sm ${missing || duplicate.length ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}><strong>Revisión:</strong> {map.poligonos.length} polígonos · {missing} sin número · {duplicate.length ? `duplicados: ${duplicate.join(', ')}` : 'sin números duplicados'}.</div>}
+  // Diagnóstico de contigüidad: vecinos se calcula al finalizar; un lote sin
+  // vecinos nunca podrá formar parte de un bloque grupal.
+  const isolated = map.estado === 'finalizado' ? map.poligonos.filter((p) => p.vecinos.length === 0).length : 0
+  return <div><Link to="/admin/mapas" className="text-sm text-emerald-800 hover:underline">← Mapas y sorteos</Link><div className="my-4 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">{map.nombre}</h1><p className="text-sm text-stone-500">{map.descripcion}</p></div><div className="flex gap-2">{map.estado === 'borrador' ? <><button className={button} onClick={() => setEditing(true)}>Editar</button><button className={primary} disabled={finalize.isPending} onClick={() => confirm('Finalizar es irreversible: se bloqueará la geometría, se calcularán los vecinos y se creará el sorteo. ¿Continuar?') && finalize.mutate()}>{finalize.isPending ? 'Finalizando…' : 'Finalizar mapa'}</button></> : map.sorteoId && <Link className={primary} to={`/admin/sorteos/${map.sorteoId}`}>Abrir sorteo</Link>}</div></div>
+    {map.estado === 'borrador' && <div className={`mb-4 rounded-lg border p-3 text-sm ${missing || duplicate.length ? 'border-amber-300 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}><strong>Revisión:</strong> {map.poligonos.length} polígonos · {missing} sin número · {duplicate.length ? `duplicados: ${duplicate.join(', ')}` : 'sin números duplicados'}. Los vecinos (contigüidad para sorteos grupales) se calculan al finalizar: dos lotes solo son vecinos si comparten una arista exacta.</div>}
+    {isolated > 0 && <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><strong>Aviso:</strong> {isolated} polígono(s) quedaron sin vecinos (no comparten aristas exactas con ningún otro). Los sorteos de agrupaciones no podrán incluirlos en bloques contiguos.</div>}
     <ParcelMap polygons={map.poligonos} />
+    {editing && <Modal title="Editar mapa" close={() => !update.isPending && setEditing(false)}><MapEditForm map={map} pending={update.isPending} onSave={(form) => update.mutate(form)} onCancel={() => setEditing(false)} /></Modal>}
   </div>
+}
+
+function MapEditForm({ map, pending, onSave, onCancel }: { map: Mapa; pending: boolean; onSave: (f: { nombre: string; descripcion: string }) => void; onCancel: () => void }) {
+  const [nombre, setNombre] = useState(map.nombre)
+  const [descripcion, setDescripcion] = useState(map.descripcion)
+  return <form onSubmit={(e) => { e.preventDefault(); if (nombre.trim()) onSave({ nombre: nombre.trim(), descripcion: descripcion.trim() }) }} className="space-y-4">
+    <label className="block text-sm font-medium">Nombre *<input autoFocus required maxLength={200} value={nombre} onChange={(e) => setNombre(e.target.value)} className="mt-1 w-full rounded border border-stone-300 px-3 py-2" /></label>
+    <label className="block text-sm font-medium">Descripción<textarea maxLength={2000} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="mt-1 w-full rounded border border-stone-300 px-3 py-2" /></label>
+    <div className="flex justify-end gap-2"><button type="button" className={button} onClick={onCancel} disabled={pending}>Cancelar</button><button className={primary} disabled={pending || !nombre.trim()}>{pending ? 'Guardando…' : 'Guardar'}</button></div>
+  </form>
 }
 
 function Metric({ label, value }: { label: string; value: number }) { return <div className="rounded bg-stone-50 p-2"><strong className="block text-lg">{value}</strong><span className="text-xs text-stone-500">{label}</span></div> }

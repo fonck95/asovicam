@@ -9,12 +9,15 @@ export class ApiError extends Error {
   status: number
   details?: unknown
   referencedBy?: { resource: string; id: string; label: string }[]
+  /** Cuerpo completo del error: algunos 409 traen campos extra (p. ej. sorteoId al finalizar un mapa ya finalizado). */
+  body?: Record<string, unknown>
 
   constructor(status: number, message: string, extra?: Record<string, unknown>) {
     super(message)
     this.status = status
     this.details = extra?.details
     this.referencedBy = extra?.referencedBy as ApiError['referencedBy']
+    this.body = extra
   }
 }
 

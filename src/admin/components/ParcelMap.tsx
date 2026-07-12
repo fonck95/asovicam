@@ -3,16 +3,26 @@ import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Asignacion, MapaPolygon } from '../api'
 
-const COLORS = ['#059669', '#2563eb', '#7c3aed', '#db2777', '#d97706', '#0891b2']
+/** Verde fijo para asignaciones individuales; paleta cíclica por evento grupal. */
+const INDIVIDUAL_COLOR = '#059669'
+const GROUP_COLORS = ['#2563eb', '#7c3aed', '#db2777', '#d97706', '#0891b2', '#4f46e5', '#b91c1c', '#65a30d']
+
+const dateFormat = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
 
 export function ParcelMap({
   polygons,
   assignments = [],
   focusIds = [],
+  socioLabels,
+  grupoLabels,
 }: {
   polygons: MapaPolygon[]
   assignments?: Asignacion[]
   focusIds?: string[]
+  /** asociadoId → "Nombre · cédula" para el tooltip. */
+  socioLabels?: Map<string, string>
+  /** agrupacionId → nombre para el tooltip. */
+  grupoLabels?: Map<string, string>
 }) {
   const host = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
@@ -29,16 +39,31 @@ export function ParcelMap({
       const assignment = byPolygon.get(polygon.polygonId)
       let color = '#78716c'
       if (assignment) {
-        if (!eventColors.has(assignment.eventoId)) eventColors.set(assignment.eventoId, COLORS[eventColors.size % COLORS.length]!)
-        color = eventColors.get(assignment.eventoId)!
+        if (assignment.tipo === 'individual') {
+          color = INDIVIDUAL_COLOR
+        } else {
+          // Un color por eventoId para que el bloque grupal se lea como unidad.
+          if (!eventColors.has(assignment.eventoId)) eventColors.set(assignment.eventoId, GROUP_COLORS[eventColors.size % GROUP_COLORS.length]!)
+          color = eventColors.get(assignment.eventoId)!
+        }
       }
+      const focused = focusIds.includes(polygon.polygonId)
       const layer = L.polygon(
+        // coordenadas = [anillo exterior, ...huecos]; Leaflet usa [lat, lng].
         polygon.coordenadas.map((ring) => ring.map(({ lat, lng }) => [lat, lng] as L.LatLngTuple)),
-        { color: focusIds.includes(polygon.polygonId) ? '#facc15' : color, weight: focusIds.includes(polygon.polygonId) ? 4 : 2, fillColor: color, fillOpacity: assignment ? 0.58 : 0.2 },
+        { color: focused ? '#facc15' : color, weight: focused ? 4 : 2, fillColor: color, fillOpacity: assignment ? 0.58 : 0.2 },
       ).addTo(instance)
-      const detail = assignment
-        ? `<br>Asignación: <strong>${escapeHtml(assignment.asignacionId)}</strong><br>Socio: ${escapeHtml(assignment.asociadoId)}${assignment.agrupacionId ? `<br>Agrupación: ${escapeHtml(assignment.agrupacionId)}` : ''}`
-        : '<br>Disponible'
+      let detail = '<br>Disponible'
+      if (assignment) {
+        const socio = socioLabels?.get(assignment.asociadoId) ?? `${assignment.asociadoId.slice(0, 8)}…`
+        const grupo = assignment.agrupacionId
+          ? grupoLabels?.get(assignment.agrupacionId) ?? `${assignment.agrupacionId.slice(0, 8)}…`
+          : null
+        detail = `<br>Socio: <strong>${escapeHtml(socio)}</strong>` +
+          (grupo ? `<br>Agrupación: ${escapeHtml(grupo)}` : '') +
+          `<br>Sorteado: ${escapeHtml(dateFormat.format(new Date(assignment.sorteadoAt)))}` +
+          `<br>Asignación: ${escapeHtml(assignment.asignacionId)}`
+      }
       layer.bindTooltip(`<strong>${escapeHtml(polygon.numero || 'Sin número')}</strong>${detail}`)
       return layer
     })
@@ -50,7 +75,7 @@ export function ParcelMap({
     }
     map.current = instance
     return () => { instance.remove(); map.current = null }
-  }, [polygons, assignments, focusIds])
+  }, [polygons, assignments, focusIds, socioLabels, grupoLabels])
 
   if (polygons.length === 0) return <div className="grid h-80 place-items-center rounded-lg bg-stone-100 text-stone-500">El mapa no contiene polígonos</div>
   return <div ref={host} className="h-[32rem] min-h-80 w-full overflow-hidden rounded-lg border border-stone-200" aria-label="Vista parcelaria" />
