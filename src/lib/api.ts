@@ -14,6 +14,12 @@ export const API_BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') ??
   '';
 
+// El panel de administración solo puede autenticarse servido same-origin con
+// la API (la cookie de sesión es SameSite=Lax y el CORS no admite PUT/DELETE
+// cross-origin), así que TODO acceso admin del sitio apunta a esta URL — nunca
+// a la ruta interna /admin del dominio público.
+export const ADMIN_PANEL_URL: string = API_BASE_URL ? `${API_BASE_URL}/admin/` : '/admin';
+
 // El CORS público del backend no admite credenciales: los fetch van siempre
 // sin cookies (omit) y con timeout defensivo para no colgar el primer render.
 const FETCH_TIMEOUT_MS = 8000;

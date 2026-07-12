@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Sprout } from 'lucide-react';
+import { Menu, X, Sprout, Lock } from 'lucide-react';
 import { navLinks } from '../../data/navigation';
+import { ADMIN_PANEL_URL } from '../../lib/api';
 import styles from './Header.module.css';
 
 export default function Header() {
@@ -92,6 +93,19 @@ export default function Header() {
                 </Link>
               </li>
             )}
+            <li>
+              {/* Navegación de página completa al panel same-origin con la
+                  API: la sesión (cookie SameSite=Lax) solo vive allí. */}
+              <a
+                href={ADMIN_PANEL_URL}
+                className={styles.navLogin}
+                aria-label="Iniciar sesión — acceso administradores"
+                onClick={closeMenu}
+              >
+                <Lock size={14} aria-hidden="true" />
+                Iniciar sesión
+              </a>
+            </li>
           </ul>
         </nav>
 
