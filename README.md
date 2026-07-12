@@ -75,9 +75,10 @@ El backend (Express + MongoDB, repo `fonck95/asovicam-backend`) vive en
   (ver `.env`; en Vercel debe valer `https://api.asovicam.org`, sin `www.`
   y sin barra final, y todo cambio requiere redeploy porque las variables
   `VITE_*` se inyectan en build time).
-- `/admin` no se enlaza desde el sitio público y lleva `noindex`. El panel
-  llama al backend con cookies (`credentials: 'include'`); el botón de login
-  es la única navegación de página completa, hacia `/auth/google`.
+- `/admin` lleva `noindex` y se enlaza discretamente desde el pie de página
+  del sitio («Acceso administradores»). El panel llama al backend con cookies
+  (`credentials: 'include'`); el botón «Entrar con Google» es la única
+  navegación de página completa, hacia `/auth/google`.
 
 ### Contenido del sitio desde la API pública
 

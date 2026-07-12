@@ -101,13 +101,19 @@
   --header-height: 76px;
 }
 
-/* Reset & Base */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* Reset & Base — dentro de @layer: las reglas sin capa tienen prioridad
+   sobre cualquier @layer, y este reset universal anulaba las utilidades de
+   padding/margin de Tailwind (layer utilities, ver tailwind.css) en todo el
+   panel /admin. En capa, el selector universal (especificidad 0) sigue
+   aplicando a todo lo que ninguna otra regla toque, igual que antes. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 }
 
 html {
