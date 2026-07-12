@@ -10,6 +10,7 @@ import {
   Twitter,
   Music2,
   MessageCircle,
+  Lock,
 } from 'lucide-react';
 import { navLinks } from '../../data/navigation';
 import { useContent } from '../../content/ContentContext';
@@ -129,6 +130,12 @@ export default function Footer() {
           <p>
             &copy; {currentYear} ASOVICAM. Todos los derechos reservados.
           </p>
+          {/* El panel vive en este mismo dominio: /admin muestra el login
+              (Google) cuando no hay sesión y el dashboard cuando la hay. */}
+          <Link to="/admin" className={styles.adminLink}>
+            <Lock size={13} aria-hidden="true" />
+            Acceso administradores
+          </Link>
           <p className={styles.footerCredits}>
             Hecho con amor por el campo colombiano
           </p>
