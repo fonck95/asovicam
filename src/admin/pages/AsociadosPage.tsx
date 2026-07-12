@@ -27,6 +27,12 @@ const GENERO_FILTROS = [
 
 const GENERO_LABEL: Record<string, string> = { femenino: 'Femenino', masculino: 'Masculino', otro: 'Otro' }
 
+const LK_FILTROS = [
+  { value: '', label: 'LK: todos' },
+  { value: '1', label: 'LK: 1' },
+  { value: '0', label: 'LK: 0' },
+] as const
+
 const FORM_VACIO: AsociadoInput = {
   nombre: '',
   cedula: '',
@@ -34,9 +40,10 @@ const FORM_VACIO: AsociadoInput = {
   telefono: '',
   correo: '',
   genero: '',
+  lk: 0,
 }
 
-type CampoOrdenable = 'nombre' | 'cedula' | 'fechaNacimiento'
+type CampoOrdenable = 'nombre' | 'cedula' | 'fechaNacimiento' | 'lk'
 
 const INPUT_BASE =
   'w-full rounded border px-2 py-1.5 text-sm focus:border-emerald-600 focus:outline-none'
@@ -101,6 +108,7 @@ export function AsociadosPage() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [genero, setGenero] = useState('')
+  const [lk, setLk] = useState<'' | '0' | '1'>('')
   const [sort, setSort] = useState<string>('nombre')
   const [page, setPage] = useState(1)
 
@@ -121,9 +129,10 @@ export function AsociadosPage() {
   const qs = new URLSearchParams({ page: String(page), limit: String(LIMIT), sort })
   if (search) qs.set('search', search)
   if (genero) qs.set('genero', genero)
+  if (lk) qs.set('lk', lk)
 
   const query = useQuery({
-    queryKey: ['asociados', { search, genero, page, limit: LIMIT, sort }],
+    queryKey: ['asociados', { search, genero, lk, page, limit: LIMIT, sort }],
     queryFn: () => api.get<AsociadosList>(`/api/admin/asociados?${qs.toString()}`),
     placeholderData: keepPreviousData,
   })
@@ -155,6 +164,7 @@ export function AsociadosPage() {
             telefono: item.telefono,
             correo: item.correo,
             genero: item.genero,
+            lk: item.lk ?? 0,
           },
     )
   }
@@ -243,7 +253,8 @@ export function AsociadosPage() {
   )
 
   const data = query.data
-  const sinAsociados = data !== undefined && data.total === 0 && search === '' && genero === ''
+  const sinAsociados =
+    data !== undefined && data.total === 0 && search === '' && genero === '' && lk === ''
   const inputClase = (campo: CampoAsociado) =>
     `${INPUT_BASE} ${fieldErrors[campo] ? 'border-red-400' : 'border-stone-300'}`
   const hoy = new Date().toISOString().slice(0, 10)
@@ -291,6 +302,21 @@ export function AsociadosPage() {
             </button>
           ))}
         </div>
+        <select
+          aria-label="Filtrar asociados por LK"
+          value={lk}
+          onChange={(e) => {
+            setLk(e.target.value as '' | '0' | '1')
+            setPage(1)
+          }}
+          className="rounded border border-stone-200 bg-white px-3 py-1 text-sm text-stone-600"
+        >
+          {LK_FILTROS.map((filtro) => (
+            <option key={filtro.value} value={filtro.value}>
+              {filtro.label}
+            </option>
+          ))}
+        </select>
         {data && !sinAsociados && (
           <span className="ml-auto text-sm text-stone-500">
             {data.total} {data.total === 1 ? 'asociado' : 'asociados'} en total
@@ -336,6 +362,7 @@ export function AsociadosPage() {
                 <Th>Teléfono</Th>
                 <Th>Correo</Th>
                 <Th>Género</Th>
+                <Th campo="lk">LK</Th>
                 <th className="px-3 py-2 text-right">Acciones</th>
               </tr>
             </thead>
@@ -348,6 +375,17 @@ export function AsociadosPage() {
                   <td className="px-3 py-2">{a.telefono || '—'}</td>
                   <td className="max-w-56 truncate px-3 py-2">{a.correo || '—'}</td>
                   <td className="px-3 py-2">{GENERO_LABEL[a.genero] ?? '—'}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`inline-flex min-w-6 justify-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        a.lk === 1
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-stone-100 text-stone-600'
+                      }`}
+                    >
+                      {a.lk}
+                    </span>
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">
                     <button onClick={() => abrirForm(a)} className="rounded px-2 py-1 text-emerald-700 hover:bg-emerald-50">
                       Editar
@@ -367,7 +405,7 @@ export function AsociadosPage() {
               ))}
               {data.items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-stone-500">
+                  <td colSpan={8} className="px-3 py-8 text-center text-stone-500">
                     Sin resultados para esta búsqueda o filtro
                   </td>
                 </tr>
@@ -460,6 +498,16 @@ export function AsociadosPage() {
                   <option value="femenino">Femenino</option>
                   <option value="masculino">Masculino</option>
                   <option value="otro">Otro</option>
+                </select>
+              </Campo>
+              <Campo label="LK" required hint="valor binario: 0 o 1" error={fieldErrors.lk}>
+                <select
+                  className={inputClase('lk')}
+                  value={form.lk}
+                  onChange={(e) => setForm((f) => ({ ...f, lk: e.target.value === '1' ? 1 : 0 }))}
+                >
+                  <option value={0}>0</option>
+                  <option value={1}>1</option>
                 </select>
               </Campo>
             </div>
