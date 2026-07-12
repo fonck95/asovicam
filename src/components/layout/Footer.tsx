@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import {
-  Sprout,
   MapPin,
   Phone,
   Mail,
@@ -38,15 +37,7 @@ export default function Footer() {
           {/* Brand */}
           <div className={styles.footerBrand}>
             <div className={styles.logo}>
-              <span className={styles.logoMark}>
-                <Sprout size={22} strokeWidth={2.25} />
-              </span>
-              <div>
-                <div className={styles.logoName}>ASOVICAM</div>
-                <div className={styles.logoTagline}>
-                  Vida en el Campo
-                </div>
-              </div>
+              <img src="/logo.jpg" alt="ASOVICAM — Asociación Vida en el Campo" className={styles.logoImage} />
             </div>
             <p className={styles.footerDescription}>
               Cultivando tradición, sembrando futuro. Sistema milpa con técnica

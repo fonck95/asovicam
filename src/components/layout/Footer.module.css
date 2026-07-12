@@ -39,6 +39,14 @@
   margin-bottom: var(--spacing-md);
 }
 
+.logoImage {
+  display: block;
+  width: auto;
+  height: 64px;
+  max-width: 210px;
+  object-fit: contain;
+}
+
 .logoMark {
   display: inline-flex;
   align-items: center;
