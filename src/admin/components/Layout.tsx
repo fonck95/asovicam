@@ -21,8 +21,12 @@ export function Layout({ user }: { user: SessionUser }) {
     <div className="flex min-h-screen">
       <aside className="flex w-60 shrink-0 flex-col border-r border-stone-200 bg-white">
         <div className="border-b border-stone-100 px-4 py-4">
-          <p className="text-sm font-bold text-emerald-900">🌽 ASOVICAM</p>
-          <p className="text-xs text-stone-400">Gestión de contenido</p>
+          <img
+            src="/logo.jpg"
+            alt="ASOVICAM — Asociación Vida en el Campo"
+            className="h-12 w-auto max-w-full object-contain object-left"
+          />
+          <p className="mt-2 text-xs text-stone-400">Gestión de contenido</p>
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
           {RESOURCES.map((r) => (

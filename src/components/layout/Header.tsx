@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Sprout, Lock } from 'lucide-react';
+import { Menu, X, Lock } from 'lucide-react';
 import { navLinks } from '../../data/navigation';
 import { ADMIN_PANEL_URL } from '../../lib/api';
 import styles from './Header.module.css';
@@ -52,13 +52,7 @@ export default function Header() {
     >
       <div className={`container ${styles.headerInner}`}>
         <Link to="/" className={styles.logo} onClick={closeMenu} aria-label="ASOVICAM — Inicio">
-          <span className={styles.logoMark}>
-            <Sprout size={22} strokeWidth={2.25} />
-          </span>
-          <span className={styles.logoText}>
-            <span className={styles.logoName}>ASOVICAM</span>
-            <span className={styles.logoTagline}>Vida en el Campo</span>
-          </span>
+          <img src="/logo.jpg" alt="ASOVICAM — Asociación Vida en el Campo" className={styles.logoImage} />
         </Link>
 
         <nav

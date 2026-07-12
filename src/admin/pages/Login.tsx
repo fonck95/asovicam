@@ -4,8 +4,11 @@ export function Login() {
   return (
     <div className="grid min-h-screen place-items-center bg-gradient-to-b from-emerald-900 to-emerald-950 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-xl">
-        <p className="text-3xl">🌽🫘🍉</p>
-        <h1 className="mt-3 text-xl font-bold text-emerald-900">ASOVICAM</h1>
+        <img
+          src="/logo.jpg"
+          alt="ASOVICAM — Asociación Vida en el Campo"
+          className="mx-auto h-20 w-auto max-w-full object-contain"
+        />
         <p className="mt-1 text-sm text-stone-500">Panel de administración de contenido</p>
         <a
           href={`${API_URL}/auth/google`}
