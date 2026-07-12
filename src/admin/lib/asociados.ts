@@ -10,11 +10,26 @@ import type { Asociado } from '../api'
  * hacia terceros ni se loggea.
  */
 
-export const CAMPOS = ['nombre', 'cedula', 'fechaNacimiento', 'telefono', 'correo', 'genero'] as const
+export const CAMPOS = ['nombre', 'cedula', 'fechaNacimiento', 'telefono', 'correo', 'genero', 'lk'] as const
 export type CampoAsociado = (typeof CAMPOS)[number]
 
 /** Fila tal como la espera POST /api/admin/asociados{,/import}. */
-export type AsociadoInput = Record<CampoAsociado, string>
+export interface AsociadoInput {
+  nombre: string
+  cedula: string
+  fechaNacimiento: string
+  telefono: string
+  correo: string
+  genero: string
+  lk: 0 | 1
+}
+
+/**
+ * Sin la columna LK, la propiedad se omite para conservar el valor al actualizar
+ * archivos antiguos. Si la columna existe, se conserva cualquier valor inválido
+ * durante la preview para que el servidor también lo rechace.
+ */
+type AsociadoImportInput = Omit<AsociadoInput, 'lk'> & { lk?: 0 | 1 | string }
 
 export const GENEROS = ['femenino', 'masculino', 'otro'] as const
 
@@ -26,6 +41,7 @@ export const PLANTILLA_HEADERS: readonly string[] = [
   'N°_TELEFONO_ASOCIADO',
   'CORREO_ELECTRÓNICO_ASOCIADO',
   'GENERO',
+  'LK',
 ]
 
 const FILA_EJEMPLO: readonly string[] = [
@@ -35,6 +51,7 @@ const FILA_EJEMPLO: readonly string[] = [
   '+57 300 123 4567',
   'maria@example.com',
   'F',
+  '0',
 ]
 
 // ---------- Validación local (mismas reglas que el servidor) ----------
@@ -55,6 +72,13 @@ export const normalizarCedula = (v: string): string => v.trim().replace(/[.\s-]/
 export const normalizarGenero = (v: string): string => {
   const s = v.trim().toLowerCase()
   return ALIAS_GENERO[s] ?? s
+}
+
+/** Normaliza exclusivamente los dos valores binarios aceptados por el servidor. */
+export const normalizarLk = (v: unknown): 0 | 1 | null => {
+  if (v === 0 || v === '0') return 0
+  if (v === 1 || v === '1') return 1
+  return null
 }
 
 /** 'DD/MM/AAAA' o 'DD-MM-AAAA' → 'AAAA-MM-DD'; lo demás pasa tal cual. */
@@ -83,7 +107,9 @@ const esFechaNacimientoReal = (s: string): boolean => {
  * inmediato en el formulario y en la preview de importación. El servidor
  * sigue siendo la autoridad: aquí solo se anticipa lo que él rechazaría.
  */
-export function validarAsociado(input: AsociadoInput): Partial<Record<CampoAsociado, string>> {
+export function validarAsociado(
+  input: AsociadoInput | AsociadoImportInput,
+): Partial<Record<CampoAsociado, string>> {
   const errores: Partial<Record<CampoAsociado, string>> = {}
   const nombre = input.nombre.trim()
   if (nombre.length < 1 || nombre.length > 200) errores.nombre = 'obligatorio (1 a 200 caracteres)'
@@ -101,6 +127,7 @@ export function validarAsociado(input: AsociadoInput): Partial<Record<CampoAsoci
   const genero = normalizarGenero(input.genero)
   if (genero !== '' && !(GENEROS as readonly string[]).includes(genero))
     errores.genero = 'usa femenino, masculino, otro (o F/M), o deja vacío'
+  if ('lk' in input && normalizarLk(input.lk) === null) errores.lk = 'usa únicamente 0 o 1; no lo dejes vacío'
   return errores
 }
 
@@ -148,7 +175,15 @@ export function xlsxBlob(filas: string[][]): Blob {
       celda.z = '@'
     }
   }
-  ws['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 32 }, { wch: 12 }]
+  ws['!cols'] = [
+    { wch: 28 },
+    { wch: 14 },
+    { wch: 20 },
+    { wch: 22 },
+    { wch: 32 },
+    { wch: 12 },
+    { wch: 8 },
+  ]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Asociados')
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
@@ -165,7 +200,15 @@ export function plantillaFilas(): string[][] {
 export function asociadosAFilas(items: Asociado[]): string[][] {
   return [
     [...PLANTILLA_HEADERS],
-    ...items.map((a) => [a.nombre, a.cedula, a.fechaNacimiento, a.telefono, a.correo, a.genero]),
+    ...items.map((a) => [
+      a.nombre,
+      a.cedula,
+      a.fechaNacimiento,
+      a.telefono,
+      a.correo,
+      a.genero,
+      String(a.lk),
+    ]),
   ]
 }
 
@@ -192,12 +235,14 @@ const CABECERA_A_CAMPO: Record<string, CampoAsociado> = {
   'CORREO ELECTRONICO ASOCIADO': 'correo',
   CORREO: 'correo',
   GENERO: 'genero',
+  LK: 'lk',
+  'L K': 'lk',
 }
 
 export interface FilaImportada {
   /** Número de fila en el archivo original (la cabecera cuenta como fila 1). */
   fila: number
-  datos: AsociadoInput
+  datos: AsociadoImportInput
   /** Errores locales ('campo: mensaje'); la fila se envía igual y el server decide. */
   errores: string[]
 }
@@ -281,15 +326,25 @@ export async function parsearArchivo(file: File): Promise<ArchivoParseado> {
 
   const filas: FilaImportada[] = []
   const cedulasVistas = new Map<string, number>()
+  const incluyeLk = columnaDeCampo.has('lk')
   let erroresLocales = 0
   for (let i = idxCabecera + 1; i < matriz.length; i++) {
     const cruda = matriz[i] ?? []
-    const datos = {} as AsociadoInput
+    const valores = {} as Record<CampoAsociado, string>
     for (const campo of CAMPOS) {
       const col = columnaDeCampo.get(campo)
-      datos[campo] = col === undefined ? '' : celdaATexto(cruda[col], campo)
+      valores[campo] = col === undefined ? '' : celdaATexto(cruda[col], campo)
     }
-    if (CAMPOS.every((campo) => datos[campo] === '')) continue // fila totalmente vacía
+    if (CAMPOS.every((campo) => valores[campo] === '')) continue // fila totalmente vacía
+    const datos: AsociadoImportInput = {
+      nombre: valores.nombre,
+      cedula: valores.cedula,
+      fechaNacimiento: valores.fechaNacimiento,
+      telefono: valores.telefono,
+      correo: valores.correo,
+      genero: valores.genero,
+    }
+    if (incluyeLk) datos.lk = normalizarLk(valores.lk) ?? valores.lk
     const fila = i + 1
     const errores = Object.entries(validarAsociado(datos)).map(([campo, msg]) => `${campo}: ${msg}`)
     const cedula = normalizarCedula(datos.cedula)

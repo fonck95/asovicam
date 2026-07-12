@@ -132,6 +132,7 @@ export interface Asociado {
   telefono: string
   correo: string
   genero: '' | 'femenino' | 'masculino' | 'otro'
+  lk: 0 | 1
   updatedBy: string
   createdAt: string
   updatedAt: string

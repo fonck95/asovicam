@@ -35,7 +35,8 @@ type Estado =
 
 const NOTA_UPSERT =
   'Las filas cuya cédula ya exista sobrescribirán TODOS los datos del asociado con lo que diga el ' +
-  'archivo (las celdas vacías borran el dato actual).'
+  'archivo (las celdas vacías borran el dato actual). En archivos antiguos sin la columna LK, el ' +
+  'valor LK existente se conserva; para asociados nuevos se usa 0.'
 
 /** Diálogo de carga masiva: archivo → preview/validación → lotes → reporte. */
 export function AsociadosImport({ onClose }: { onClose: () => void }) {
@@ -201,6 +202,7 @@ export function AsociadosImport({ onClose }: { onClose: () => void }) {
                     <th className="px-2 py-1.5">Teléfono</th>
                     <th className="px-2 py-1.5">Correo</th>
                     <th className="px-2 py-1.5">Género</th>
+                    <th className="px-2 py-1.5">LK</th>
                     <th className="px-2 py-1.5">Errores locales</th>
                   </tr>
                 </thead>
@@ -214,6 +216,9 @@ export function AsociadosImport({ onClose }: { onClose: () => void }) {
                       <td className="px-2 py-1">{f.datos.telefono}</td>
                       <td className="max-w-40 truncate px-2 py-1">{f.datos.correo}</td>
                       <td className="px-2 py-1">{f.datos.genero}</td>
+                      <td className="whitespace-nowrap px-2 py-1">
+                        {'lk' in f.datos ? f.datos.lk : '— (conservar)'}
+                      </td>
                       <td className="max-w-56 px-2 py-1 text-red-700">{f.errores.join('; ')}</td>
                     </tr>
                   ))}
