@@ -4,7 +4,6 @@ import Layout from './components/layout/Layout';
 import ScrollToTop from './components/ScrollToTop';
 import ErrorBoundary from './components/ErrorBoundary';
 import ContentProvider from './content/ContentProvider';
-import { API_BASE_URL } from './lib/api';
 
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
@@ -27,18 +26,6 @@ function PageLoader() {
   );
 }
 
-// El panel solo puede autenticarse servido same-origin con la API (la cookie
-// de sesión es SameSite=Lax y no viaja cross-site): en cualquier otro dominio
-// (Vercel, asovicam.org) /admin redirige al panel real en vez de renderizar
-// una copia que jamás podría iniciar sesión. En dev se sirve local (proxy).
-function AdminGate() {
-  if (!import.meta.env.DEV && API_BASE_URL && API_BASE_URL !== window.location.origin) {
-    window.location.replace(`${API_BASE_URL}/admin/`);
-    return <PageLoader />;
-  }
-  return <AdminApp />;
-}
-
 export default function App() {
   return (
     <ErrorBoundary>
@@ -53,8 +40,12 @@ export default function App() {
                   opcional elige el cultivo (maíz / frijol / sandía). */}
               <Route path="experiencia" element={<Experiencia />} />
               <Route path="experiencia/:producto" element={<Experiencia />} />
-              {/* Panel privado, separado del layout público. */}
-              <Route path="admin/*" element={<AdminGate />} />
+              {/* Panel privado, separado del layout público. Habla con la API
+                  cross-origin: el backend emite la cookie de sesión con
+                  SameSite=None, su CORS admite credenciales y todos los
+                  métodos para este sitio, y el login de Google devuelve al
+                  usuario a este mismo /admin. */}
+              <Route path="admin/*" element={<AdminApp />} />
               <Route element={<Layout />}>
                 <Route index element={<Home />} />
                 <Route path="nosotros" element={<About />} />

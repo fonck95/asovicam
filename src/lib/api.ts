@@ -14,11 +14,11 @@ export const API_BASE_URL: string =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') ??
   '';
 
-// El panel de administración solo puede autenticarse servido same-origin con
-// la API (la cookie de sesión es SameSite=Lax y el CORS no admite PUT/DELETE
-// cross-origin), así que TODO acceso admin del sitio apunta a esta URL — nunca
-// a la ruta interna /admin del dominio público.
-export const ADMIN_PANEL_URL: string = API_BASE_URL ? `${API_BASE_URL}/admin/` : '/admin';
+// El panel de administración vive en la ruta interna /admin de este mismo
+// sitio y habla con la API cross-origin: el backend emite la cookie de sesión
+// con SameSite=None, su CORS admite credenciales y todos los métodos para el
+// origen del sitio, y tras el login de Google devuelve al usuario a /admin.
+export const ADMIN_PANEL_URL: string = '/admin';
 
 // El CORS público del backend no admite credenciales: los fetch van siempre
 // sin cookies (omit) y con timeout defensivo para no colgar el primer render.

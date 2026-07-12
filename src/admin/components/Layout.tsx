@@ -25,10 +25,13 @@ export function Layout({ user }: { user: SessionUser }) {
           <p className="text-xs text-stone-400">Gestión de contenido</p>
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
+          {/* Destinos absolutos: bajo el montaje admin/* un `to` relativo se
+              resuelve contra la URL actual (p. ej. /admin/programs → mapas
+              daría /admin/programs/mapas). */}
           {RESOURCES.map((r) => (
             <NavLink
               key={r.path}
-              to={r.path}
+              to={`/admin/${r.path}`}
               className={({ isActive }) =>
                 `block rounded px-3 py-2 text-sm ${
                   isActive ? 'bg-emerald-50 font-medium text-emerald-900' : 'text-stone-600 hover:bg-stone-50'
@@ -42,7 +45,7 @@ export function Layout({ user }: { user: SessionUser }) {
           {EXTRA.map((r) => (
             <NavLink
               key={r.to}
-              to={r.to}
+              to={`/admin/${r.to}`}
               className={({ isActive }) =>
                 `block rounded px-3 py-2 text-sm ${
                   isActive ? 'bg-emerald-50 font-medium text-emerald-900' : 'text-stone-600 hover:bg-stone-50'

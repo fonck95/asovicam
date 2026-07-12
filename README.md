@@ -68,28 +68,24 @@ El proyecto ya es compatible con Vercel sin configuración extra:
 ## Backend y panel de administración
 
 El backend (Express + MongoDB, repo `fonck95/asovicam-backend`) vive en
-**`https://api.asovicam.org`**. El panel de administración se usa desde
-**`https://api.asovicam.org/admin/`** — tiene que servirse *same-origin* con
-la API porque la cookie de sesión del login por Google es `SameSite=Lax`
-(no viaja cross-site) y el CORS no admite `PUT`/`DELETE` cross-origin.
+**`https://api.asovicam.org`**. El panel de administración es la ruta
+interna **`/admin`** de este mismo sitio y habla con la API **cross-origin**:
+el backend emite la cookie de sesión con `SameSite=None; Secure`, su CORS
+admite credenciales y todos los métodos para el origen del sitio (con y sin
+`www.`), y tras el login de Google redirige de vuelta a `/admin`.
 
 - La URL del backend se configura con la variable **`VITE_API_URL`**
   (ver `.env`; en Vercel debe valer `https://api.asovicam.org`, sin `www.`
   y sin barra final, y todo cambio requiere redeploy porque las variables
   `VITE_*` se inyectan en build time).
-- Todo acceso admin del sitio apunta a `https://api.asovicam.org/admin/`
-  (constante `ADMIN_PANEL_URL` en `src/lib/api.ts`): el botón «Iniciar
-  sesión» del header, la tarjeta «Acceso para administradores» del Home y el
-  enlace «Acceso administradores» del pie de página.
-- La ruta interna `/admin` del dominio público **redirige** a ese panel
-  (`AdminGate` en `src/App.tsx`): renderizarla fuera de `api.asovicam.org`
-  produciría un panel que jamás puede iniciar sesión. Cuando este mismo build
-  se sirve bajo `api.asovicam.org`, la ruta se renderiza normalmente (es el
-  panel), y en desarrollo local también (proxy de Vite hacia `/api` y
-  `/auth`).
+- Todo acceso admin del sitio apunta a la ruta interna `/admin` (constante
+  `ADMIN_PANEL_URL` en `src/lib/api.ts`): el botón «Iniciar sesión» del
+  header, la tarjeta «Acceso para administradores» del Home y el enlace
+  «Acceso administradores» del pie de página.
 - `/admin` lleva `noindex`. El panel llama al backend con cookies
   (`credentials: 'include'`); el botón «Entrar con Google» es la única
-  navegación de página completa, hacia `/auth/google`.
+  navegación de página completa, hacia `https://api.asovicam.org/auth/google`.
+  En desarrollo local el proxy de Vite reenvía `/api` y `/auth`.
 
 ### Contenido del sitio desde la API pública
 
@@ -116,7 +112,7 @@ dashboard.
 ## Sorteo de lotes
 
 La organización de sorteos vive en el **panel de administración**
-(`https://api.asovicam.org/admin/` → «Mapas y sorteos»): se importa un
+(`/admin` → «Mapas y sorteos»): se importa un
 KML/KMZ, se finaliza el mapa (el backend calcula vecinos y crea el sorteo) y
 se sortea lote a lote o por agrupaciones contra
 `POST /api/admin/sorteos/:id/sortear`, idempotente por `requestId`. El

@@ -341,8 +341,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Acceso administradores: navegación de página completa al panel
-          same-origin con la API (la sesión solo funciona en ese dominio). */}
       <section className={styles.adminAccess}>
         <div className="container">
           <div className={styles.adminAccessCard}>
@@ -359,7 +357,7 @@ export default function Home() {
                 los sorteos de lotes.
               </p>
             </div>
-            <Button href={ADMIN_PANEL_URL} variant="outline">
+            <Button to={ADMIN_PANEL_URL} variant="outline">
               Iniciar sesión <ArrowRight size={16} />
             </Button>
           </div>

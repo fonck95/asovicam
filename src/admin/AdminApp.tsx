@@ -56,7 +56,9 @@ function AuthGate() {
   return (
     <Routes>
       <Route element={<Layout user={me.data} />}>
-        <Route index element={<Navigate to={RESOURCES[0]!.path} replace />} />
+        {/* Rutas absolutas: bajo el montaje admin/* los destinos relativos se
+            resuelven contra la URL actual y anidan segmentos sin fin. */}
+        <Route index element={<Navigate to={`/admin/${RESOURCES[0]!.path}`} replace />} />
         {RESOURCES.map((r) => (
           <Route key={r.path} path={r.path} element={<ResourcePage def={r} />} />
         ))}
@@ -75,7 +77,7 @@ function AuthGate() {
         <Route path="mapas/:mapId" element={<Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}><MapDetailPage /></Suspense>} />
         <Route path="sorteos/:raffleId" element={<Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}><RafflePage /></Suspense>} />
         <Route path="agrupaciones" element={<Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}><GroupsPage /></Suspense>} />
-        <Route path="*" element={<Navigate to={RESOURCES[0]!.path} replace />} />
+        <Route path="*" element={<Navigate to={`/admin/${RESOURCES[0]!.path}`} replace />} />
       </Route>
     </Routes>
   )

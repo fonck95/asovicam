@@ -94,17 +94,15 @@ export default function Header() {
               </li>
             )}
             <li>
-              {/* Navegación de página completa al panel same-origin con la
-                  API: la sesión (cookie SameSite=Lax) solo vive allí. */}
-              <a
-                href={ADMIN_PANEL_URL}
+              <Link
+                to={ADMIN_PANEL_URL}
                 className={styles.navLogin}
                 aria-label="Iniciar sesión — acceso administradores"
                 onClick={closeMenu}
               >
                 <Lock size={14} aria-hidden="true" />
                 Iniciar sesión
-              </a>
+              </Link>
             </li>
           </ul>
         </nav>
