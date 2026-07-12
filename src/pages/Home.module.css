@@ -568,6 +568,57 @@
   line-height: 1.65;
 }
 
+/* ============ Acceso administradores ============ */
+.adminAccess {
+  padding: var(--spacing-2xl) 0;
+  background: var(--color-gray-50);
+}
+
+.adminAccessCard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-lg);
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--spacing-xl);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.adminAccessIcon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-lighter);
+  color: var(--color-primary-dark);
+}
+
+.adminAccessBody {
+  flex: 1;
+  min-width: 240px;
+}
+
+.adminAccessTitle {
+  font-family: var(--font-family-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-gray-900);
+  margin-bottom: 0.25rem;
+}
+
+.adminAccessText {
+  font-size: 0.9375rem;
+  color: var(--color-gray-600);
+  line-height: 1.6;
+  max-width: 52ch;
+}
+
 /* ============ Responsive ============ */
 @media (max-width: 1024px) {
   .features {

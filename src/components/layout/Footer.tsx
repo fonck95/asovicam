@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { navLinks } from '../../data/navigation';
 import { useContent } from '../../content/ContentContext';
+import { ADMIN_PANEL_URL } from '../../lib/api';
 import styles from './Footer.module.css';
 
 const socialIcons = [
@@ -133,7 +134,7 @@ export default function Footer() {
           {/* El panel vive same-origin con la API (api.asovicam.org): la
               cookie de sesión es SameSite=Lax y no viaja cross-site, así que
               el admin solo funciona servido desde ese dominio. */}
-          <a href="https://api.asovicam.org/admin/" className={styles.adminLink}>
+          <a href={ADMIN_PANEL_URL} className={styles.adminLink}>
             <Lock size={13} aria-hidden="true" />
             Acceso administradores
           </a>

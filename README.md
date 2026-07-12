@@ -68,15 +68,26 @@ El proyecto ya es compatible con Vercel sin configuración extra:
 ## Backend y panel de administración
 
 El backend (Express + MongoDB, repo `fonck95/asovicam-backend`) vive en
-**`https://api.asovicam.org`**. El panel de administración se sirve desde
-**`https://asovicam.org/admin`** y usa el login por Google del backend.
+**`https://api.asovicam.org`**. El panel de administración se usa desde
+**`https://api.asovicam.org/admin/`** — tiene que servirse *same-origin* con
+la API porque la cookie de sesión del login por Google es `SameSite=Lax`
+(no viaja cross-site) y el CORS no admite `PUT`/`DELETE` cross-origin.
 
 - La URL del backend se configura con la variable **`VITE_API_URL`**
   (ver `.env`; en Vercel debe valer `https://api.asovicam.org`, sin `www.`
   y sin barra final, y todo cambio requiere redeploy porque las variables
   `VITE_*` se inyectan en build time).
-- `/admin` lleva `noindex` y se enlaza discretamente desde el pie de página
-  del sitio («Acceso administradores»). El panel llama al backend con cookies
+- Todo acceso admin del sitio apunta a `https://api.asovicam.org/admin/`
+  (constante `ADMIN_PANEL_URL` en `src/lib/api.ts`): el botón «Iniciar
+  sesión» del header, la tarjeta «Acceso para administradores» del Home y el
+  enlace «Acceso administradores» del pie de página.
+- La ruta interna `/admin` del dominio público **redirige** a ese panel
+  (`AdminGate` en `src/App.tsx`): renderizarla fuera de `api.asovicam.org`
+  produciría un panel que jamás puede iniciar sesión. Cuando este mismo build
+  se sirve bajo `api.asovicam.org`, la ruta se renderiza normalmente (es el
+  panel), y en desarrollo local también (proxy de Vite hacia `/api` y
+  `/auth`).
+- `/admin` lleva `noindex`. El panel llama al backend con cookies
   (`credentials: 'include'`); el botón «Entrar con Google» es la única
   navegación de página completa, hacia `/auth/google`.
 
@@ -102,19 +113,22 @@ dashboard.
   el frontend no guarda nada de autenticación: la sesión vive en la cookie
   httpOnly de `api.asovicam.org`.
 
-## Sorteo de lotes (`/admin/sorteo`)
+## Sorteo de lotes
 
-El sorteo es una **herramienta de administración**: no aparece en la
-navegación del sitio y la ruta pública `/sorteo` solo sirve para **seguir
-en vivo** un sorteo recibido por enlace (sin enlace muestra un aviso de
-acceso restringido). La organización se hace desde **`/admin/sorteo`**
-(URL sin enlaces públicos; al copiar el enlace del sorteo se comparte
-siempre la URL pública `/sorteo#…`).
+La organización de sorteos vive en el **panel de administración**
+(`https://api.asovicam.org/admin/` → «Mapas y sorteos»): se importa un
+KML/KMZ, se finaliza el mapa (el backend calcula vecinos y crea el sorteo) y
+se sortea lote a lote o por agrupaciones contra
+`POST /api/admin/sorteos/:id/sortear`, idempotente por `requestId`. El
+resultado del servidor es la única fuente de verdad; el detalle completo del
+contrato está en `SPEC.md`.
 
-> El sorteo sigue corriendo 100 % en el cliente, pero `/admin/sorteo` ahora
-> está bajo el mismo guard de sesión del panel.
+La ruta pública `/sorteo` se mantiene solo para **seguir en vivo** un sorteo
+del formato antiguo recibido por enlace (`/sorteo#…`); sin enlace muestra un
+aviso de acceso restringido.
 
-Cómo funciona el sorteo entre personas o agrupaciones:
+Cómo funciona el sorteo antiguo (100 % en el cliente) entre personas o
+agrupaciones:
 
 1. **Mapa**: por defecto usa los 48 lotes del predio LA FARAONA, pero se
    puede cargar cualquier archivo **KML o KMZ** (exportado de Google My

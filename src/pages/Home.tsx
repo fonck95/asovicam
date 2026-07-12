@@ -10,6 +10,7 @@ import {
   TreePine,
   Sparkles,
   Heart,
+  Lock,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -20,6 +21,7 @@ import HeroGpuCanvas from '../components/ui/HeroGpuCanvas';
 import SEO from '../components/SEO';
 
 import { useContent } from '../content/ContentContext';
+import { ADMIN_PANEL_URL } from '../lib/api';
 import styles from './Home.module.css';
 
 // Slides locales de respaldo: se muestran mientras el CMS no tenga slides
@@ -334,6 +336,31 @@ export default function Home() {
             </p>
             <Button to="/contacto" size="lg">
               Contáctanos <ArrowRight size={18} />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Acceso administradores: navegación de página completa al panel
+          same-origin con la API (la sesión solo funciona en ese dominio). */}
+      <section className={styles.adminAccess}>
+        <div className="container">
+          <div className={styles.adminAccessCard}>
+            <div className={styles.adminAccessIcon}>
+              <Lock size={20} aria-hidden="true" />
+            </div>
+            <div className={styles.adminAccessBody}>
+              <h2 className={styles.adminAccessTitle}>
+                Acceso para administradores
+              </h2>
+              <p className={styles.adminAccessText}>
+                ¿Haces parte del equipo de ASOVICAM? Ingresa al panel para
+                gestionar el contenido del sitio, los asociados, los mapas y
+                los sorteos de lotes.
+              </p>
+            </div>
+            <Button href={ADMIN_PANEL_URL} variant="outline">
+              Iniciar sesión <ArrowRight size={16} />
             </Button>
           </div>
         </div>
