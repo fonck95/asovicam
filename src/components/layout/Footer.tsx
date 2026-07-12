@@ -130,12 +130,13 @@ export default function Footer() {
           <p>
             &copy; {currentYear} ASOVICAM. Todos los derechos reservados.
           </p>
-          {/* El panel vive en este mismo dominio: /admin muestra el login
-              (Google) cuando no hay sesión y el dashboard cuando la hay. */}
-          <Link to="/admin" className={styles.adminLink}>
+          {/* El panel vive same-origin con la API (api.asovicam.org): la
+              cookie de sesión es SameSite=Lax y no viaja cross-site, así que
+              el admin solo funciona servido desde ese dominio. */}
+          <a href="https://api.asovicam.org/admin/" className={styles.adminLink}>
             <Lock size={13} aria-hidden="true" />
             Acceso administradores
-          </Link>
+          </a>
           <p className={styles.footerCredits}>
             Hecho con amor por el campo colombiano
           </p>
