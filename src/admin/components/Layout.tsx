@@ -4,10 +4,11 @@ import { RESOURCES } from '../resources'
 
 const EXTRA = [
   { to: 'asociados', label: 'Asociados' },
+  { to: 'mapas', label: 'Mapas y sorteos' },
+  { to: 'agrupaciones', label: 'Agrupaciones' },
   { to: 'media', label: 'Medios' },
   { to: 'messages', label: 'Mensajes' },
   { to: 'settings', label: 'Ajustes' },
-  { to: 'sorteo', label: 'Sorteo' },
 ]
 
 export function Layout({ user }: { user: SessionUser }) {

@@ -16,7 +16,10 @@ import SEO from '../components/SEO'
 const AsociadosPage = lazy(() =>
   import('./pages/AsociadosPage').then((m) => ({ default: m.AsociadosPage })),
 )
-const Sorteo = lazy(() => import('../pages/Sorteo'))
+const MapsPage = lazy(() => import('./pages/MapsPage').then((m) => ({ default: m.MapsPage })))
+const MapDetailPage = lazy(() => import('./pages/MapsPage').then((m) => ({ default: m.MapDetailPage })))
+const GroupsPage = lazy(() => import('./pages/GroupsPage').then((m) => ({ default: m.GroupsPage })))
+const RafflePage = lazy(() => import('./pages/RafflePage').then((m) => ({ default: m.RafflePage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,14 +71,10 @@ function AuthGate() {
         <Route path="media" element={<MediaLibrary />} />
         <Route path="messages" element={<MessagesPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route
-          path="sorteo"
-          element={
-            <Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}>
-              <Sorteo modo="admin" />
-            </Suspense>
-          }
-        />
+        <Route path="mapas" element={<Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}><MapsPage /></Suspense>} />
+        <Route path="mapas/:mapId" element={<Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}><MapDetailPage /></Suspense>} />
+        <Route path="sorteos/:raffleId" element={<Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}><RafflePage /></Suspense>} />
+        <Route path="agrupaciones" element={<Suspense fallback={<p className="py-20 text-center text-stone-500">Cargando…</p>}><GroupsPage /></Suspense>} />
         <Route path="*" element={<Navigate to={RESOURCES[0]!.path} replace />} />
       </Route>
     </Routes>

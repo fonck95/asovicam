@@ -33,6 +33,34 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
+/** Envía binarios conservando la cookie y reporta progreso real de subida. */
+export function uploadBinary<T>(
+  path: string,
+  file: File,
+  contentType: string,
+  onProgress?: (percent: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_URL}${path}`)
+    xhr.withCredentials = true
+    xhr.setRequestHeader('Content-Type', contentType)
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100))
+    }
+    xhr.onerror = () => reject(new ApiError(0, 'No se pudo conectar con el servidor'))
+    xhr.onload = () => {
+      let body: Record<string, unknown> = {}
+      try { body = JSON.parse(xhr.responseText) as Record<string, unknown> } catch { /* respuesta vacía */ }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        if (xhr.status === 401) window.dispatchEvent(new Event('asovicam:unauthenticated'))
+        reject(new ApiError(xhr.status, (body.error as string) ?? `Error ${xhr.status}`, body))
+      } else resolve(body as T)
+    }
+    xhr.send(file)
+  })
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) =>
@@ -115,6 +143,33 @@ export interface AsociadosList {
   page: number
   limit: number
   pages: number
+}
+
+export type Coordinate = { lng: number; lat: number }
+export type MapaPolygon = { polygonId: string; numero: string; coordenadas: Coordinate[][]; vecinos: string[] }
+export interface Mapa {
+  id: string; nombre: string; descripcion: string; estado: 'borrador' | 'finalizado'
+  poligonos: MapaPolygon[]; sorteoId: string | null; finalizadoAt: string | null
+  updatedBy: string; createdAt: string; updatedAt: string
+}
+export interface AgrupacionMember { _id?: string; id?: string; nombre: string; cedula: string }
+export interface Agrupacion {
+  id: string; nombre: string; descripcion: string; asociadoIds: Array<string | AgrupacionMember>
+  updatedBy: string; createdAt: string; updatedAt: string
+}
+export interface Asignacion {
+  asignacionId: string; eventoId: string; tipo: 'individual' | 'agrupacion'; asociadoId: string
+  agrupacionId: string | null; polygonId: string; numeroPoligono: string
+  coordenadas: Coordinate[][]; sorteadoAt: string; sorteadoPor: string
+}
+export interface EventoSorteo {
+  eventoId: string; requestId: string; tipo: 'individual' | 'agrupacion'; asociadoIds: string[]
+  agrupacionId: string | null; polygonIds: string[]; creadoAt: string
+}
+export interface SorteoAdmin {
+  id: string; mapaId: string; estado: 'en_progreso' | 'completado'; poligonosDisponibles: string[]
+  asignaciones: Asignacion[]; eventos: EventoSorteo[]; iniciadoAt: string; completadoAt: string | null
+  updatedBy: string; mapa?: Mapa
 }
 
 /** `row` es 1-based sobre el array `rows` enviado en la petición. */
