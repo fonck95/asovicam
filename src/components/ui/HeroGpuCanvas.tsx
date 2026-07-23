@@ -129,6 +129,8 @@ export default function HeroGpuCanvas({ className = '', intensity = 1.0 }: HeroG
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let raf = 0;
     let cancelled = false;
+    let isVisible = true;
+    let renderFrame: FrameRequestCallback | null = null;
     const pointer = { x: 0.5, y: 0.4 };
 
     let ctx: GPUCanvasContext | null = null;
@@ -183,9 +185,19 @@ export default function HeroGpuCanvas({ className = '', intensity = 1.0 }: HeroG
       setActive(true);
 
       const start = performance.now();
-      const frame = () => {
-        if (cancelled || !device || !ctx || !pipeline || !uniformBuf || !bindGroup) return;
-        const t = (performance.now() - start) / 1000;
+      const frame: FrameRequestCallback = (now) => {
+        raf = 0;
+        if (
+          cancelled ||
+          !isVisible ||
+          document.hidden ||
+          !device ||
+          !ctx ||
+          !pipeline ||
+          !uniformBuf ||
+          !bindGroup
+        ) return;
+        const t = (now - start) / 1000;
         const data = new Float32Array([
           canvas.width,
           canvas.height,
@@ -219,18 +231,38 @@ export default function HeroGpuCanvas({ className = '', intensity = 1.0 }: HeroG
           raf = requestAnimationFrame(frame);
         }
       };
-      frame();
+      renderFrame = frame;
+      raf = requestAnimationFrame(frame);
     })().catch((err) => console.warn('[HeroGpuCanvas] init failed', err));
 
     const onResize = () => resize();
+    const pointerTarget = canvas.parentElement ?? canvas;
+    const onVisibilityChange = () => {
+      if (!document.hidden && isVisible && renderFrame && !raf) {
+        raf = requestAnimationFrame(renderFrame);
+      }
+    };
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry?.isIntersecting ?? true;
+        if (isVisible && renderFrame && !raf) {
+          raf = requestAnimationFrame(renderFrame);
+        }
+      },
+      { rootMargin: '120px' },
+    );
+    visibilityObserver.observe(canvas);
     window.addEventListener('resize', onResize);
-    canvas.addEventListener('pointermove', handlePointer);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    pointerTarget.addEventListener('pointermove', handlePointer as EventListener);
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
+      visibilityObserver.disconnect();
       window.removeEventListener('resize', onResize);
-      canvas.removeEventListener('pointermove', handlePointer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      pointerTarget.removeEventListener('pointermove', handlePointer as EventListener);
       uniformBuf?.destroy();
     };
   }, [intensity]);

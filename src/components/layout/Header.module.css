@@ -36,6 +36,11 @@
   transform: translateY(-1px);
 }
 
+.logoPicture {
+  display: block;
+  height: 52px;
+}
+
 .logoImage {
   display: block;
   width: auto;

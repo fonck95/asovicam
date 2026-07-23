@@ -6,7 +6,7 @@
   display: block;
   opacity: 0;
   transition: opacity 1200ms ease;
-  pointer-events: auto;
+  pointer-events: none;
   z-index: 0;
 }
 

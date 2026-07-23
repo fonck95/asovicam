@@ -52,7 +52,26 @@ export default function Header() {
     >
       <div className={`container ${styles.headerInner}`}>
         <Link to="/" className={styles.logo} onClick={closeMenu} aria-label="ASOVICAM — Inicio">
-          <img src="/logo.jpg" alt="ASOVICAM — Asociación Vida en el Campo" className={styles.logoImage} />
+          <picture className={styles.logoPicture}>
+            <source
+              type="image/avif"
+              srcSet="/img/asovicam-logo-128.avif 128w, /img/asovicam-logo-256.avif 256w, /img/asovicam-logo-384.avif 384w"
+              sizes="180px"
+            />
+            <source
+              type="image/webp"
+              srcSet="/img/asovicam-logo-128.webp 128w, /img/asovicam-logo-256.webp 256w, /img/asovicam-logo-384.webp 384w"
+              sizes="180px"
+            />
+            <img
+              src="/img/asovicam-logo-256.webp"
+              alt="ASOVICAM — Asociación Vida en el Campo"
+              className={styles.logoImage}
+              width="180"
+              height="52"
+              decoding="async"
+            />
+          </picture>
         </Link>
 
         <nav
