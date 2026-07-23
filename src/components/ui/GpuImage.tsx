@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from 'react';
 import { imageManifest } from '../../data/imageManifest';
+import { supportsWebGPU } from '../../utils/webgpu';
+import GpuImageReveal from './GpuImageReveal';
 import styles from './GpuImage.module.css';
 
 interface GpuImageProps {
@@ -24,7 +32,11 @@ export default function GpuImage({
 }: GpuImageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
   const [inView, setInView] = useState(eager);
+  const [gpuPhase, setGpuPhase] = useState<
+    'idle' | 'pending' | 'revealing' | 'complete'
+  >('idle');
 
   const entry = imageManifest[src];
   const computedAspectRatio =
@@ -52,14 +64,33 @@ export default function GpuImage({
   // Pick the smallest variant >= maxWidth for the default `src`, plus a srcset
   // covering all variants so the browser picks the right one for the viewport.
   const variants = entry?.variants ?? [];
-  const fallbackSrc =
+  const fallbackVariant =
     variants.find((v) => v.width >= maxWidth)?.src ?? variants.at(-1)?.src ?? src;
-  const srcSet = variants.length
+  const fallbackSrc = fallbackVariant;
+  const webpSrcSet = variants.length
     ? variants.map((v) => `${v.src} ${v.width}w`).join(', ')
+    : undefined;
+  const avifSrcSet = variants.some((variant) => variant.avif)
+    ? variants
+        .filter((variant) => variant.avif)
+        .map((variant) => `${variant.avif} ${variant.width}w`)
+        .join(', ')
     : undefined;
   const sizes = `(max-width: 768px) 100vw, ${maxWidth}px`;
 
   const lqip = entry?.lqip;
+
+  const handleLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    setLoaded(true);
+    setLoadedImage(event.currentTarget);
+    const reduceMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+    setGpuPhase(supportsWebGPU() && !reduceMotion ? 'pending' : 'complete');
+  };
+
+  const handleGpuReady = useCallback(() => setGpuPhase('revealing'), []);
+  const handleGpuComplete = useCallback(() => setGpuPhase('complete'), []);
 
   return (
     <div
@@ -70,21 +101,36 @@ export default function GpuImage({
         ...(lqip ? { backgroundImage: `url(${lqip})` } : null),
       }}
       data-loaded={loaded ? 'true' : 'false'}
+      data-gpu-phase={gpuPhase}
     >
       {!loaded && <div className={styles.shimmer} aria-hidden="true" />}
       {inView && (
-        <img
-          src={fallbackSrc}
-          srcSet={srcSet}
-          sizes={sizes}
-          alt={alt}
-          loading={eager ? 'eager' : 'lazy'}
-          decoding="async"
-          fetchPriority={eager ? 'high' : 'auto'}
-          className={styles.img}
-          onLoad={() => setLoaded(true)}
-        />
+        <picture className={styles.picture}>
+          {avifSrcSet && (
+            <source type="image/avif" srcSet={avifSrcSet} sizes={sizes} />
+          )}
+          {webpSrcSet && (
+            <source type="image/webp" srcSet={webpSrcSet} sizes={sizes} />
+          )}
+          <img
+            src={fallbackSrc}
+            alt={alt}
+            loading={eager ? 'eager' : 'lazy'}
+            decoding="async"
+            fetchPriority={eager ? 'high' : 'auto'}
+            className={styles.img}
+            onLoad={handleLoad}
+          />
+        </picture>
       )}
+      {(gpuPhase === 'pending' || gpuPhase === 'revealing') &&
+        loadedImage && (
+          <GpuImageReveal
+            image={loadedImage}
+            onReady={handleGpuReady}
+            onComplete={handleGpuComplete}
+          />
+        )}
     </div>
   );
 }
